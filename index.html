@@ -4473,46 +4473,44 @@ function finHandleImport(event){
         let ds=(row['Data']||'').toString().trim();
         if(ds.includes('/')){const [d,m,y]=ds.split('/');ds=y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0');}
         const val=parseFloat((row['Preço']||'0').toString().replace('R$','').replace(/\s/g,'').replace(/\./g,'').replace(',','.'))||0;
-        if(!val||!ds) return;
         const st=(row['Situação do pagamento']||'').toString().trim().toLowerCase()==='pago'?'Pago':'Pendente';
         let forma=(row['Formas de pagamento']||'').toString().trim();
-        if(forma==='Nenhum'||forma==='nan') forma='';
+        if(forma==='Nenhum'||forma==='nan'||forma==='None') forma='';
         if(forma.toLowerCase().includes('dinheiro')) forma='Dinheiro';
         if(forma.toLowerCase().includes('débito')||forma.toLowerCase().includes('debito')) forma='Cartão de débito';
         const pac=(row['Paciente']||'').toString().trim();
         const ter=normTer((row['Especialista']||'').toString().trim());
         const servico=(row['Serviços']||'').toString().trim();
 
-        // Importa receita
-        const dupCheck=recs.some(r=>r.data===ds&&r.paciente===pac&&r.valor===val);
-        if(dupCheck){dup++;} else {
-          recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:ter,servico,forma,status:st,origem:'doctoralia'});
-          imp++;
-        }
-
         if(!pac||!ter) return;
 
-        // Cria paciente na supervisão se não existir (nome + terapeuta)
+        // Cria paciente na supervisão se não existir (independente de valor)
         if(!pacs.find(p=>p.nome.toLowerCase()===pac.toLowerCase()&&(p.terapeuta||'').toLowerCase()===ter.toLowerCase())){
           pacs.push({
-            id:'doc_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+            id:'doc_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2),
             nome:pac, terapeuta:ter, idade:'', inicio:ds,
             queixa:servico, telefone:'', origem:'Doctoralia', obs:'', fromLead:true
           });
           novoPac++;
         }
 
-        // Cria lead convertido se não existir (nome + terapeuta)
+        // Cria lead convertido se não existir (independente de valor)
         if(!conv.find(c=>(c.paciente||'').toLowerCase()===pac.toLowerCase()&&(c.terapeuta||'').toLowerCase()===ter.toLowerCase())){
-          const newId='ca_doc_'+Date.now()+'_'+Math.random().toString(36).slice(2);
           conv.push({
-            id:newId, paciente:pac, terapeuta:ter, valor:null,
+            id:'ca_doc_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2),
+            paciente:pac, terapeuta:ter, valor:null,
             origem:'Doctoralia', servico, status:'Fechado',
-            observacao:'Paciente antigo', leadConvertido:false, ativo:true,
-            data:ds
+            observacao:'Paciente antigo', leadConvertido:false, ativo:true, data:ds
           });
           novoLead++;
         }
+
+        // Importa receita apenas se tiver valor e data válidos
+        if(!val||!ds) return;
+        const dupCheck=recs.some(r=>r.data===ds&&r.paciente===pac&&r.valor===val);
+        if(dupCheck){dup++;return;}
+        recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:ter,servico,forma,status:st,origem:'doctoralia'});
+        imp++;
       });
 
       finSave(FK.REC,recs);
