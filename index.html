@@ -607,42 +607,51 @@ async function _fbWrite(k,v){
 async function _migrateLocalToFirebase(){
   if(!_db)return;
   try{
-    const {doc,getDoc,deleteDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const {doc,getDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
 
-    // Verifica versão no Firebase
     const verSnap=await getDoc(doc(_db,'dados','cl_data_version'));
     const fbVersion=verSnap.exists()?verSnap.data().value:null;
     const DATA_VERSION='2026-03-13-v8';
 
     if(fbVersion!==DATA_VERSION){
-      // Força reset do conv_antigos com seed atualizado (leadConvertido marcado)
-      await _fbWrite('cl_conv_antigos', JSON.parse(JSON.stringify(SEED_CONVERTIDOS_ANTIGOS)));
+      // Firebase vazio ou versão antiga — sobe TODOS os dados locais sem sobrescrever leads existentes
+      const fbLeadsSnap=await getDoc(doc(_db,'dados',K.LEADS));
+      const fbLeads=fbLeadsSnap.exists()?fbLeadsSnap.data().value:[];
+      const localLeads=load(K.LEADS)||[];
+
+      // Usa leads do Firebase se tiver mais dados (evita perda)
+      const leadsParaSalvar=fbLeads.length>localLeads.length?fbLeads:localLeads;
+
+      // Só reseta conv_antigos se o Firebase estiver completamente vazio
+      if(!fbVersion){
+        await _fbWrite('cl_conv_antigos', JSON.parse(JSON.stringify(SEED_CONVERTIDOS_ANTIGOS)));
+      }
+
+      // Sempre sobe leads, pacientes, registros e usuários sem perder dados
+      if(leadsParaSalvar.length>0) await _fbWrite(K.LEADS, leadsParaSalvar);
+
+      const localPac=load(K.PAC)||[];
+      const fbPacSnap=await getDoc(doc(_db,'dados',K.PAC));
+      const fbPac=fbPacSnap.exists()?fbPacSnap.data().value:[];
+      if(localPac.length>fbPac.length) await _fbWrite(K.PAC, localPac);
+
+      const localRec=load(K.REC)||[];
+      const fbRecSnap=await getDoc(doc(_db,'dados',K.REC));
+      const fbRec=fbRecSnap.exists()?fbRecSnap.data().value:[];
+      if(localRec.length>fbRec.length) await _fbWrite(K.REC, localRec);
+
       await _fbWrite(K.USR, load(K.USR)||[]);
       await _fbWrite('cl_data_version', DATA_VERSION);
-      console.log('🔄 v8: conv_antigos atualizado com leadConvertido');
+      console.log('🔄 v8: migração concluída preservando dados');
       return;
     }
 
-    // Sempre garante que os usuários do seed existem no Firebase
+    // Já na versão correta — garante usuários
     const usersSnap=await getDoc(doc(_db,'dados',K.USR));
     const fbUsers=usersSnap.exists()?usersSnap.data().value:[];
     const localUsers=load(K.USR)||[];
     if(localUsers.length>fbUsers.length){
       await _fbWrite(K.USR, localUsers);
-      console.log('👥 Usuários sincronizados com Firebase');
-    }
-
-    // Já na versão correta — só sobe dados locais se Firebase estiver vazio
-    const snap=await getDoc(doc(_db,'dados',K.USR));
-    if(snap.exists())return;
-    for(const k of Object.values(K)){
-      if(k===K.SES)continue;
-      const local=localStorage.getItem(k);
-      if(local){try{await _fbWrite(k,JSON.parse(local));}catch(e){}}
-    }
-    const users=localStorage.getItem(K.USR);
-    if(!users){
-      await _fbWrite(K.USR,[{id:'1',nome:'Administrador',username:'admin',password:'admin123',role:'admin'}]);
     }
   }catch(e){console.warn('Erro migração:',e);}
 }
