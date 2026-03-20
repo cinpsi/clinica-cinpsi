@@ -4463,7 +4463,12 @@ function finHandleImport(event){
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
       const recs=finLoad(FK.REC);
-      let imp=0, dup=0;
+      let imp=0, dup=0, novoPac=0, novoLead=0;
+
+      // Carrega pacientes e convertidos para verificar novos
+      const pacs=loadPac();
+      const conv=loadConvAntigos();
+
       rows.forEach((row,i)=>{
         let ds=(row['Data']||'').toString().trim();
         if(ds.includes('/')){const [d,m,y]=ds.split('/');ds=y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0');}
@@ -4475,13 +4480,50 @@ function finHandleImport(event){
         if(forma.toLowerCase().includes('dinheiro')) forma='Dinheiro';
         if(forma.toLowerCase().includes('débito')||forma.toLowerCase().includes('debito')) forma='Cartão de débito';
         const pac=(row['Paciente']||'').toString().trim();
+        const ter=normTer((row['Especialista']||'').toString().trim());
+        const servico=(row['Serviços']||'').toString().trim();
+
+        // Importa receita
         const dupCheck=recs.some(r=>r.data===ds&&r.paciente===pac&&r.valor===val);
-        if(dupCheck){dup++;return;}
-        recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:normTer((row['Especialista']||'').toString().trim()),servico:(row['Serviços']||'').toString().trim(),forma,status:st,origem:'doctoralia'});
-        imp++;
+        if(dupCheck){dup++;} else {
+          recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:ter,servico,forma,status:st,origem:'doctoralia'});
+          imp++;
+        }
+
+        if(!pac||!ter) return;
+
+        // Cria paciente na supervisão se não existir (nome + terapeuta)
+        if(!pacs.find(p=>p.nome.toLowerCase()===pac.toLowerCase()&&(p.terapeuta||'').toLowerCase()===ter.toLowerCase())){
+          pacs.push({
+            id:'doc_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+            nome:pac, terapeuta:ter, idade:'', inicio:ds,
+            queixa:servico, telefone:'', origem:'Doctoralia', obs:'', fromLead:true
+          });
+          novoPac++;
+        }
+
+        // Cria lead convertido se não existir (nome + terapeuta)
+        if(!conv.find(c=>(c.paciente||'').toLowerCase()===pac.toLowerCase()&&(c.terapeuta||'').toLowerCase()===ter.toLowerCase())){
+          const newId='ca_doc_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+          conv.push({
+            id:newId, paciente:pac, terapeuta:ter, valor:null,
+            origem:'Doctoralia', servico, status:'Fechado',
+            observacao:'Paciente antigo', leadConvertido:false, ativo:true,
+            data:ds
+          });
+          novoLead++;
+        }
       });
-      finSave(FK.REC,recs); fin_refresh();
-      toast(imp+' consulta'+(imp!==1?'s':'')+' importada'+(imp!==1?'s':'')+(dup?` (${dup} duplicada${dup!==1?'s':''} ignorada${dup!==1?'s':''})`:'')+' ✅');
+
+      finSave(FK.REC,recs);
+      if(novoPac>0) savePac(pacs);
+      if(novoLead>0) saveConvAntigos(conv);
+      fin_refresh();
+
+      let msg=imp+' consulta'+(imp!==1?'s':'')+' importada'+(imp!==1?'s':'');
+      if(dup) msg+=` (${dup} duplicada${dup!==1?'s':''} ignorada${dup!==1?'s':''})`;
+      if(novoPac) msg+=` · ${novoPac} paciente${novoPac!==1?'s':''} novo${novoPac!==1?'s':''} adicionado${novoPac!==1?'s':''}`;
+      toast(msg+' ✅');
     }catch(err){ toast('Erro ao ler o arquivo. ❌'); console.error(err); }
   };
   reader.readAsArrayBuffer(file);
