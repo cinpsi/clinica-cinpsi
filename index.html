@@ -611,7 +611,7 @@ async function _migrateLocalToFirebase(){
 
     const verSnap=await getDoc(doc(_db,'dados','cl_data_version'));
     const fbVersion=verSnap.exists()?verSnap.data().value:null;
-    const DATA_VERSION='2026-03-13-v8';
+    const DATA_VERSION='2026-03-13-v9';
 
     if(fbVersion!==DATA_VERSION){
       // Firebase vazio ou versão antiga — sobe TODOS os dados locais sem sobrescrever leads existentes
@@ -803,7 +803,14 @@ const SEED_CONVERTIDOS_ANTIGOS=[
   {id:"ca67",paciente:"Victória Amorim Santos",terapeuta:"Mayara",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
   {id:"ca68",paciente:"Vinicius Bonifácio Fernandes",terapeuta:"Tatiane",valor:null,origem:"Indicação",servico:"Psicoterapia",status:"Fechado",observacao:"Lead convertido",leadConvertido:true},
   {id:"ca69",paciente:"Vitória Ribeiro",terapeuta:"Mayara",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
-  {id:"ca70",paciente:"Viviane do Prado Manoel",terapeuta:"Tatiane",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false}
+  {id:"ca70",paciente:"Viviane do Prado Manoel",terapeuta:"Tatiane",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca71",paciente:"Levi Nazzoni de Sousa",terapeuta:"Luciana",valor:null,origem:"Doctoralia",servico:"Primeira consulta Fonoaudiologia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca72",paciente:"Sérgio Corelli Freitas",terapeuta:"Luciana",valor:null,origem:"Doctoralia",servico:"Primeira consulta Fonoaudiologia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca73",paciente:"Cleide Michelle",terapeuta:"Tatiane",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca74",paciente:"João Pedro Ferreira da Silva",terapeuta:"Mayara",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca75",paciente:"LUIS PAULO RODRIGUES DOS SANTOS",terapeuta:"Tatiane",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca76",paciente:"Miguel Porto Santos",terapeuta:"Leticia",valor:null,origem:"Doctoralia",servico:"Psicoterapia Criança",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false},
+  {id:"ca77",paciente:"Bryan Fornazaro de Freitas",terapeuta:"Leticia",valor:null,origem:"Doctoralia",servico:"Psicoterapia",status:"Fechado",observacao:"Paciente antigo",leadConvertido:false}
 ];
 
 
@@ -3214,7 +3221,7 @@ setTimeout(async ()=>{
   }
 }, 3000);
 // Versão dos dados — força atualização quando há nova importação
-const DATA_VERSION = '2026-03-13-v8';
+const DATA_VERSION = '2026-03-13-v9';
 if(localStorage.getItem('cl_data_version') !== DATA_VERSION){
   localStorage.removeItem('cl_conv_antigos');
   localStorage.removeItem('cl_fat');
