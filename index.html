@@ -1493,7 +1493,11 @@ function populateTerapeutaDropdown(selId, val){
   const ters=loadUsers().filter(u=>u.role==='terapeuta'||u.role==='supervisora').sort((a,b)=>a.nome.localeCompare(b.nome));
   const sel=document.getElementById(selId);
   if(!sel) return;
-  sel.innerHTML='<option value="">Selecione...</option>'+ters.map(t=>`<option value="${esc(t.nome)}"${t.nome===val?' selected':''}>${esc(t.nome)}</option>`).join('');
+  // Usa normTer para garantir que o valor salvo bate com o nome no dropdown
+  sel.innerHTML='<option value="">Selecione...</option>'+ters.map(t=>{
+    const nomeNorm=normTer(t.nome);
+    return`<option value="${esc(nomeNorm)}"${nomeNorm===val||t.nome===val?' selected':''}>${esc(nomeNorm)}</option>`;
+  }).join('');
 }
 
 function openLeadModal(id){
