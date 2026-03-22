@@ -551,7 +551,10 @@ async function initFirebase(){
     _db=getFirestore(fbApp);
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
-    for(const col of cols){
+    // Adiciona chaves financeiras e de config ao listener
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses'];
+    const allCols=[...cols, ...extraCols];
+    for(const col of allCols){
       onSnapshot(doc(_db,'dados',col),snap=>{
         if(snap.exists()){
           const val=snap.data().value;
@@ -639,6 +642,20 @@ async function _migrateLocalToFirebase(){
       const fbRecSnap=await getDoc(doc(_db,'dados',K.REC));
       const fbRec=fbRecSnap.exists()?fbRecSnap.data().value:[];
       if(localRec.length>fbRec.length) await _fbWrite(K.REC, localRec);
+
+      // Sobe dados financeiros do localStorage para Firebase se Firebase estiver vazio
+      const extraKeys=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses'];
+      for(const k of extraKeys){
+        const fbSnap=await getDoc(doc(_db,'dados',k));
+        const localData=localStorage.getItem(k);
+        if(!fbSnap.exists()&&localData){
+          try{
+            const parsed=JSON.parse(localData);
+            const hasData=Array.isArray(parsed)?parsed.length>0:Object.keys(parsed||{}).length>0;
+            if(hasData){ await _fbWrite(k,parsed); console.log('📦 Migrado para Firebase:',k); }
+          }catch(e){}
+        }
+      }
 
       await _fbWrite(K.USR, load(K.USR)||[]);
       await _fbWrite('cl_data_version', DATA_VERSION);
@@ -3245,8 +3262,18 @@ let _finYear  = new Date().getFullYear();
 let _finTipo  = 'unica';
 
 const FK = { REC: 'cinpsi_receitas', DESP: 'cinpsi_despesas', FORN: 'cinpsi_fornecedores', PREV: 'cinpsi_previsao_config' };
-function finLoad(k){ try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){ return []; } }
-function finSave(k,v){ localStorage.setItem(k, JSON.stringify(v)); }
+function finLoad(k){
+  try{
+    const cached=_cache[k];
+    if(cached!==undefined) return Array.isArray(cached)?cached:(cached||[]);
+    return JSON.parse(localStorage.getItem(k)||'[]');
+  }catch(e){return[];}
+}
+function finSave(k,v){
+  localStorage.setItem(k,JSON.stringify(v));
+  _cache[k]=v;
+  if(typeof _fbWrite==='function') _fbWrite(k,v);
+}
 
 function finFmt(v){ return 'R$ '+v.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function finFmtDate(s){ if(!s||!s.includes('-')) return s||'—'; const [y,m,d]=s.split('-'); return d+'/'+m+'/'+y; }
@@ -3359,8 +3386,18 @@ function fin_refresh(){
 // ════════════════════════════════════════════════════════════
 const DIAS_SEMANA=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta','Sábado'];
 
-function finLoadPrevConfig(){ try{return JSON.parse(localStorage.getItem(FK.PREV)||'{}');}catch(e){return{};} }
-function finSavePrevConfig(v){ localStorage.setItem(FK.PREV,JSON.stringify(v)); }
+function finLoadPrevConfig(){
+  try{
+    const cached=_cache[FK.PREV];
+    if(cached!==undefined) return cached||{};
+    return JSON.parse(localStorage.getItem(FK.PREV)||'{}');
+  }catch(e){return{};}
+}
+function finSavePrevConfig(v){
+  localStorage.setItem(FK.PREV,JSON.stringify(v));
+  _cache[FK.PREV]=v;
+  _fbWrite(FK.PREV,v);
+}
 
 // Conta quantas vezes um dia da semana (0=dom..6=sáb) aparece no mês/ano
 function contarDiasNoMes(diaSemana, mes, ano){
@@ -3813,9 +3850,17 @@ function finDefaultPct(ter){
   return defaults[ter]??35;
 }
 function finLoadRegras(){
-  try{ return JSON.parse(localStorage.getItem('cinpsi_regras_repasse')||'{}'); }catch(e){ return {}; }
+  try{
+    const cached=_cache['cinpsi_regras_repasse'];
+    if(cached!==undefined) return cached||{};
+    return JSON.parse(localStorage.getItem('cinpsi_regras_repasse')||'{}');
+  }catch(e){ return {}; }
 }
-function finSaveRegras(r){ localStorage.setItem('cinpsi_regras_repasse', JSON.stringify(r)); }
+function finSaveRegras(r){
+  localStorage.setItem('cinpsi_regras_repasse',JSON.stringify(r));
+  _cache['cinpsi_regras_repasse']=r;
+  _fbWrite('cinpsi_regras_repasse',r);
+}
 
 // Retorna as regras vigentes, mesclando salvas com defaults hardcoded
 function finGetRegras(){
@@ -3851,7 +3896,7 @@ function finBuildFat(){
   // % globais salvos (para terapeutas sem regra especial)
   const pctGlobal={};
   loadFat().forEach(r=>{if(r.pct_repasse!=null) pctGlobal[r.terapeuta]=r.pct_repasse;});
-  try{ const fr=JSON.parse(localStorage.getItem('cinpsi_repasses')||'{}'); Object.assign(pctGlobal,fr); }catch(e){}
+  try{ const fr=_cache['cinpsi_repasses']||JSON.parse(localStorage.getItem('cinpsi_repasses')||'{}'); Object.assign(pctGlobal,fr); }catch(e){}
 
   const regras = finGetRegras();
 
@@ -3975,11 +4020,13 @@ function finRenderRepasses(){
 function finRepUpdateRepasse(terapeuta, val){
   // Salva no storage do financeiro E no storage antigo (compatibilidade)
   const pct=parseFloat(val)/100;
-  const fr=JSON.parse(localStorage.getItem('cinpsi_repasses')||'{}');
+  const fr=_cache['cinpsi_repasses']||JSON.parse(localStorage.getItem('cinpsi_repasses')||'{}');
   // Remove entradas com nomes curtos legados
   ['Luciana','Adriana'].forEach(n=>delete fr[n]);
   if(isNaN(pct)) delete fr[terapeuta]; else fr[terapeuta]=pct;
-  localStorage.setItem('cinpsi_repasses', JSON.stringify(fr));
+  localStorage.setItem('cinpsi_repasses',JSON.stringify(fr));
+  _cache['cinpsi_repasses']=fr;
+  _fbWrite('cinpsi_repasses',fr);
 
   // Mantém compatibilidade com updateRepasse original
   const fat=loadFat();
