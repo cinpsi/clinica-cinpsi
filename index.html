@@ -1804,7 +1804,9 @@ function saveConv(){
   const novoValor=document.getElementById('ec-valor').value?Number(document.getElementById('ec-valor').value):null;
   const valorMensal=document.getElementById('ec-valor-mensal').value?Number(document.getElementById('ec-valor-mensal').value):null;
   const diaSemana=document.getElementById('ec-dia-semana').value!==''?parseInt(document.getElementById('ec-dia-semana').value):null;
-  const prevCampos={modalidade, valor:novoValor, valorMensal, diaSemana};
+  // Para mensal, valor = valorMensal; para avulso/unica, valor = valor por sessão
+  const valorFinal=modalidade==='mensal'?(valorMensal||null):novoValor;
+  const prevCampos={modalidade, valor:valorFinal, valorMensal, diaSemana};
 
   // Se é um antigo (id começa com "ca"), atualiza na lista de antigos
   if(editConvId.startsWith('ca')||!editConvId.startsWith('lead_')){
