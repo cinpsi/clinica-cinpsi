@@ -5,8 +5,50 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Clínica — Sistema de Gestão</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
+async function forceSyncAll(btn){
+  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
+  try{
+    const allKeys=Object.values(K).filter(k=>k!=='cl_session');
+    let count=0;
+    for(const k of allKeys){
+      try{
+        const val=_cache[k]!==undefined?_cache[k]:JSON.parse(localStorage.getItem(k)||'null');
+        if(val!==null){ await _fbWrite(k,val); count++; }
+      }catch(e){}
+    }
+    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+    alert('✅ '+count+' itens sincronizados com a nuvem!');
+  }catch(e){
+    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+  }
+}
+
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
+async function forceSyncAll(btn){
+  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
+  try{
+    const allKeys=Object.values(K).filter(k=>k!=='cl_session');
+    let count=0;
+    for(const k of allKeys){
+      try{
+        const val=_cache[k]!==undefined?_cache[k]:JSON.parse(localStorage.getItem(k)||'null');
+        if(val!==null){ await _fbWrite(k,val); count++; }
+      }catch(e){}
+    }
+    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+    alert('✅ '+count+' itens sincronizados com a nuvem!');
+  }catch(e){
+    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+  }
+}
+
+</script>
 <style>
 :root{
   --bg:#F7F4EF;--surface:#FFF;--surface2:#F0EDE8;--border:#E2DDD6;--border2:#CCC8C0;
@@ -454,6 +496,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
         </div>
       </div>
       <button class="btn-logout" onclick="doLogout()">Sair</button>
+      <button onclick="forceSyncAll(this)" style="width:100%;margin-bottom:6px;padding:8px;background:none;border:1px solid #9bc8e0;border-radius:8px;font-size:11px;color:#0e3e5e;cursor:pointer;text-align:center">☁️ Sincronizar agora</button>
       <button id="btn-backup" onclick="exportBackup()" style="display:none;width:100%;margin-top:6px;padding:8px;background:none;border:1px solid var(--border);border-radius:var(--radius);font-size:11px;color:var(--text2);cursor:pointer;text-align:center" title="Exportar backup de todos os dados">💾 Backup dos dados</button>
     </div>
   </aside>
@@ -546,7 +589,6 @@ const FIREBASE_CONFIG = {
 // STORAGE LAYER — Firebase Firestore + localStorage como cache
 // ════════════════════════════════════════════════════════════
 const K={USR:'cl_users',SES:'cl_session',LEADS:'cl_leads',PAC:'cl_pac',REC:'cl_rec',FAT:'cl_fat',CONV:'cl_conv_antigos',HIST:'cl_fat_historico',PTI:'cl_pti',PTIPRO:'cl_pti_pro',REGPRO:'cl_reg_pro'};
-const MEUDEV_KEY = 'cl_meudev';
 
 let _db=null;
 let _fbReady=false;
@@ -562,7 +604,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses', MEUDEV_KEY];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       onSnapshot(doc(_db,'dados',col),snap=>{
@@ -1171,8 +1213,8 @@ function buildNav(){
       <button class="nav-item" onclick="showView('registros')" id="nav-registros"><span class="nav-icon">📋</span> Registros</button>
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
       <button class="nav-item" onclick="showView('pacientes')" id="nav-pacientes"><span class="nav-icon">👤</span> Pacientes</button>
-      <div class="nav-section">Meu Desenvolvimento</div>
-      <button class="nav-item" onclick="showView('meudesenvolvimento')" id="nav-meudesenvolvimento"><span class="nav-icon">🌱</span> Notas de supervisão</button>
+      <button class="nav-item" onclick="showView('pti')" id="nav-pti"><span class="nav-icon">🎯</span> PTI</button>
+      <button class="nav-item" onclick="showView('ptipro')" id="nav-ptipro"><span class="nav-icon">📋</span> PTI Profissionais</button>
       <div class="nav-section">Configurações</div>
       <button class="nav-item" onclick="showView('usuarios')" id="nav-usuarios"><span class="nav-icon">🔐</span> Usuários</button>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -1181,8 +1223,9 @@ function buildNav(){
       <button class="nav-item" onclick="showView('registros')" id="nav-registros"><span class="nav-icon">📋</span> Registros</button>
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
       <button class="nav-item" onclick="showView('pacientes')" id="nav-pacientes"><span class="nav-icon">👤</span> Pacientes</button>
-      <div class="nav-section">Meu Desenvolvimento</div>
-      <button class="nav-item" onclick="showView('meudesenvolvimento')" id="nav-meudesenvolvimento"><span class="nav-icon">🌱</span> Notas de supervisão</button>
+      <button class="nav-item" onclick="showView('pti')" id="nav-pti"><span class="nav-icon">🎯</span> PTI</button>
+      <button class="nav-item" onclick="showView('ptipro')" id="nav-ptipro"><span class="nav-icon">📋</span> PTI Profissionais</button>
+      <button class="nav-item" onclick="abrirMeuDesenvolvimento()" id="nav-meudev"><span class="nav-icon">🌱</span> Meu desenvolvimento</button>
       <div class="nav-section">Configurações</div>
       <button class="nav-item" onclick="showView('usuarios')" id="nav-usuarios"><span class="nav-icon">🔐</span> Usuários</button>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -1191,8 +1234,10 @@ function buildNav(){
       <button class="nav-item" onclick="showView('registros')" id="nav-registros"><span class="nav-icon">📋</span> Registros</button>
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
       <button class="nav-item" onclick="showView('pacientes')" id="nav-pacientes"><span class="nav-icon">👤</span> Pacientes</button>
+      <button class="nav-item" onclick="showView('pti')" id="nav-pti"><span class="nav-icon">🎯</span> PTI</button>
       <div class="nav-section">Meu Desenvolvimento</div>
-      <button class="nav-item" onclick="showView('meudesenvolvimento')" id="nav-meudesenvolvimento"><span class="nav-icon">🌱</span> Notas de supervisão</button>
+      <button class="nav-item" onclick="showView('ptipro')" id="nav-ptipro"><span class="nav-icon">📋</span> PTI Profissionais</button>
+      <button class="nav-item" onclick="abrirMeuDesenvolvimento()" id="nav-meudev"><span class="nav-icon">🌱</span> Meu desenvolvimento</button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   }
@@ -1215,7 +1260,6 @@ const VM={
   'usuarios':{title:'Usuários',sub:'Gestão de acesso'},
   'minhaconta':{title:'Minha conta',sub:'Alterar senha'},
   'financeiro':{title:'Financeiro',sub:'Controle de receitas e despesas da clínica',role:'admin'},
-  'meudesenvolvimento':{title:'Meu Desenvolvimento',sub:'Notas de supervisão estruturada'},
 };
 
 let leadViewMode='tabela';
@@ -1266,7 +1310,6 @@ function showView(name){
   else if(name==='ptipro') renderPTIPro(c);
   else if(name==='usuarios') renderUsuarios(c);
   else if(name==='minhaconta') renderMinhaConta(c);
-  else if(name==='meudesenvolvimento') renderMeuDesenvolvimento(c);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -5221,323 +5264,25 @@ function finHandleImport(event){
   event.target.value='';
 }
 
-// ════════════════════════════════════════════════════════════
-// MEU DESENVOLVIMENTO — Notas de Supervisão Estruturada
-// ════════════════════════════════════════════════════════════
 
-function loadMeuDev(){
-  try{ return JSON.parse(localStorage.getItem(MEUDEV_KEY)||'[]'); }catch(e){ return []; }
-}
-function saveMeuDev(arr){
-  localStorage.setItem(MEUDEV_KEY, JSON.stringify(arr));
-  if(_db) _fbWrite(MEUDEV_KEY, arr);
-}
-function meuDevId(){ return 'md_'+Date.now()+'_'+Math.random().toString(36).slice(2,7); }
-
-function renderMeuDesenvolvimento(c){
-  const notas = loadMeuDev().filter(n => n.terapeuta === CU.nome || n.terapeutaId === CU.id);
-  notas.sort((a,b)=>(b.data||'').localeCompare(a.data||''));
-
-  const acts = document.getElementById('topbar-actions');
-  acts.innerHTML = `<button class="btn-purple" onclick="meuDevAbrirNova()">+ Nova nota</button>`;
-
-  if(!notas.length){
-    c.innerHTML=`<div style="text-align:center;padding:60px 20px;color:var(--text3)">
-      <div style="font-size:36px;margin-bottom:12px">🌱</div>
-      <div style="font-size:15px;font-weight:500;color:var(--text2);margin-bottom:6px">Nenhuma nota de supervisão ainda</div>
-      <div style="font-size:13px">Clique em <strong>+ Nova nota</strong> para registrar sua primeira supervisão.</div>
-    </div>`;
-    return;
+async function forceSyncAll(btn){
+  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
+  try{
+    const allKeys=Object.values(K).filter(k=>k!=='cl_session');
+    let count=0;
+    for(const k of allKeys){
+      try{
+        const val=_cache[k]!==undefined?_cache[k]:JSON.parse(localStorage.getItem(k)||'null');
+        if(val!==null){ await _fbWrite(k,val); count++; }
+      }catch(e){}
+    }
+    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+    alert('✅ '+count+' itens sincronizados com a nuvem!');
+  }catch(e){
+    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
   }
-
-  c.innerHTML=`
-  <div style="max-width:760px">
-    ${notas.map(n=>`
-    <div class="record-card" onclick="meuDevVerNota('${n.id}')">
-      <div class="rec-head">
-        <div class="rec-patient" style="font-size:15px">📋 ${esc(n.protocolo||'Sem protocolo')}</div>
-        <div class="rec-date-badge">${fmtDate(n.data)}</div>
-      </div>
-      <div class="rec-meta">
-        <span class="meta-pill pill-terapia">Supervisor/a: ${esc(n.supervisor||'—')}</span>
-        ${n.horarioInicio||n.horarioFim?`<span class="meta-pill pill-inicio">${esc(n.horarioInicio||'')}${n.horarioFim?' – '+esc(n.horarioFim):''}</span>`:''}
-      </div>
-      <div class="rec-topics">
-        <div class="topic-preview tp-obs"><div class="topic-preview-label">Metas</div><div class="topic-preview-text">${esc((n.metas||'—').slice(0,80))}</div></div>
-        <div class="topic-preview tp-ori"><div class="topic-preview-label">Agenda</div><div class="topic-preview-text">${esc((n.agenda||'—').slice(0,80))}</div></div>
-        <div class="topic-preview tp-tar"><div class="topic-preview-label">Resumo</div><div class="topic-preview-text">${esc((n.resumo||'—').slice(0,80))}</div></div>
-        <div class="topic-preview tp-prx"><div class="topic-preview-label">Plano de ação</div><div class="topic-preview-text">${esc((n.planoAcao||'—').slice(0,80))}</div></div>
-      </div>
-    </div>`).join('')}
-  </div>`;
-}
-
-function meuDevAbrirNova(){
-  const c = document.getElementById('main-content');
-  document.getElementById('topbar-title').textContent = 'Nova Nota de Supervisão';
-  document.getElementById('topbar-sub').textContent = 'Preencha os campos abaixo';
-  document.getElementById('topbar-actions').innerHTML = '';
-  meuDevRenderForm(c, null);
-}
-
-function meuDevVerNota(id){
-  const notas = loadMeuDev();
-  const nota = notas.find(n=>n.id===id); if(!nota) return;
-  const c = document.getElementById('main-content');
-  document.getElementById('topbar-title').textContent = 'Nota de Supervisão';
-  document.getElementById('topbar-sub').textContent = fmtDate(nota.data);
-  document.getElementById('topbar-actions').innerHTML = `<button class="btn-delete" onclick="meuDevExcluir('${id}')">🗑 Excluir</button>`;
-  meuDevRenderForm(c, nota);
-}
-
-function meuDevRenderForm(c, nota){
-  const n = nota || {};
-  const isEdit = !!nota;
-  const alunos = n.alunos || [{nome:'',presenca:'P'}];
-  const atividades = n.atividades || {perguntas:false,gravacao:false,leitura:false,atividadeFormativa:false,avaliacao:false,outros:false};
-
-  c.innerHTML=`
-  <div style="max-width:760px">
-    <button class="back-btn" onclick="showView('meudesenvolvimento')">← Voltar</button>
-
-    <!-- CABEÇALHO -->
-    <div class="form-card">
-      <div class="section-title">Identificação</div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label">Nome do/a supervisor/a</label>
-          <input class="form-input" id="md-supervisor" value="${esc(n.supervisor||'')}" placeholder="Nome completo">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Protocolo de atendimento</label>
-          <input class="form-input" id="md-protocolo" value="${esc(n.protocolo||'')}" placeholder="Nº do protocolo">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Data</label>
-          <input class="form-input" type="date" id="md-data" value="${esc(n.data||'')}">
-        </div>
-        <div class="form-group" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-          <div>
-            <label class="form-label">Início</label>
-            <input class="form-input" type="time" id="md-inicio" value="${esc(n.horarioInicio||'')}">
-          </div>
-          <div>
-            <label class="form-label">Fim</label>
-            <input class="form-input" type="time" id="md-fim" value="${esc(n.horarioFim||'')}">
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ALUNOS -->
-    <div class="form-card">
-      <div class="section-title" style="display:flex;justify-content:space-between;align-items:center">
-        Alunos
-        <button class="btn-ghost" style="font-size:12px;padding:4px 10px" onclick="meuDevAddAluno()">+ Aluno</button>
-      </div>
-      <div id="md-alunos-wrap">
-        ${alunos.map((a,i)=>`
-        <div class="form-grid" style="grid-template-columns:1fr auto auto;gap:8px;margin-bottom:8px;align-items:center" id="md-aluno-row-${i}">
-          <input class="form-input" id="md-aluno-nome-${i}" value="${esc(a.nome||'')}" placeholder="Nome do aluno">
-          <select class="form-select" id="md-aluno-pres-${i}" style="width:70px">
-            <option value="P" ${a.presenca==='P'?'selected':''}>P</option>
-            <option value="F" ${a.presenca==='F'?'selected':''}>F</option>
-          </select>
-          ${i>0?`<button class="btn-delete" onclick="meuDevRemAluno(${i})">✕</button>`:'<div style="width:40px"></div>'}
-        </div>`).join('')}
-      </div>
-    </div>
-
-    <!-- ATIVIDADES -->
-    <div class="form-card">
-      <div class="section-title">Atividades de Supervisão / Plano de Ação</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px">
-        ${[
-          ['perguntas','Perguntas'],
-          ['gravacao','Gravação de sessão'],
-          ['leitura','Leitura'],
-          ['atividadeFormativa','Atividade formativa'],
-          ['avaliacao','Avaliação'],
-          ['outros','Outros*']
-        ].map(([key,label])=>`
-        <label style="display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);cursor:pointer;background:var(--surface);font-size:13px;transition:background .15s"
-          onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface)'">
-          <input type="checkbox" id="md-at-${key}" ${atividades[key]?'checked':''} style="accent-color:var(--purple);width:15px;height:15px">
-          ${esc(label)}
-        </label>`).join('')}
-      </div>
-      <div style="font-size:11px;color:var(--text3);margin-top:6px">*combinado em supervisão</div>
-    </div>
-
-    <!-- METAS / OBSERVADOR -->
-    <div class="form-card">
-      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-group full" style="grid-column:1">
-          <div class="topic-header th-tar" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">🎯 Metas da supervisão</div>
-          <textarea class="topic-textarea" id="md-metas" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-            placeholder="Descreva as metas desta supervisão..." rows="4">${esc(n.metas||'')}</textarea>
-        </div>
-        <div class="form-group full" style="grid-column:2">
-          <div class="topic-header th-obs" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">👁 O observador</div>
-          <textarea class="topic-textarea" id="md-observador" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-            placeholder="Notas do observador..." rows="4">${esc(n.observador||'')}</textarea>
-        </div>
-      </div>
-    </div>
-
-    <!-- PONTE -->
-    <div class="form-card">
-      <div class="topic-header th-ori" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">🔗 Ponte com a supervisão anterior</div>
-      <textarea class="topic-textarea" id="md-ponte" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-        placeholder="Como essa sessão se conecta com a anterior?" rows="4">${esc(n.ponte||'')}</textarea>
-    </div>
-
-    <!-- AGENDA -->
-    <div class="form-card">
-      <div class="topic-header th-prx" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">📅 Agenda da supervisão</div>
-      <textarea class="topic-textarea" id="md-agenda" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-        placeholder="Tópicos previstos para esta supervisão..." rows="4">${esc(n.agenda||'')}</textarea>
-    </div>
-
-    <!-- DESENVOLVIMENTO -->
-    <div class="form-card">
-      <div class="topic-header th-obs" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">📝 Desenvolvimento da supervisão (anotações relevantes)</div>
-      <textarea class="topic-textarea" id="md-desenvolvimento" style="border-radius:0 0 var(--radius-sm) var(--radius-sm);min-height:120px"
-        placeholder="Registre os principais pontos discutidos e anotações relevantes..." rows="6">${esc(n.desenvolvimento||'')}</textarea>
-    </div>
-
-    <!-- RESUMO + PLANO -->
-    <div class="form-card">
-      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:14px">
-        <div style="grid-column:1">
-          <div class="topic-header th-tar" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">💬 Resumo – O que ficou de mais importante para cada um?</div>
-          <textarea class="topic-textarea" id="md-resumo" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-            placeholder="O que foi mais significativo..." rows="5">${esc(n.resumo||'')}</textarea>
-        </div>
-        <div style="grid-column:2">
-          <div class="topic-header th-prx" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">✅ Plano de ação (tarefa para casa ou pendência) para a próxima supervisão?</div>
-          <textarea class="topic-textarea" id="md-planoAcao" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-            placeholder="Tarefas, leituras, pendências..." rows="5">${esc(n.planoAcao||'')}</textarea>
-        </div>
-      </div>
-    </div>
-
-    <!-- OBSERVAÇÕES FINAIS + FEEDBACK -->
-    <div class="form-card">
-      <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:14px">
-        <div style="grid-column:1">
-          <div class="topic-header th-ori" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">📣 Observações finais da supervisora / avisos / feedback durante a supervisão</div>
-          <textarea class="topic-textarea" id="md-obsFinal" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-            placeholder="Avisos, observações e feedbacks dados pela supervisora..." rows="5">${esc(n.obsFinal||'')}</textarea>
-        </div>
-        <div style="grid-column:2">
-          <div class="topic-header th-duv" style="border-radius:var(--radius-sm) var(--radius-sm) 0 0;font-size:12px">🔄 Após a supervisão: qual o feedback dos/as supervisores/as observadores/as?</div>
-          <textarea class="topic-textarea" id="md-feedbackPos" style="border-radius:0 0 var(--radius-sm) var(--radius-sm)"
-            placeholder="Feedback recebido após a sessão..." rows="5">${esc(n.feedbackPos||'')}</textarea>
-        </div>
-      </div>
-    </div>
-
-    <!-- BOTÃO SALVAR -->
-    <div style="display:flex;justify-content:flex-end;gap:10px;margin-bottom:32px">
-      <button class="btn-ghost" onclick="showView('meudesenvolvimento')">Cancelar</button>
-      <button class="btn-save-purple" onclick="meuDevSalvar('${isEdit?nota.id:''}')">💾 Salvar nota</button>
-    </div>
-  </div>`;
-
-  // Guarda estado de alunos em memória
-  window._mdAlunos = JSON.parse(JSON.stringify(alunos));
-}
-
-function meuDevGetAlunos(){
-  const wrap = document.getElementById('md-alunos-wrap');
-  if(!wrap) return window._mdAlunos||[{nome:'',presenca:'P'}];
-  const rows = wrap.querySelectorAll('[id^="md-aluno-row-"]');
-  const res = [];
-  rows.forEach((row,i)=>{
-    const nome = (document.getElementById('md-aluno-nome-'+i)||{}).value||'';
-    const presenca = (document.getElementById('md-aluno-pres-'+i)||{}).value||'P';
-    if(nome.trim()) res.push({nome:nome.trim(), presenca});
-  });
-  return res.length ? res : [{nome:'',presenca:'P'}];
-}
-
-function meuDevAddAluno(){
-  window._mdAlunos = meuDevGetAlunos();
-  window._mdAlunos.push({nome:'',presenca:'P'});
-  _meuDevRefreshAlunos();
-}
-
-function meuDevRemAluno(i){
-  window._mdAlunos = meuDevGetAlunos();
-  window._mdAlunos.splice(i,1);
-  if(!window._mdAlunos.length) window._mdAlunos = [{nome:'',presenca:'P'}];
-  _meuDevRefreshAlunos();
-}
-
-function _meuDevRefreshAlunos(){
-  const wrap = document.getElementById('md-alunos-wrap'); if(!wrap) return;
-  wrap.innerHTML = window._mdAlunos.map((a,i)=>`
-    <div class="form-grid" style="grid-template-columns:1fr auto auto;gap:8px;margin-bottom:8px;align-items:center" id="md-aluno-row-${i}">
-      <input class="form-input" id="md-aluno-nome-${i}" value="${esc(a.nome||'')}" placeholder="Nome do aluno">
-      <select class="form-select" id="md-aluno-pres-${i}" style="width:70px">
-        <option value="P" ${a.presenca==='P'?'selected':''}>P</option>
-        <option value="F" ${a.presenca==='F'?'selected':''}>F</option>
-      </select>
-      ${i>0?`<button class="btn-delete" onclick="meuDevRemAluno(${i})">✕</button>`:'<div style="width:40px"></div>'}
-    </div>`).join('');
-}
-
-function meuDevSalvar(idExistente){
-  const g = id => (document.getElementById(id)||{}).value||'';
-  const gc = id => (document.getElementById(id)||{}).checked||false;
-
-  const nota = {
-    id: idExistente || meuDevId(),
-    terapeuta: CU.nome,
-    terapeutaId: CU.id,
-    supervisor:       g('md-supervisor'),
-    protocolo:        g('md-protocolo'),
-    data:             g('md-data'),
-    horarioInicio:    g('md-inicio'),
-    horarioFim:       g('md-fim'),
-    alunos:           meuDevGetAlunos(),
-    atividades: {
-      perguntas:          gc('md-at-perguntas'),
-      gravacao:           gc('md-at-gravacao'),
-      leitura:            gc('md-at-leitura'),
-      atividadeFormativa: gc('md-at-atividadeFormativa'),
-      avaliacao:          gc('md-at-avaliacao'),
-      outros:             gc('md-at-outros'),
-    },
-    metas:           g('md-metas'),
-    observador:      g('md-observador'),
-    ponte:           g('md-ponte'),
-    agenda:          g('md-agenda'),
-    desenvolvimento: g('md-desenvolvimento'),
-    resumo:          g('md-resumo'),
-    planoAcao:       g('md-planoAcao'),
-    obsFinal:        g('md-obsFinal'),
-    feedbackPos:     g('md-feedbackPos'),
-    updatedAt:       Date.now(),
-  };
-
-  if(!nota.data){ toast('Informe a data da supervisão. ⚠️'); return; }
-
-  const todas = loadMeuDev();
-  const idx = todas.findIndex(n=>n.id===nota.id);
-  if(idx>=0) todas[idx]=nota; else todas.push(nota);
-  saveMeuDev(todas);
-  toast('Nota salva com sucesso! ✅');
-  showView('meudesenvolvimento');
-}
-
-function meuDevExcluir(id){
-  if(!confirm('Excluir esta nota de supervisão? Essa ação não pode ser desfeita.')) return;
-  const todas = loadMeuDev().filter(n=>n.id!==id);
-  saveMeuDev(todas);
-  toast('Nota excluída.');
-  showView('meudesenvolvimento');
 }
 
 </script>
