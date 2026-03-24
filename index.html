@@ -8,6 +8,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-app-compat.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-firestore-compat.min.js"></script>
 
 <style>
 :root{
@@ -557,17 +559,15 @@ let _currentView=null;
 
 async function initFirebase(){
   try{
-    const {initializeApp}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-    const {getFirestore,doc,getDoc,setDoc,onSnapshot}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-    const fbApp=initializeApp(FIREBASE_CONFIG);
-    _db=getFirestore(fbApp);
+    const fbApp=firebase.initializeApp(FIREBASE_CONFIG);
+    _db=firebase.firestore();
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
     const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
-      onSnapshot(doc(_db,'dados',col),snap=>{
+      _db.collection('dados').doc(col).onSnapshot(snap=>{
         if(snap.exists()){
           const val=snap.data().value;
           const fbTs=snap.data().updatedAt||0;
@@ -619,9 +619,8 @@ async function _fbWrite(k,v){
     return;
   }
   try{
-    const {doc,setDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
     const ts=Date.now();
-    await setDoc(doc(_db,'dados',k),{value:v, updatedAt:ts});
+    await _db.collection('dados').doc(k).set({value:v, updatedAt:ts});
     localStorage.setItem(k+'_ts', ts);
     // Remove da fila se estava pendente
     delete _pendingWrites[k];
@@ -646,16 +645,14 @@ async function _fbWrite(k,v){
 async function _migrateLocalToFirebase(){
   if(!_db)return;
   try{
-    const {doc,getDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-
-    const verSnap=await getDoc(doc(_db,'dados','cl_data_version'));
-    const fbVersion=verSnap.exists()?verSnap.data().value:null;
+    const verSnap=await _db.collection('dados').doc('cl_data_version').get();
+    const fbVersion=verSnap.exists?verSnap.data().value:null;
     const DATA_VERSION='2026-03-13-v9';
 
     if(fbVersion!==DATA_VERSION){
       // Firebase vazio ou versão antiga — sobe TODOS os dados locais sem sobrescrever leads existentes
-      const fbLeadsSnap=await getDoc(doc(_db,'dados',K.LEADS));
-      const fbLeads=fbLeadsSnap.exists()?fbLeadsSnap.data().value:[];
+      const fbLeadsSnap=await _db.collection('dados').doc(K.LEADS).get();
+      const fbLeads=fbLeadsSnap.exists?fbLeadsSnap.data().value:[];
       const localLeads=load(K.LEADS)||[];
 
       // Usa leads do Firebase se tiver mais dados (evita perda)
@@ -670,19 +667,19 @@ async function _migrateLocalToFirebase(){
       if(leadsParaSalvar.length>0) await _fbWrite(K.LEADS, leadsParaSalvar);
 
       const localPac=load(K.PAC)||[];
-      const fbPacSnap=await getDoc(doc(_db,'dados',K.PAC));
-      const fbPac=fbPacSnap.exists()?fbPacSnap.data().value:[];
+      const fbPacSnap=await _db.collection('dados').doc(K.PAC).get();
+      const fbPac=fbPacSnap.exists?fbPacSnap.data().value:[];
       if(localPac.length>fbPac.length) await _fbWrite(K.PAC, localPac);
 
       const localRec=load(K.REC)||[];
-      const fbRecSnap=await getDoc(doc(_db,'dados',K.REC));
-      const fbRec=fbRecSnap.exists()?fbRecSnap.data().value:[];
+      const fbRecSnap=await _db.collection('dados').doc(K.REC).get();
+      const fbRec=fbRecSnap.exists?fbRecSnap.data().value:[];
       if(localRec.length>fbRec.length) await _fbWrite(K.REC, localRec);
 
       // Sobe dados financeiros do localStorage para Firebase se Firebase estiver vazio
       const extraKeys=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses'];
       for(const k of extraKeys){
-        const fbSnap=await getDoc(doc(_db,'dados',k));
+        const fbSnap=await _db.collection('dados').doc(k).get();
         const localData=localStorage.getItem(k);
         if(!fbSnap.exists()&&localData){
           try{
@@ -700,8 +697,8 @@ async function _migrateLocalToFirebase(){
     }
 
     // Já na versão correta — garante usuários
-    const usersSnap=await getDoc(doc(_db,'dados',K.USR));
-    const fbUsers=usersSnap.exists()?usersSnap.data().value:[];
+    const usersSnap=await _db.collection('dados').doc(K.USR).get();
+    const fbUsers=usersSnap.exists?usersSnap.data().value:[];
     const localUsers=load(K.USR)||[];
     if(localUsers.length>fbUsers.length){
       await _fbWrite(K.USR, localUsers);
