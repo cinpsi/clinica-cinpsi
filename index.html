@@ -580,13 +580,11 @@ async function initFirebase(){
             if(!fbValid){ _fbWrite(K.USR, local); }
             else { _cache[col]=val; localStorage.setItem(col,JSON.stringify(val)); }
           } else {
-            // Só aceita do Firebase se for mais recente que o local
-            const localTs=parseInt(localStorage.getItem(col+'_ts')||'0');
-            if(fbTs>=localTs){
-              _cache[col]=val;
-              localStorage.setItem(col,JSON.stringify(val));
-              localStorage.setItem(col+'_ts', fbTs);
-            }
+            // Sempre aceita dados do Firebase — ele é a fonte da verdade
+            // O onSnapshot só dispara quando há mudança real no servidor
+            _cache[col]=val;
+            localStorage.setItem(col,JSON.stringify(val));
+            localStorage.setItem(col+'_ts', fbTs);
           }
           if(col===K.PAC && typeof normalizePacTerapeutas==='function') normalizePacTerapeutas();
           _onDataUpdate(col);
