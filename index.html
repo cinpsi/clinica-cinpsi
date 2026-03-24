@@ -568,7 +568,7 @@ async function initFirebase(){
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
-        if(snap.exists()){
+        if(snap.exists){
           const val=snap.data().value;
           const fbTs=snap.data().updatedAt||0;
 
@@ -681,7 +681,7 @@ async function _migrateLocalToFirebase(){
       for(const k of extraKeys){
         const fbSnap=await _db.collection('dados').doc(k).get();
         const localData=localStorage.getItem(k);
-        if(!fbSnap.exists()&&localData){
+        if(!fbSnap.exists&&localData){
           try{
             const parsed=JSON.parse(localData);
             const hasData=Array.isArray(parsed)?parsed.length>0:Object.keys(parsed||{}).length>0;
