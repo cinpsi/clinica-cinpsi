@@ -460,6 +460,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="btn-logout" onclick="doLogout()">Sair</button>
       <button onclick="forceSyncAll(this)" style="width:100%;margin-bottom:6px;padding:8px;background:none;border:1px solid #9bc8e0;border-radius:8px;font-size:11px;color:#0e3e5e;cursor:pointer;text-align:center">☁️ Sincronizar agora</button>
       <button id="btn-backup" onclick="exportBackup()" style="display:none;width:100%;margin-top:6px;padding:8px;background:none;border:1px solid var(--border);border-radius:var(--radius);font-size:11px;color:var(--text2);cursor:pointer;text-align:center" title="Exportar backup de todos os dados">💾 Backup dos dados</button>
+      <button id="btn-restore" onclick="importBackup()" style="display:none;width:100%;margin-top:4px;padding:8px;background:none;border:1px solid var(--border);border-radius:var(--radius);font-size:11px;color:var(--text2);cursor:pointer;text-align:center" title="Restaurar backup a partir de arquivo JSON">🔄 Restaurar backup</button>
     </div>
   </aside>
 
@@ -1092,6 +1093,17 @@ function exportBackup(){
       faturamento: load(K.FAT)||[],
       convertidos: load(K.CONV)||[],
       historico: load(K.HIST)||[],
+      pti: load(K.PTI)||[],
+      pti_pro: load(K.PTIPRO)||[],
+      reg_pro: load(K.REGPRO)||[],
+    },
+    financeiro:{
+      receitas: finLoad(FK.REC)||[],
+      despesas: finLoad(FK.DESP)||[],
+      fornecedores: finLoad(FK.FORN)||[],
+      previsao_config: finLoad(FK.PREV)||[],
+      regras_repasse: JSON.parse(localStorage.getItem('cinpsi_regras_repasse')||'{}'),
+      repasses: JSON.parse(localStorage.getItem('cinpsi_repasses')||'{}'),
     }
   };
   const json=JSON.stringify(backup, null, 2);
@@ -1105,6 +1117,90 @@ function exportBackup(){
   URL.revokeObjectURL(url);
   toast('✅ Backup exportado com sucesso!');
   localStorage.setItem('cl_ultimo_backup', Date.now());
+}
+
+function importBackup(){
+  const input=document.createElement('input');
+  input.type='file';
+  input.accept='.json';
+  input.onchange=function(e){
+    const file=e.target.files[0];
+    if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const backup=JSON.parse(ev.target.result);
+        if(!backup.dados) throw new Error('Arquivo inválido: estrutura não reconhecida.');
+
+        const mo=document.createElement('div');
+        mo.className='modal-overlay';
+        mo.id='modal-confirmar-restore';
+        const temFin=backup.financeiro ? '✅ Financeiro incluído' : '⚠️ Financeiro não encontrado neste backup';
+        mo.innerHTML=`
+          <div class="modal" style="max-width:420px">
+            <div class="modal-header"><span class="modal-title">⚠️ Restaurar Backup</span></div>
+            <div class="modal-body">
+              <p style="margin-bottom:12px">Você está prestes a restaurar um backup de <strong>${new Date(backup.exportedAt).toLocaleString('pt-BR')}</strong>.</p>
+              <p style="margin-bottom:12px;color:var(--danger);font-weight:500">⚠️ Todos os dados atuais serão substituídos. Esta ação não pode ser desfeita.</p>
+              <p style="font-size:13px;color:var(--text2);margin-bottom:4px">📦 Dados encontrados no backup:</p>
+              <ul style="font-size:13px;color:var(--text2);margin:0 0 12px 18px;line-height:1.8">
+                <li>${(backup.dados.usuarios||[]).length} usuários</li>
+                <li>${(backup.dados.pacientes||[]).length} pacientes</li>
+                <li>${(backup.dados.leads||[]).length} leads</li>
+                <li>${(backup.dados.convertidos||[]).length} convertidos</li>
+                <li>${temFin}</li>
+              </ul>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-cancel" onclick="document.getElementById('modal-confirmar-restore').remove()">Cancelar</button>
+              <button class="btn-save" style="background:var(--danger)" onclick="confirmarRestore(${JSON.stringify(JSON.stringify(backup))})">🔄 Restaurar agora</button>
+            </div>
+          </div>`;
+        document.body.appendChild(mo);
+      }catch(err){
+        toast('❌ Erro ao ler backup: '+err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+function confirmarRestore(jsonStr){
+  document.getElementById('modal-confirmar-restore')?.remove();
+  try{
+    const backup=JSON.parse(jsonStr);
+    const d=backup.dados;
+
+    // Restaurar dados principais
+    if(d.usuarios)   save(K.USR,  d.usuarios);
+    if(d.leads)      save(K.LEADS,d.leads);
+    if(d.pacientes)  save(K.PAC,  d.pacientes);
+    if(d.registros)  save(K.REC,  d.registros);
+    if(d.faturamento)save(K.FAT,  d.faturamento);
+    if(d.convertidos)save(K.CONV, d.convertidos);
+    if(d.historico)  save(K.HIST, d.historico);
+    if(d.pti)        save(K.PTI,  d.pti);
+    if(d.pti_pro)    save(K.PTIPRO, d.pti_pro);
+    if(d.reg_pro)    save(K.REGPRO, d.reg_pro);
+
+    // Restaurar dados financeiros (se existirem)
+    if(backup.financeiro){
+      const f=backup.financeiro;
+      if(f.receitas)        finSave(FK.REC,  f.receitas);
+      if(f.despesas)        finSave(FK.DESP, f.despesas);
+      if(f.fornecedores)    finSave(FK.FORN, f.fornecedores);
+      if(f.previsao_config) finSave(FK.PREV, f.previsao_config);
+      if(f.regras_repasse)  localStorage.setItem('cinpsi_regras_repasse', JSON.stringify(f.regras_repasse));
+      if(f.repasses)        localStorage.setItem('cinpsi_repasses', JSON.stringify(f.repasses));
+    }
+
+    localStorage.setItem('cl_ultimo_backup', Date.now());
+    toast('✅ Backup restaurado com sucesso! Recarregando...');
+    setTimeout(()=>location.reload(), 1500);
+  }catch(err){
+    toast('❌ Erro ao restaurar: '+err.message);
+  }
 }
 function tryAutoLogin(){
   const sid=load(K.SES); if(!sid)return false;
@@ -1126,6 +1222,8 @@ function launchApp(){
   // Mostra botão de backup apenas para admin
   const btnBackup=document.getElementById('btn-backup');
   if(btnBackup) btnBackup.style.display=CU.role==='admin'?'block':'none';
+  const btnRestore=document.getElementById('btn-restore');
+  if(btnRestore) btnRestore.style.display=CU.role==='admin'?'block':'none';
   if(CU.role==='admin'){
     checkBackupLembrete();
     showView('dash-leads');
