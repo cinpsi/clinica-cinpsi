@@ -5,50 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Clínica — Sistema de Gestão</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js">
-async function forceSyncAll(btn){
-  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
-  try{
-    const allKeys=Object.values(K).filter(k=>k!=='cl_session');
-    let count=0;
-    for(const k of allKeys){
-      try{
-        const val=_cache[k]!==undefined?_cache[k]:JSON.parse(localStorage.getItem(k)||'null');
-        if(val!==null){ await _fbWrite(k,val); count++; }
-      }catch(e){}
-    }
-    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
-    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
-    alert('✅ '+count+' itens sincronizados com a nuvem!');
-  }catch(e){
-    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
-    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
-  }
-}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
-</script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js">
-async function forceSyncAll(btn){
-  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
-  try{
-    const allKeys=Object.values(K).filter(k=>k!=='cl_session');
-    let count=0;
-    for(const k of allKeys){
-      try{
-        const val=_cache[k]!==undefined?_cache[k]:JSON.parse(localStorage.getItem(k)||'null');
-        if(val!==null){ await _fbWrite(k,val); count++; }
-      }catch(e){}
-    }
-    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
-    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
-    alert('✅ '+count+' itens sincronizados com a nuvem!');
-  }catch(e){
-    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
-    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
-  }
-}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
-</script>
 <style>
 :root{
   --bg:#F7F4EF;--surface:#FFF;--surface2:#F0EDE8;--border:#E2DDD6;--border2:#CCC8C0;
@@ -649,14 +609,38 @@ async function initFirebase(){
   }
 }
 
+// Fila de dados pendentes para enviar ao Firebase
+const _pendingWrites = {};
+let _retryTimer = null;
+
 async function _fbWrite(k,v){
-  if(!_db)return;
+  if(!_db){
+    _pendingWrites[k]=v;
+    return;
+  }
   try{
     const {doc,setDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
     const ts=Date.now();
     await setDoc(doc(_db,'dados',k),{value:v, updatedAt:ts});
     localStorage.setItem(k+'_ts', ts);
-  }catch(e){console.warn('Erro Firebase write:',e);}
+    // Remove da fila se estava pendente
+    delete _pendingWrites[k];
+  }catch(e){
+    // Guarda na fila e agenda retry automático em 30s
+    _pendingWrites[k]=v;
+    console.warn('Firebase write falhou, agendando retry:', k);
+    if(!_retryTimer){
+      _retryTimer=setTimeout(async()=>{
+        _retryTimer=null;
+        const keys=Object.keys(_pendingWrites);
+        if(!keys.length) return;
+        console.log('🔄 Retry automático:', keys.length, 'itens');
+        for(const key of keys){
+          await _fbWrite(key, _pendingWrites[key]);
+        }
+      }, 30000); // tenta de novo em 30 segundos
+    }
+  }
 }
 
 async function _migrateLocalToFirebase(){
@@ -5279,6 +5263,40 @@ async function forceSyncAll(btn){
     if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
     setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
     alert('✅ '+count+' itens sincronizados com a nuvem!');
+  }catch(e){
+    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+  }
+}
+
+
+async function forceSyncAll(btn){
+  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
+  try{
+    // Sincroniza TODAS as chaves do localStorage para o Firebase
+    const allKeys=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(k && !k.endsWith('_ts') && k!=='cl_session' && k!=='cl_data_version' && k!=='cl_ultimo_backup'){
+        allKeys.push(k);
+      }
+    }
+    let count=0;
+    for(const k of allKeys){
+      try{
+        const raw=localStorage.getItem(k);
+        if(raw){
+          const val=JSON.parse(raw);
+          if(val!==null && val!==undefined){
+            await _fbWrite(k,val);
+            count++;
+          }
+        }
+      }catch(e){}
+    }
+    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
+    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
+    toast('✅ '+count+' itens sincronizados!');
   }catch(e){
     if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
     setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
