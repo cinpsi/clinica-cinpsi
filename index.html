@@ -552,6 +552,7 @@ const FIREBASE_CONFIG = {
 // STORAGE LAYER — Firebase Firestore + localStorage como cache
 // ════════════════════════════════════════════════════════════
 const K={USR:'cl_users',SES:'cl_session',LEADS:'cl_leads',PAC:'cl_pac',REC:'cl_rec',FAT:'cl_fat',CONV:'cl_conv_antigos',HIST:'cl_fat_historico',PTI:'cl_pti',PTIPRO:'cl_pti_pro',REGPRO:'cl_reg_pro'};
+const FK = { REC: 'cinpsi_receitas', DESP: 'cinpsi_despesas', FORN: 'cinpsi_fornecedores', PREV: 'cinpsi_previsao_config' };
 
 let _db=null;
 let _fbReady=false;
@@ -4012,7 +4013,6 @@ let _finMonth = new Date().getMonth();
 let _finYear  = new Date().getFullYear();
 let _finTipo  = 'unica';
 
-const FK = { REC: 'cinpsi_receitas', DESP: 'cinpsi_despesas', FORN: 'cinpsi_fornecedores', PREV: 'cinpsi_previsao_config' };
 function finLoad(k){
   try{
     const cached=_cache[k];
