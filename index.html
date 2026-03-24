@@ -400,6 +400,15 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .pti-builder-card{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
 .pti-obj-num{width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0}
 
+.ptipro-prof-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 20px;display:flex;align-items:center;justify-content:space-between;box-shadow:var(--shadow);cursor:pointer;transition:border-color .15s;margin-bottom:10px}
+.ptipro-prof-card:hover{border-color:var(--accent)}
+.ptipro-field-block{background:var(--surface2);border-radius:var(--radius);padding:16px;margin-bottom:14px;border:1px solid var(--border)}
+.ptipro-field-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.ptipro-field-badge{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600}
+.ptipro-badge-prof{background:rgba(155,200,224,.2);color:#0e3e5e}
+.ptipro-badge-sup{background:rgba(198,161,102,.2);color:#7a5510}
+.ptipro-badge-obs{background:rgba(168,182,161,.2);color:#3d6b47}
+
 </style>
 </head>
 <body>
@@ -536,7 +545,7 @@ const FIREBASE_CONFIG = {
 // ════════════════════════════════════════════════════════════
 // STORAGE LAYER — Firebase Firestore + localStorage como cache
 // ════════════════════════════════════════════════════════════
-const K={USR:'cl_users',SES:'cl_session',LEADS:'cl_leads',PAC:'cl_pac',REC:'cl_rec',FAT:'cl_fat',CONV:'cl_conv_antigos',HIST:'cl_fat_historico',PTI:'cl_pti'};
+const K={USR:'cl_users',SES:'cl_session',LEADS:'cl_leads',PAC:'cl_pac',REC:'cl_rec',FAT:'cl_fat',CONV:'cl_conv_antigos',HIST:'cl_fat_historico',PTI:'cl_pti',PTIPRO:'cl_pti_pro',REGPRO:'cl_reg_pro'};
 
 let _db=null;
 let _fbReady=false;
@@ -680,8 +689,11 @@ function _onDataUpdate(col){
     [K.PAC]:['pacientes','novo-registro'],
     [K.REC]:['registros'],
     [K.FAT]:['faturamento'],
-    [K.USR]:['usuarios'],
+    [K.USR]:['usuarios','ptipro'],
     [K.CONV]:['convertidos'],
+    [K.PTIPRO]:['ptipro'],
+    [K.REGPRO]:['ptipro'],
+    [K.PTI]:['pti'],
   };
   if((viewMap[col]||[]).includes(_currentView)){
     const c=document.getElementById('main-content');
@@ -1159,6 +1171,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
       <button class="nav-item" onclick="showView('pacientes')" id="nav-pacientes"><span class="nav-icon">👤</span> Pacientes</button>
       <button class="nav-item" onclick="showView('pti')" id="nav-pti"><span class="nav-icon">🎯</span> PTI</button>
+      <button class="nav-item" onclick="showView('ptipro')" id="nav-ptipro"><span class="nav-icon">📋</span> PTI Profissionais</button>
       <div class="nav-section">Configurações</div>
       <button class="nav-item" onclick="showView('usuarios')" id="nav-usuarios"><span class="nav-icon">🔐</span> Usuários</button>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -1168,6 +1181,8 @@ function buildNav(){
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
       <button class="nav-item" onclick="showView('pacientes')" id="nav-pacientes"><span class="nav-icon">👤</span> Pacientes</button>
       <button class="nav-item" onclick="showView('pti')" id="nav-pti"><span class="nav-icon">🎯</span> PTI</button>
+      <button class="nav-item" onclick="showView('ptipro')" id="nav-ptipro"><span class="nav-icon">📋</span> PTI Profissionais</button>
+      <button class="nav-item" onclick="abrirMeuDesenvolvimento()" id="nav-meudev"><span class="nav-icon">🌱</span> Meu desenvolvimento</button>
       <div class="nav-section">Configurações</div>
       <button class="nav-item" onclick="showView('usuarios')" id="nav-usuarios"><span class="nav-icon">🔐</span> Usuários</button>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -1177,6 +1192,9 @@ function buildNav(){
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
       <button class="nav-item" onclick="showView('pacientes')" id="nav-pacientes"><span class="nav-icon">👤</span> Pacientes</button>
       <button class="nav-item" onclick="showView('pti')" id="nav-pti"><span class="nav-icon">🎯</span> PTI</button>
+      <div class="nav-section">Meu Desenvolvimento</div>
+      <button class="nav-item" onclick="showView('ptipro')" id="nav-ptipro"><span class="nav-icon">📋</span> PTI Profissionais</button>
+      <button class="nav-item" onclick="abrirMeuDesenvolvimento()" id="nav-meudev"><span class="nav-icon">🌱</span> Meu desenvolvimento</button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   }
@@ -1195,6 +1213,7 @@ const VM={
   'detalhe':{title:'Detalhe',sub:''},
   'pacientes':{title:'Pacientes',sub:'Cadastro de pacientes'},
   'pti':{title:'PTI – Plano Terapêutico Individual',sub:'Objetivos terapêuticos por paciente'},
+  'ptipro':{title:'PTI Profissionais',sub:'Plano de desenvolvimento dos profissionais'},
   'usuarios':{title:'Usuários',sub:'Gestão de acesso'},
   'minhaconta':{title:'Minha conta',sub:'Alterar senha'},
   'financeiro':{title:'Financeiro',sub:'Controle de receitas e despesas da clínica',role:'admin'},
@@ -1245,6 +1264,7 @@ function showView(name){
   else if(name==='novo-registro') renderNovoRegistro(c);
   else if(name==='pacientes') renderPacientes(c);
   else if(name==='pti') renderPTI(c);
+  else if(name==='ptipro') renderPTIPro(c);
   else if(name==='usuarios') renderUsuarios(c);
   else if(name==='minhaconta') renderMinhaConta(c);
 }
@@ -2097,7 +2117,7 @@ function refreshRegistros(){
       <div class="rec-head"><span class="rec-patient">${esc(r.paciente)}</span><span class="rec-date-badge">${fmtDate(r.data)}</span></div>
       <div class="rec-meta">
         <span class="meta-pill pill-terapia">Terapeuta: ${esc(r.terapeuta||'—')}</span>
-        <span class="meta-pill pill-sup">Supervisora: ${esc(r.supervisora||'—')}</span>
+        <span class="meta-pill pill-sup">Supervisora</span>
         <span class="meta-pill pill-inicio">Início: ${fmtDate(r.inicioTratamento)||'—'}</span>
       </div>
       <div class="rec-topics">
@@ -2141,7 +2161,7 @@ function showDetalhe(id){
         <div class="detail-patient">${esc(r.paciente)}</div>
         <div class="detail-meta">
           <span class="meta-pill pill-terapia">Terapeuta: ${esc(r.terapeuta||'—')}</span>
-          <span class="meta-pill pill-sup">Supervisora: ${esc(r.supervisora||'—')}</span>
+          <span class="meta-pill pill-sup">Supervisora</span>
           <span class="meta-pill pill-inicio">Início: ${fmtDate(r.inicioTratamento)||'—'}</span>
           <span class="meta-pill pill-inicio">Supervisão: ${fmtDate(r.data)}</span>
         </div>
@@ -2223,7 +2243,7 @@ function renderNovoRegistro(c){
           <input class="form-input" id="nr-data" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
         <div class="form-group full"><label class="form-label">Supervisora *</label>
           <select class="form-select" id="nr-sup">
-            ${loadUsers().filter(u=>u.role==='supervisora').map(u=>`<option value="${esc(u.nome)}"${u.nome===CU.nome||CU.role!=='supervisora'&&u.nome==='Tatiane Sanches'?' selected':''}>${esc(u.nome)}</option>`).join('')}
+            ${loadUsers().filter(u=>u.role==='supervisora').map(u=>`<option value="${esc(u.nome)}"${u.nome===CU.nome||CU.role!=='supervisora'&&u.nome==='Tatiane Sanches'?' selected':''}>Supervisora${loadUsers().filter(x=>x.role==='supervisora').length>1?' — '+esc(u.nome):''}</option>`).join('')}
           </select></div>
       </div>
     </div>
@@ -2739,6 +2759,617 @@ function ptiCopyRelatorio(pacId){
     t+='\n';
   });
   navigator.clipboard.writeText(t).then(()=>toast('✅ Relatório copiado!'));
+}
+
+// ════════════════════════════════════════════════════════════
+// PTI PROFISSIONAIS
+// ════════════════════════════════════════════════════════════
+const loadRegPro=()=>load(K.REGPRO)||{};
+const saveRegPro=d=>store(K.REGPRO,d);
+
+
+const savePTIPro=d=>store(K.PTIPRO,d);
+
+// Campos fixos (nomes provisórios — Tatiane vai definir depois)
+const PTIPRO_CAMPOS=[
+  {id:'c1', label:'Campo 1', badge:'ptipro-badge-prof', role:'profissional'},
+  {id:'c2', label:'Campo 2', badge:'ptipro-badge-prof', role:'profissional'},
+  {id:'c3', label:'Campo 3', badge:'ptipro-badge-prof', role:'profissional'},
+  {id:'c4', label:'Orientações do Supervisor', badge:'ptipro-badge-sup', role:'supervisor'},
+  {id:'c5', label:'Observações Gerais', badge:'ptipro-badge-obs', role:'todos'},
+];
+
+function abrirMeuDesenvolvimento(){
+  // Abre direto no perfil do profissional logado
+  const prof=loadUsers().find(u=>u.id===CU.id||u.nome===CU.nome||normTer(u.nome)===normTer(CU.nome));
+  if(!prof){toast('Perfil não encontrado. Tente recarregar.'); return;}
+  // Navega para ptipro e abre direto no perfil
+  showView('ptipro');
+  setTimeout(()=>ptiProOpenProf(prof.id), 100);
+}
+
+function renderPTIPro(c){
+  const isSup=CU.role==='supervisora'||CU.role==='admin';
+  const todosUsers=loadUsers();
+  const profs=todosUsers.filter(u=>u.role==='terapeuta'||u.role==='supervisora').sort((a,b)=>a.nome.localeCompare(b.nome));
+  const data=loadPTIPro();
+
+  // Terapeuta vê só o seu próprio
+  const lista=isSup?profs:profs.filter(p=>normTer(p.nome)===normTer(CU.nome)||p.nome===CU.nome);
+
+  if(!lista.length){
+    c.innerHTML=`<div style="text-align:center;padding:48px;color:var(--text3)">
+      <div style="font-size:32px;margin-bottom:10px">📋</div>
+      <div style="font-size:14px">Carregando profissionais...</div>
+      <div style="font-size:12px;margin-top:8px">Se continuar vazio, aguarde a sincronização com a nuvem e reabra a aba.</div>
+      <button class="btn-ghost" style="margin-top:16px" onclick="showView('ptipro')">🔄 Recarregar</button>
+    </div>`;
+    document.getElementById('topbar-title').textContent='PTI Profissionais';
+    document.getElementById('topbar-sub').textContent='Plano de desenvolvimento da equipe';
+    return;
+  }
+
+  c.innerHTML=`
+  <div style="margin-bottom:20px">
+    ${lista.map(prof=>{
+      const plan=data[prof.id]||{objectives:[],evaluations:{},fields:{},orientacoes:'',obs_gerais:''};
+      const tot=plan.objectives.length;
+      const acq=plan.objectives.filter(o=>(plan.evaluations[o.id]||{}).status==='adquirido').length;
+      const pct=tot?Math.round(acq/tot*100):0;
+      return`<div class="ptipro-prof-card" onclick="ptiProOpenProf('${prof.id}')">
+        <div>
+          <div class="pti-pac-name">${esc(normTer(prof.nome))}</div>
+          <div class="pti-pac-meta">${esc(prof.role==='supervisora'?'Supervisora':'Terapeuta')}${tot?` · ${tot} objetivo${tot!==1?'s':''}`:' · Sem objetivos cadastrados'}</div>
+        </div>
+        <div class="pti-progress">
+          ${tot?`<div class="pti-bar-wrap"><div class="pti-bar-fill" style="width:${pct}%"></div></div>
+          <div class="pti-pct">${pct}%</div>`:'<span style="font-size:12px;color:var(--text3)">Iniciar →</span>'}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+  document.getElementById('topbar-title').textContent='PTI Profissionais';
+  document.getElementById('topbar-sub').textContent='Plano de desenvolvimento da equipe';
+}
+
+function ptiProOpenProf(profId){
+  const prof=loadUsers().find(u=>u.id===profId); if(!prof) return;
+  const data=loadPTIPro();
+  const plan=data[profId]||{objectives:[],evaluations:{},orientacoes:'',obs_gerais:''};
+  const isSup=CU.role==='supervisora'||CU.role==='admin';
+  const isOwn=normTer(CU.nome)===normTer(prof.nome)||CU.role==='admin';
+  const c=document.getElementById('main-content');
+
+  const tot=plan.objectives.length;
+  const acq=plan.objectives.filter(o=>(plan.evaluations[o.id]||{}).status==='adquirido').length;
+  const par=plan.objectives.filter(o=>(plan.evaluations[o.id]||{}).status==='parcial').length;
+  const nao=plan.objectives.filter(o=>(plan.evaluations[o.id]||{}).status==='nao').length;
+  const pct=tot?Math.round(acq/tot*100):0;
+
+  c.innerHTML=`
+  <button class="back-btn" onclick="showView('ptipro')">← Voltar</button>
+  <div class="detail-wrapper">
+    <div class="detail-header">
+      <div class="detail-patient">📋 ${esc(normTer(prof.nome))}</div>
+      <div class="detail-meta">
+        <span class="meta-pill pill-terapia">${prof.role==='supervisora'?'Supervisora':'Terapeuta'}</span>
+      </div>
+    </div>
+
+    <!-- Resumo -->
+    <div class="stats-bar" style="grid-template-columns:repeat(4,1fr);margin-bottom:18px">
+      <div class="stat-card"><div class="stat-label">Total objetivos</div><div class="stat-value">${tot}</div></div>
+      <div class="stat-card"><div class="stat-label" style="color:var(--green)">✓ Adquiridos</div><div class="stat-value" style="color:var(--green)">${acq}</div></div>
+      <div class="stat-card"><div class="stat-label" style="color:var(--amber)">◑ Parcial</div><div class="stat-value" style="color:var(--amber)">${par}</div></div>
+      <div class="stat-card"><div class="stat-label" style="color:var(--red)">✕ Não adquiridos</div><div class="stat-value" style="color:var(--red)">${nao}</div></div>
+    </div>
+
+    ${tot>0?`<div style="margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:6px">
+        <span>Progresso geral</span><span style="font-weight:600">${pct}% adquirido</span>
+      </div>
+      <div style="height:8px;background:var(--border);border-radius:8px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--green);border-radius:8px;transition:width .4s"></div>
+      </div>
+    </div>`:''}
+
+    <!-- Objetivos -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Objetivos de desenvolvimento</div>
+      <div style="display:flex;gap:8px">
+        ${tot>0?`<button class="btn-ghost" onclick="ptiProOpenRelatorio('${profId}')">📊 Relatório</button>`:''}
+        ${isSup?`<button class="btn-save-purple" onclick="ptiProOpenBuilder('${profId}')">✏️ ${tot>0?'Editar objetivos':'Criar PTI'}</button>`:''}
+      </div>
+    </div>
+
+    <div id="ptipro-obj-list">
+      ${tot===0?`<div style="text-align:center;padding:40px;color:var(--text3);border:2px dashed var(--border);border-radius:var(--radius)">
+        <div style="font-size:32px;margin-bottom:10px">📋</div>
+        <div>${isSup?'Clique em "Criar PTI" para cadastrar os objetivos.':'Aguardando cadastro de objetivos pela supervisora.'}</div>
+      </div>`:
+      plan.objectives.map(obj=>{
+        const ev=plan.evaluations[obj.id]||{status:null,obs:''};
+        const sc=ev.status?'s-'+ev.status:'';
+        const sl=ev.status==='adquirido'?'Adquirido':ev.status==='parcial'?'Parcialmente':ev.status==='nao'?'Não Adquirido':'Sem avaliação';
+        return`<div class="pti-obj-card ${sc}" id="ptipro-obj-${obj.id}">
+          <div class="pti-obj-header" onclick="ptiProToggleObj('${obj.id}')">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">
+              <span class="pti-sphere">${esc(obj.area||'Geral')}</span>
+              <span style="font-size:13px;font-weight:500">${esc(obj.title)}</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <span style="font-size:11px;color:var(--text2)">${sl}</span>
+              <span style="color:var(--text3)">▾</span>
+            </div>
+          </div>
+          <div class="pti-obj-body">
+            ${obj.desc?`<div style="font-size:13px;color:var(--text2);margin-bottom:12px">${esc(obj.desc)}</div>`:''}
+            ${obj.criterion?`<div style="font-size:12px;color:var(--text3);margin-bottom:12px"><strong>Critério:</strong> ${esc(obj.criterion)}</div>`:''}
+            <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px;margin-top:8px">
+              <div style="font-size:10px;letter-spacing:1.2px;text-transform:uppercase;color:var(--text3);margin-bottom:10px">Avaliação</div>
+              <div class="pti-status-sel">
+                <button class="pti-sbtn${ev.status==='adquirido'?' aa':''}" onclick="ptiProSetStatus('${profId}','${obj.id}','adquirido')">✓<br>Adquirido</button>
+                <button class="pti-sbtn${ev.status==='parcial'?' ap':''}" onclick="ptiProSetStatus('${profId}','${obj.id}','parcial')">◑<br>Parcialmente</button>
+                <button class="pti-sbtn${ev.status==='nao'?' an':''}" onclick="ptiProSetStatus('${profId}','${obj.id}','nao')">✕<br>Não Adquirido</button>
+              </div>
+              <textarea style="width:100%;min-height:60px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px;font-family:inherit;font-size:13px;resize:vertical"
+                placeholder="Observações sobre este objetivo..."
+                oninput="ptiProSaveObs('${profId}','${obj.id}',this.value)">${esc(ev.obs||'')}</textarea>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Campos fixos -->
+    <div style="margin-top:24px">
+      <div class="section-title" style="margin-bottom:14px">Campos de desenvolvimento</div>
+
+      <!-- Campos 1, 2, 3 — preenchidos pelo profissional -->
+      ${(()=>{
+        let html='';
+        for(let n=1;n<=3;n++){
+          const disabled=(!isOwn&&!isSup)?'disabled':'';
+          const readonly=(isSup&&!isOwn)?'readonly':'';
+          html+=`<div class="ptipro-field-block">
+            <div class="ptipro-field-label">Campo ${n} <span class="ptipro-field-badge ptipro-badge-prof">Profissional</span></div>
+            <textarea id="ptipro-c${n}-${profId}" style="width:100%;min-height:80px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-family:inherit;font-size:13px;resize:vertical;background:var(--surface)"
+              placeholder="Preenchido pelo profissional..." ${disabled} ${readonly}
+              oninput="ptiProSaveField('${profId}','c${n}',this.value)">${esc(plan['c'+n]||'')}</textarea>
+          </div>`;
+        }
+        return html;
+      })()}
+
+      <!-- Campo 4 — orientações do supervisor -->
+      <div class="ptipro-field-block" style="border-color:rgba(198,161,102,.4)">
+        <div class="ptipro-field-label">
+          Orientações do Supervisor
+          <span class="ptipro-field-badge ptipro-badge-sup">Supervisora</span>
+        </div>
+        <textarea id="ptipro-c4-${profId}" style="width:100%;min-height:80px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-family:inherit;font-size:13px;resize:vertical;background:var(--surface)"
+          placeholder="${isSup?'Digite as orientações para este profissional...':'Orientações da supervisora...'}"
+          ${!isSup?'disabled':''}
+          oninput="ptiProSaveField('${profId}','c4',this.value)">${esc((plan.c4||''))}</textarea>
+      </div>
+
+      <!-- Campo 5 — observações gerais (todos) -->
+      <div class="ptipro-field-block" style="border-color:rgba(168,182,161,.4)">
+        <div class="ptipro-field-label">
+          Observações Gerais
+          <span class="ptipro-field-badge ptipro-badge-obs">Todos</span>
+        </div>
+        <textarea id="ptipro-c5-${profId}" style="width:100%;min-height:80px;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;font-family:inherit;font-size:13px;resize:vertical;background:var(--surface)"
+          placeholder="Observações gerais..."
+          oninput="ptiProSaveField('${profId}','c5',this.value)">${esc((plan.c5||''))}</textarea>
+      </div>
+    </div>
+
+    <!-- Registros de Desenvolvimento -->
+    <div style="margin-top:28px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <div class="section-title" style="margin:0">📝 Registros de Desenvolvimento</div>
+        ${isOwn?`<button class="btn-save-purple" style="font-size:13px" onclick="ptiProNovoRegistro('${profId}')">+ Novo registro</button>`:''}
+      </div>
+      <div id="ptipro-regs-list">${ptiProRenderRegs(profId)}</div>
+    </div>
+  </div>`;
+
+  document.getElementById('topbar-title').textContent='PTI — '+normTer(prof.nome);
+  document.getElementById('topbar-sub').textContent='Plano de Desenvolvimento Profissional';
+}
+
+function ptiProRenderRegs(profId){
+  const regs=(loadRegPro()[profId]||[]).sort((a,b)=>b.data.localeCompare(a.data));
+  const isSup=CU.role==='supervisora'||CU.role==='admin';
+  if(!regs.length) return`<div style="text-align:center;padding:32px;color:var(--text3);border:2px dashed var(--border);border-radius:var(--radius)">
+    <div style="font-size:28px;margin-bottom:8px">📝</div>
+    <div>Nenhum registro criado ainda.</div>
+    <div style="font-size:12px;margin-top:4px">Clique em "+ Novo registro" para começar.</div>
+  </div>`;
+  return regs.map(r=>`
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;box-shadow:var(--shadow)">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);cursor:pointer" onclick="ptiProToggleReg('reg-${r.id}')">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:13px;font-weight:600">Registro de ${fmtDate(r.data)}</span>
+        ${r.orientacao?'<span style="font-size:10px;padding:2px 7px;border-radius:20px;background:rgba(198,161,102,.2);color:#7a5510;font-weight:600">Com orientação</span>':''}
+      </div>
+      <span style="color:var(--text3)">▾</span>
+    </div>
+    <div id="reg-${r.id}" style="display:none;padding:16px">
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0e3e5e;margin-bottom:6px">Qual habilidade necessito trabalhar?</div>
+        <div style="font-size:13px;color:var(--text);white-space:pre-wrap;background:var(--surface2);padding:10px;border-radius:var(--radius-sm)">${esc(r.hab||'—')}</div>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0e3e5e;margin-bottom:6px">Quais maneiras são melhores para o meu treino?</div>
+        <div style="font-size:13px;color:var(--text);white-space:pre-wrap;background:var(--surface2);padding:10px;border-radius:var(--radius-sm)">${esc(r.treino||'—')}</div>
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0e3e5e;margin-bottom:6px">Como saberei se atingi meu objetivo?</div>
+        <div style="font-size:13px;color:var(--text);white-space:pre-wrap;background:var(--surface2);padding:10px;border-radius:var(--radius-sm)">${esc(r.meta||'—')}</div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#7a5510;margin-bottom:6px">🎯 Orientação do Supervisor</div>
+        ${isSup
+          ?`<textarea style="width:100%;min-height:70px;border:1px solid rgba(198,161,102,.5);border-radius:var(--radius-sm);padding:10px;font-family:inherit;font-size:13px;resize:vertical;background:var(--surface)"
+              placeholder="Digite a orientação para este registro..."
+              oninput="ptiProSaveOrientacao('${profId}','${r.id}',this.value)">${esc(r.orientacao||'')}</textarea>`
+          :`<div style="font-size:13px;color:var(--text);white-space:pre-wrap;background:rgba(198,161,102,.08);padding:10px;border-radius:var(--radius-sm);min-height:40px;border:1px solid rgba(198,161,102,.3)">${esc(r.orientacao||'Aguardando orientação da supervisora...')}</div>`
+        }
+      </div>
+    </div>
+  </div>`).join('');
+}
+
+function ptiProToggleReg(id){
+  const el=document.getElementById(id);
+  if(el) el.style.display=el.style.display==='none'?'block':'none';
+}
+
+function ptiProSaveOrientacao(profId,regId,val){
+  const all=loadRegPro();
+  if(!all[profId]) all[profId]=[];
+  const reg=all[profId].find(r=>r.id===regId);
+  if(reg){reg.orientacao=val; saveRegPro(all);}
+}
+
+function ptiProNovoRegistro(profId){
+  document.getElementById('modal-regpro')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-regpro';
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+  mo.innerHTML=`
+  <div class="modal" style="max-width:600px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header">
+      <div class="modal-title">📝 Novo Registro de Desenvolvimento</div>
+      <button class="modal-close" onclick="document.getElementById('modal-regpro').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:14px">
+        <label class="form-label">Data do registro</label>
+        <input class="form-input" type="date" id="regpro-data" value="${new Date().toISOString().slice(0,10)}">
+      </div>
+      <div style="background:var(--surface2);border-radius:var(--radius);padding:14px;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#0e3e5e;margin-bottom:4px">Respondido pelo profissional</div>
+        <div class="form-group" style="margin-top:12px">
+          <label class="form-label">Qual habilidade necessito trabalhar?</label>
+          <textarea class="form-textarea" id="regpro-hab" placeholder="Descreva a habilidade que precisa desenvolver..."></textarea>
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label class="form-label">Quais maneiras são melhores para o meu treino?</label>
+          <textarea class="form-textarea" id="regpro-treino" placeholder="Ex: artigos, observação de especialista, role play..."></textarea>
+        </div>
+        <div class="form-group" style="margin-top:12px">
+          <label class="form-label">Como saberei se atingi meu objetivo?</label>
+          <textarea class="form-textarea" id="regpro-meta" placeholder="Descreva o critério de sucesso..."></textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-regpro').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="ptiProSalvarRegistro('${profId}')">💾 Salvar registro</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function ptiProSalvarRegistro(profId){
+  const data=document.getElementById('regpro-data').value;
+  const hab=document.getElementById('regpro-hab').value.trim();
+  const treino=document.getElementById('regpro-treino').value.trim();
+  const meta=document.getElementById('regpro-meta').value.trim();
+  if(!data||!hab){toast('Preencha a data e pelo menos a primeira pergunta.');return;}
+  const all=loadRegPro();
+  if(!all[profId]) all[profId]=[];
+  all[profId].push({
+    id:Date.now().toString(),
+    data, hab, treino, meta,
+    orientacao:'',
+    criadoPor:CU.nome,
+    criadoEm:new Date().toISOString()
+  });
+  saveRegPro(all);
+  document.getElementById('modal-regpro').remove();
+  // Atualiza lista de registros sem recarregar a página toda
+  const el=document.getElementById('ptipro-regs-list');
+  if(el) el.innerHTML=ptiProRenderRegs(profId);
+  toast('✅ Registro salvo!');
+}
+
+function ptiProToggleObj(objId){
+  document.getElementById('ptipro-obj-'+objId)?.classList.toggle('open');
+}
+
+function ptiProSetStatus(profId,objId,status){
+  const all=loadPTIPro();
+  if(!all[profId]) all[profId]={objectives:[],evaluations:{}};
+  if(!all[profId].evaluations[objId]) all[profId].evaluations[objId]={status:null,obs:''};
+  all[profId].evaluations[objId].status=status;
+  savePTIPro(all);
+  ptiProOpenProf(profId);
+  setTimeout(()=>document.getElementById('ptipro-obj-'+objId)?.classList.add('open'),50);
+}
+
+function ptiProSaveObs(profId,objId,val){
+  const all=loadPTIPro();
+  if(!all[profId]) all[profId]={objectives:[],evaluations:{}};
+  if(!all[profId].evaluations[objId]) all[profId].evaluations[objId]={status:null,obs:''};
+  all[profId].evaluations[objId].obs=val;
+  savePTIPro(all);
+}
+
+function ptiProSaveField(profId,field,val){
+  const all=loadPTIPro();
+  if(!all[profId]) all[profId]={objectives:[],evaluations:{}};
+  all[profId][field]=val;
+  savePTIPro(all);
+}
+
+let _ptiProObjCount=0;
+function ptiProOpenBuilder(profId){
+  const prof=loadUsers().find(u=>u.id===profId); if(!prof) return;
+  const plan=loadPTIPro()[profId]||{objectives:[],evaluations:{}};
+  document.getElementById('modal-ptipro-builder')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-ptipro-builder';
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+  const areas=['Clínica','Técnica','Relacional','Administrativa','Outra'];
+  mo.innerHTML=`
+  <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header">
+      <div class="modal-title">📋 PTI — ${esc(normTer(prof.nome))}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-ptipro-builder').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text2);background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px">
+        💡 Defina os objetivos de desenvolvimento profissional. As avaliações são feitas na tela principal.
+      </div>
+      <div id="ptipro-builder-list"></div>
+      <button class="btn-ghost" style="width:100%;margin-top:4px" onclick="ptiProAddObjField()">+ Adicionar objetivo</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-ptipro-builder').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="ptiProSaveBuilder('${profId}')">💾 Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+  const list=document.getElementById('ptipro-builder-list');
+  _ptiProObjCount=0;
+  if(plan.objectives.length){
+    plan.objectives.forEach(obj=>ptiProAddObjField(obj));
+  } else {
+    ptiProAddObjField();
+  }
+}
+
+function ptiProAddObjField(obj=null){
+  _ptiProObjCount++;
+  const idx=_ptiProObjCount;
+  const id=obj?obj.id:'pobj_'+Date.now()+'_'+idx;
+  const list=document.getElementById('ptipro-builder-list'); if(!list) return;
+  const areas=['Clínica','Técnica','Relacional','Administrativa','Outra'];
+  const areaOpts=areas.map(a=>`<option value="${a}"${obj&&obj.area===a?' selected':''}>${a}</option>`).join('');
+  const div=document.createElement('div');
+  div.className='pti-builder-card';
+  div.dataset.id=id;
+  div.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+      <div class="pti-obj-num">${idx}</div>
+      <input class="form-input" style="flex:1" placeholder="Objetivo de desenvolvimento..." value="${esc(obj?obj.title:'')}">
+      <button style="background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px" onclick="this.closest('.pti-builder-card').remove()">×</button>
+    </div>
+    <div class="form-grid">
+      <div class="form-group"><label class="form-label">Área</label>
+        <select class="form-select"><option value="">Selecione...</option>${areaOpts}</select></div>
+      <div class="form-group"><label class="form-label">Critério de aquisição</label>
+        <input class="form-input" placeholder="Como será avaliado..." value="${esc(obj?obj.criterion:'')}"></div>
+      <div class="form-group full"><label class="form-label">Descrição / Estratégia</label>
+        <input class="form-input" placeholder="Como desenvolver este objetivo..." value="${esc(obj?obj.desc:'')}"></div>
+    </div>`;
+  list.appendChild(div);
+}
+
+function ptiProSaveBuilder(profId){
+  const cards=document.querySelectorAll('#ptipro-builder-list .pti-builder-card');
+  const objectives=[];
+  cards.forEach(card=>{
+    const id=card.dataset.id;
+    const inputs=card.querySelectorAll('input,select');
+    const title=inputs[0].value.trim(); if(!title) return;
+    objectives.push({id,title,area:inputs[1].value||'Geral',criterion:inputs[2].value.trim(),desc:inputs[3].value.trim()});
+  });
+  const all=loadPTIPro();
+  if(!all[profId]) all[profId]={objectives:[],evaluations:{}};
+  const keepIds=new Set(objectives.map(o=>o.id));
+  Object.keys(all[profId].evaluations||{}).forEach(id=>{if(!keepIds.has(id)) delete all[profId].evaluations[id];});
+  all[profId].objectives=objectives;
+  savePTIPro(all);
+  document.getElementById('modal-ptipro-builder').remove();
+  ptiProOpenProf(profId);
+  toast('✅ PTI salvo!');
+}
+
+function ptiProOpenRelatorio(profId){
+  const prof=loadUsers().find(u=>u.id===profId); if(!prof) return;
+  const plan=loadPTIPro()[profId]||{objectives:[],evaluations:{}};
+  const objs=plan.objectives;
+  if(!objs.length){toast('Nenhum objetivo cadastrado.');return;}
+  const acq=objs.filter(o=>(plan.evaluations[o.id]||{}).status==='adquirido').length;
+  const par=objs.filter(o=>(plan.evaluations[o.id]||{}).status==='parcial').length;
+  const nao=objs.filter(o=>(plan.evaluations[o.id]||{}).status==='nao').length;
+  const none=objs.length-acq-par-nao;
+  document.getElementById('modal-ptipro-rel')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-ptipro-rel';
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+  mo.innerHTML=`
+  <div class="modal" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <div class="modal-header">
+      <div class="modal-title">📊 Relatório PTI — ${esc(normTer(prof.nome))}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-ptipro-rel').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="stats-bar" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+        <div class="stat-card"><div class="stat-label" style="color:var(--green)">Adquiridos</div><div class="stat-value" style="color:var(--green)">${acq}</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:var(--amber)">Parcialmente</div><div class="stat-value" style="color:var(--amber)">${par}</div></div>
+        <div class="stat-card"><div class="stat-label" style="color:var(--red)">Não adquiridos</div><div class="stat-value" style="color:var(--red)">${nao}</div></div>
+        <div class="stat-card"><div class="stat-label">Não avaliados</div><div class="stat-value">${none}</div></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px">
+        <div style="background:var(--surface2);border-radius:var(--radius);padding:14px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">Por objetivo</div><div style="position:relative;height:180px"><canvas id="ptipro-chart-bar"></canvas></div></div>
+        <div style="background:var(--surface2);border-radius:var(--radius);padding:14px"><div style="font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">Distribuição</div><div style="position:relative;height:180px"><canvas id="ptipro-chart-dough"></canvas></div></div>
+      </div>
+      ${objs.map((obj,i)=>{
+        const ev=plan.evaluations[obj.id]||{};
+        const rl=ev.status==='adquirido'?'Adquirido':ev.status==='parcial'?'Parcialmente':ev.status==='nao'?'Não Adquirido':'Não avaliado';
+        const bc=ev.status==='adquirido'?'var(--green)':ev.status==='parcial'?'var(--amber)':ev.status==='nao'?'var(--red)':'var(--text3)';
+        return`<div style="background:var(--surface2);border-radius:var(--radius-sm);padding:13px 16px;margin-bottom:8px;border-left:4px solid ${bc}">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+            <span style="font-size:13px;font-weight:500"><strong>Obj. ${i+1}</strong> [${esc(obj.area||'Geral')}] — ${esc(obj.title)}</span>
+            <span style="font-size:11px;padding:2px 8px;border-radius:20px;background:var(--surface);color:${bc};white-space:nowrap;flex-shrink:0">${rl}</span>
+          </div>
+          ${ev.obs?`<div style="font-size:12px;color:var(--text2);font-style:italic;margin-top:7px;padding-top:7px;border-top:1px solid var(--border)">${esc(ev.obs)}</div>`:''}
+        </div>`;
+      }).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+        <span style="font-size:11px;color:var(--text3)">Gerado em ${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn-ghost" onclick="ptiProCopyRelatorio('${profId}')">📋 Copiar</button>
+          <button class="btn-save-purple" onclick="ptiProExportPDF('${profId}')">📄 Exportar PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  let _barPro=null,_doughPro=null;
+  setTimeout(()=>{
+    mo.classList.add('open');
+    const labels=objs.map((_,i)=>`Obj.${i+1}`);
+    const vals=objs.map(o=>{const s=(plan.evaluations[o.id]||{}).status;return s==='adquirido'?3:s==='parcial'?2:s==='nao'?1:0;});
+    const cols=objs.map(o=>{const s=(plan.evaluations[o.id]||{}).status;return s==='adquirido'?'#a8b6a1':s==='parcial'?'#c6a166':s==='nao'?'#b2680e':'#708b9c';});
+    if(_barPro){_barPro.destroy();}_barPro=new Chart(document.getElementById('ptipro-chart-bar'),{type:'bar',data:{labels,datasets:[{data:vals,backgroundColor:cols,borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{min:0,max:3,ticks:{stepSize:1,callback:v=>v===3?'Adq.':v===2?'Parc.':v===1?'Não':'',color:'#04253d',font:{size:9,weight:'600'}},grid:{color:'rgba(4,37,61,.1)'}},x:{ticks:{color:'#04253d',font:{size:10}},grid:{display:false}}}}});
+    if(_doughPro){_doughPro.destroy();}_doughPro=new Chart(document.getElementById('ptipro-chart-dough'),{type:'doughnut',data:{labels:['Adquirido','Parcialmente','Não Adquirido','Não avaliado'],datasets:[{data:[acq,par,nao,none],backgroundColor:['#a8b6a1','#c6a166','#b2680e','#708b9c'],borderWidth:0,hoverOffset:5}]},options:{responsive:true,maintainAspectRatio:false,cutout:'60%',plugins:{legend:{position:'bottom',labels:{color:'#04253d',font:{size:10,weight:'600'},padding:10,boxWidth:10}}}}});
+  },100);
+}
+
+function ptiProCopyRelatorio(profId){
+  const prof=loadUsers().find(u=>u.id===profId); if(!prof) return;
+  const plan=loadPTIPro()[profId]||{objectives:[],evaluations:{}};
+  let t=`CINPSI – PTI Profissional\nProfissional: ${normTer(prof.nome)}\nData: ${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}\n\n`;
+  plan.objectives.forEach((obj,i)=>{
+    const ev=plan.evaluations[obj.id]||{};
+    const sl=ev.status==='adquirido'?'Adquirido':ev.status==='parcial'?'Parcialmente Adquirido':ev.status==='nao'?'Não Adquirido':'Não avaliado';
+    t+=`Objetivo ${i+1} [${obj.area||'Geral'}]\n${obj.title}\nStatus: ${sl}\n`;
+    if(ev.obs) t+=`Obs: ${ev.obs}\n`;
+    t+='\n';
+  });
+  navigator.clipboard.writeText(t).then(()=>toast('✅ Relatório copiado!'));
+}
+
+function ptiProExportPDF(profId){
+  const prof=loadUsers().find(u=>u.id===profId); if(!prof) return;
+  const plan=loadPTIPro()[profId]||{objectives:[],evaluations:{}};
+  const objs=plan.objectives;
+  const acq=objs.filter(o=>(plan.evaluations[o.id]||{}).status==='adquirido').length;
+  const par=objs.filter(o=>(plan.evaluations[o.id]||{}).status==='parcial').length;
+  const nao=objs.filter(o=>(plan.evaluations[o.id]||{}).status==='nao').length;
+  const pct=objs.length?Math.round(acq/objs.length*100):0;
+  const data=new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
+  const chartBarEl=document.getElementById('ptipro-chart-bar');
+  const chartDoughEl=document.getElementById('ptipro-chart-dough');
+  const imgBar=chartBarEl?chartBarEl.toDataURL('image/png'):'';
+  const imgDough=chartDoughEl?chartDoughEl.toDataURL('image/png'):'';
+  let chartsSection='';
+  if(imgBar||imgDough){
+    let inner='';
+    if(imgBar) inner+=`<div style="background:#f5f2ee;border-radius:8px;padding:14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#708b9c;margin-bottom:10px">Por objetivo</div><img src="${imgBar}" style="width:100%;height:auto"></div>`;
+    if(imgDough) inner+=`<div style="background:#f5f2ee;border-radius:8px;padding:14px"><div style="font-size:10px;text-transform:uppercase;letter-spacing:1.2px;color:#708b9c;margin-bottom:10px">Distribuição</div><img src="${imgDough}" style="width:100%;height:auto"></div>`;
+    chartsSection=`<div class="section-title">Análise Gráfica</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">${inner}</div>`;
+  }
+  const objsHTML=objs.map((obj,i)=>{
+    const ev=plan.evaluations[obj.id]||{};
+    const sl=ev.status==='adquirido'?'✓ Adquirido':ev.status==='parcial'?'◑ Parcialmente':ev.status==='nao'?'✕ Não Adquirido':'— Não avaliado';
+    const cor=ev.status==='adquirido'?'#3d6b47':ev.status==='parcial'?'#7a5510':ev.status==='nao'?'#8b3a1a':'#04253d';
+    const borda=ev.status==='adquirido'?'#a8b6a1':ev.status==='parcial'?'#c6a166':ev.status==='nao'?'#b2680e':'#708b9c';
+    return`<div style="border-left:4px solid ${borda};background:#f5f2ee;border-radius:6px;padding:12px 16px;margin-bottom:10px;page-break-inside:avoid">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:6px">
+        <strong style="font-size:13px;color:#04253d">[${obj.area||'Geral'}] ${obj.title}</strong>
+        <span style="font-size:11px;color:${cor};font-weight:700;white-space:nowrap">${sl}</span>
+      </div>
+      ${obj.criterion?`<div style="font-size:12px;color:#04253d;opacity:.8;margin-bottom:2px"><strong>Critério:</strong> ${obj.criterion}</div>`:''}
+      ${obj.desc?`<div style="font-size:12px;color:#04253d;opacity:.8;margin-bottom:2px"><strong>Estratégia:</strong> ${obj.desc}</div>`:''}
+      ${ev.obs?`<div style="font-size:12px;color:#04253d;margin-top:6px;padding-top:6px;border-top:1px solid #d8d4cf;font-style:italic"><strong>Obs:</strong> ${ev.obs}</div>`:''}
+    </div>`;
+  }).join('');
+  const camposHTML=[
+    {n:'c1',l:'Campo 1',badge:'#9bc8e0'},
+    {n:'c2',l:'Campo 2',badge:'#9bc8e0'},
+    {n:'c3',l:'Campo 3',badge:'#9bc8e0'},
+    {n:'c4',l:'Orientações do Supervisor',badge:'#c6a166'},
+    {n:'c5',l:'Observações Gerais',badge:'#a8b6a1'},
+  ].filter(f=>plan[f.n]).map(f=>`<div style="background:#f5f2ee;border-radius:6px;padding:12px 16px;margin-bottom:10px;page-break-inside:avoid">
+    <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:${f.badge};margin-bottom:6px">${f.l}</div>
+    <div style="font-size:13px;color:#04253d;white-space:pre-wrap">${plan[f.n]}</div>
+  </div>`).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>PTI Pro — ${normTer(prof.nome)}</title>
+  <style>
+    @page{margin:20mm 18mm;size:A4}*{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Segoe UI',Arial,sans-serif;color:#04253d;background:#fff;font-size:13px;line-height:1.6;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .header{background:#04253d;color:#fff;padding:24px 28px;display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px}
+    .header h1{font-size:22px;font-weight:700;margin-bottom:2px}.header p{font-size:11px;color:#9bc8e0;letter-spacing:1.5px;text-transform:uppercase}
+    .header-right{text-align:right;font-size:12px;color:#9bc8e0}.header-right strong{color:#c6a166;font-size:14px}
+    .summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+    .s-card{background:#f0ede8;border-radius:8px;padding:12px;text-align:center}.s-val{font-size:26px;font-weight:800;display:block}.s-lbl{font-size:10px;color:#04253d;text-transform:uppercase;letter-spacing:1px;font-weight:600;opacity:.7}
+    .section-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:#04253d;border-bottom:2px solid #04253d;padding-bottom:6px;margin:20px 0 12px;opacity:.6}
+    .footer{margin-top:24px;padding-top:12px;border-top:1px solid #d8d4cf;display:flex;justify-content:space-between;font-size:10px;color:#04253d;font-weight:500}
+    .cinpsi-badge{background:#04253d;color:#c6a166;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:1px}
+  </style></head><body>
+  <div class="header">
+    <div><h1>PTI Profissional</h1><p>CINPSI · Centro Integrado de Neurociências e Psicologia</p></div>
+    <div class="header-right"><div><strong>${normTer(prof.nome)}</strong></div><div>${prof.role==='supervisora'?'Supervisora':'Terapeuta'}</div></div>
+  </div>
+  <div class="summary">
+    <div class="s-card"><span class="s-val" style="color:#04253d">${objs.length}</span><span class="s-lbl">Total</span></div>
+    <div class="s-card"><span class="s-val" style="color:#3d6b47">${acq}</span><span class="s-lbl">Adquiridos</span></div>
+    <div class="s-card"><span class="s-val" style="color:#7a5510">${par}</span><span class="s-lbl">Parcialmente</span></div>
+    <div class="s-card"><span class="s-val" style="color:#8b3a1a">${nao}</span><span class="s-lbl">Não adquiridos</span></div>
+  </div>
+  ${objs.length?`<div style="margin-bottom:20px"><div style="display:flex;justify-content:space-between;font-size:12px;color:#04253d;font-weight:600;margin-bottom:6px"><span>Progresso geral</span><span>${pct}% adquirido</span></div><div style="height:10px;background:#d8d4cf;border-radius:8px;overflow:hidden"><div style="height:100%;width:${pct}%;background:#a8b6a1;border-radius:8px"></div></div></div>`:''}
+  ${chartsSection}
+  ${objs.length?`<div class="section-title">Objetivos de Desenvolvimento</div>${objsHTML}`:''}
+  ${camposHTML?`<div class="section-title">Campos de Desenvolvimento</div>${camposHTML}`:''}
+  <div class="footer"><span>Gerado em ${data} · CINPSI</span><span class="cinpsi-badge">CINPSI</span></div>
+  </body></html>`;
+  const w=window.open('','_blank','width=800,height=900');
+  w.document.write(html);
+  w.document.close();
+  w.onload=()=>{w.focus();w.print();};
 }
 
 function renderPacientes(c){
@@ -4509,6 +5140,12 @@ function normTer(nome){
     'luciana alves duarte':'Luciana','luciana alves':'Luciana','luciana':'Luciana',
   };
   return MAP[(nome||'').toLowerCase().trim()]||(nome||'').trim();
+}
+
+// Converte nome de supervisora para exibição nos contextos de supervisão
+function nomeSup(nome){
+  const sups=['Tatiane Sanches','Tatiane','Priscila'];
+  return sups.some(s=>s.toLowerCase()===(nome||'').toLowerCase().trim())?'Supervisora':nome||'—';
 }
 
 function finHandleImport(event){
