@@ -1153,11 +1153,14 @@ function importBackup(){
               </ul>
             </div>
             <div class="modal-footer">
-              <button class="btn-cancel" onclick="document.getElementById('modal-confirmar-restore').remove()">Cancelar</button>
-              <button class="btn-save" style="background:var(--danger)" onclick="confirmarRestore(${JSON.stringify(JSON.stringify(backup))})">🔄 Restaurar agora</button>
+              <button class="btn-cancel" id="btn-restore-cancelar">Cancelar</button>
+              <button class="btn-save" id="btn-restore-confirmar" style="background:var(--danger)">🔄 Restaurar agora</button>
             </div>
           </div>`;
         document.body.appendChild(mo);
+        setTimeout(()=>mo.classList.add('open'),10);
+        document.getElementById('btn-restore-cancelar').addEventListener('click',()=>mo.remove());
+        document.getElementById('btn-restore-confirmar').addEventListener('click',()=>confirmarRestore(backup));
       }catch(err){
         toast('❌ Erro ao ler backup: '+err.message);
       }
@@ -1167,10 +1170,9 @@ function importBackup(){
   input.click();
 }
 
-function confirmarRestore(jsonStr){
+function confirmarRestore(backup){
   document.getElementById('modal-confirmar-restore')?.remove();
   try{
-    const backup=JSON.parse(jsonStr);
     const d=backup.dados;
 
     // Restaurar dados principais
