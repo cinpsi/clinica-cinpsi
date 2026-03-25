@@ -22,6 +22,22 @@
   localStorage.setItem('cinpsi_repasses',       JSON.stringify(f.repasses||{}));
   localStorage.setItem('br_240326b','1');
   console.log('✅ Dados restaurados do backup 24/03/2026');
+  // Força envio para Firebase após restaurar
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      try{
+        if(typeof _fbWrite === 'function'){
+          var keys = ['cl_users','cl_leads','cl_pac','cl_rec','cl_conv_antigos',
+                      'cinpsi_receitas','cinpsi_despesas','cinpsi_fornecedores'];
+          keys.forEach(function(k){
+            var v = localStorage.getItem(k);
+            if(v) try{ _fbWrite(k, JSON.parse(v)); }catch(e){}
+          });
+          console.log('✅ Dados enviados ao Firebase');
+        }
+      }catch(e){ console.warn('Erro ao enviar ao Firebase:', e); }
+    }, 3000);
+  });
 })();
 </script>
 
@@ -605,11 +621,17 @@ async function initFirebase(){
             if(!fbValid){ _fbWrite(K.USR, local); }
             else { _cache[col]=val; localStorage.setItem(col,JSON.stringify(val)); }
           } else {
-            // Sempre aceita dados do Firebase — ele é a fonte da verdade
-            // O onSnapshot só dispara quando há mudança real no servidor
-            _cache[col]=val;
-            localStorage.setItem(col,JSON.stringify(val));
-            localStorage.setItem(col+'_ts', fbTs);
+            // Só aceita do Firebase se for mais recente que o local
+            const localTs=parseInt(localStorage.getItem(col+'_ts')||'0');
+            if(fbTs>=localTs){
+              _cache[col]=val;
+              localStorage.setItem(col,JSON.stringify(val));
+              localStorage.setItem(col+'_ts', fbTs);
+            } else {
+              // Local é mais recente — envia para Firebase
+              const localVal=_cache[col]!==undefined?_cache[col]:load(col);
+              if(localVal!==null&&localVal!==undefined) _fbWrite(col, localVal);
+            }
           }
           if(col===K.PAC && typeof normalizePacTerapeutas==='function') normalizePacTerapeutas();
           _onDataUpdate(col);
