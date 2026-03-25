@@ -2921,7 +2921,7 @@ function renderMeuDesenvolvimento(c) {
     c.innerHTML =
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">' +
         '<select class="form-select" id="meudev-ter-filtro" style="min-width:200px">' + terOpts + '</select>' +
-        '<button class="btn-save-purple" id="btn-nova-nota">+ Nova nota de supervisão</button>' +
+        '<button class="btn-save-purple" id="btn-nova-nota" onclick="meudevNovaNotaModal(null)">+ Nova nota de supervisão</button>' +
       '</div>' +
       '<div id="meudev-lista">' + listaHTML + '</div>';
 
@@ -3054,6 +3054,9 @@ function meudevNovaNotaModal(id) {
       '<textarea class="form-input" id="' + par[0] + '" rows="3" style="resize:vertical">' + esc(v(par[2])) + '</textarea>' +
       '</div>';
   });
+
+  // Remove modal anterior se existir
+  document.getElementById('modal-meudev')?.remove();
 
   const mo = document.createElement('div');
   mo.className = 'modal-overlay';
