@@ -3088,6 +3088,7 @@ function meudevNovaNotaModal(id) {
     '</div>';
 
   document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
 
   document.getElementById('btn-md-cancelar').addEventListener('click', function() {
     mo.remove();
