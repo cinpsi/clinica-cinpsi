@@ -669,12 +669,12 @@ async function _migrateLocalToFirebase(){
       const localPac=load(K.PAC)||[];
       const fbPacSnap=await _db.collection('dados').doc(K.PAC).get();
       const fbPac=fbPacSnap.exists?fbPacSnap.data().value:[];
-      if(localPac.length>fbPac.length) await _fbWrite(K.PAC, localPac);
+      if(fbPac.length===0 && localPac.length>0) await _fbWrite(K.PAC, localPac);
 
       const localRec=load(K.REC)||[];
       const fbRecSnap=await _db.collection('dados').doc(K.REC).get();
       const fbRec=fbRecSnap.exists?fbRecSnap.data().value:[];
-      if(localRec.length>fbRec.length) await _fbWrite(K.REC, localRec);
+      if(fbRec.length===0 && localRec.length>0) await _fbWrite(K.REC, localRec);
 
       // Sobe dados financeiros do localStorage para Firebase se Firebase estiver vazio
       const extraKeys=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses'];
@@ -5342,25 +5342,7 @@ function finHandleImport(event){
 }
 
 
-async function forceSyncAll(btn){
-  if(btn){ btn.textContent='⏳ Sincronizando...'; btn.disabled=true; }
-  try{
-    const allKeys=Object.values(K).filter(k=>k!=='cl_session');
-    let count=0;
-    for(const k of allKeys){
-      try{
-        const val=_cache[k]!==undefined?_cache[k]:JSON.parse(localStorage.getItem(k)||'null');
-        if(val!==null){ await _fbWrite(k,val); count++; }
-      }catch(e){}
-    }
-    if(btn){ btn.textContent='✅ Sincronizado!'; btn.disabled=false; }
-    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
-    alert('✅ '+count+' itens sincronizados com a nuvem!');
-  }catch(e){
-    if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
-    setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
-  }
-}
+
 
 
 async function forceSyncAll(btn){
@@ -5380,9 +5362,20 @@ async function forceSyncAll(btn){
         const raw=localStorage.getItem(k);
         if(raw){
           const val=JSON.parse(raw);
-          if(val!==null && val!==undefined){
-            await _fbWrite(k,val);
-            count++;
+          // Nunca sobrescreve Firebase com array vazio ou objeto vazio
+          const isEmpty = Array.isArray(val) ? val.length===0 : (val===null||val===undefined||(typeof val==='object'&&Object.keys(val).length===0));
+          if(!isEmpty){
+            // Verifica se Firebase tem mais dados antes de sobrescrever
+            try{
+              const fbSnap=await _db.collection('dados').doc(k).get();
+              const fbVal=fbSnap.exists?fbSnap.data().value:null;
+              const fbEmpty=!fbVal||(Array.isArray(fbVal)?fbVal.length===0:false);
+              // Só sobrescreve se Firebase estiver vazio, ou se local tiver mais itens
+              if(fbEmpty || (Array.isArray(val)&&Array.isArray(fbVal)&&val.length>=fbVal.length)){
+                await _fbWrite(k,val);
+                count++;
+              }
+            }catch(e){ await _fbWrite(k,val); count++; }
           }
         }
       }catch(e){}
