@@ -1893,12 +1893,134 @@ function refreshConv(){
     <td>${esc(p.servico||'—')}</td>
     <td>${esc(p.terapeuta||'—')}</td>
     <td>${fmtBRL(p.valor)}</td>
-    <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button></td>
+    <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--accent)" onclick="duplicarConvertido('${esc(p.id)}')">➕ Duplicar</button></td>
   </tr>`;}).join('');
 }
 
 // ── Modal edição de convertido ────────────────────────────────────────────────
 let editConvId=null;
+
+function duplicarConvertido(id){
+  const todos=getConvertidos();
+  const p=todos.find(x=>x.id===id); if(!p) return;
+
+  // Cria modal de duplicação
+  document.getElementById('modal-duplicar-conv')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-duplicar-conv';
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+
+  const modal=document.createElement('div');
+  modal.className='modal';
+  modal.style.maxWidth='480px';
+
+  const hd=document.createElement('div');
+  hd.className='modal-header';
+  hd.innerHTML='<div class="modal-title">➕ Duplicar atendimento</div>';
+  const cx=document.createElement('button');
+  cx.className='modal-close'; cx.textContent='×'; cx.onclick=()=>mo.remove();
+  hd.appendChild(cx);
+
+  const bd=document.createElement('div');
+  bd.className='modal-body';
+
+  // Info do original
+  const info=document.createElement('div');
+  info.style.cssText='background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--text2)';
+  info.innerHTML='<strong>Paciente:</strong> '+esc(p.paciente||'—')+'<br><strong>Terapeuta atual:</strong> '+esc(p.terapeuta||'—')+'<br><strong>Serviço atual:</strong> '+esc(p.servico||'—');
+  bd.appendChild(info);
+
+  // Campos para o novo vínculo
+  const grid=document.createElement('div');
+  grid.className='form-grid';
+
+  // Terapeuta
+  const tOpts=loadUsers().filter(u=>u.role==='terapeuta'||u.role==='supervisora')
+    .map(u=>'<option value="'+esc(u.nome)+'">'+esc(u.nome)+'</option>').join('');
+  grid.innerHTML=
+    '<div class="form-group"><label class="form-label">Nova terapeuta *</label>'
+    +'<select class="form-select" id="dup-terapeuta"><option value="">Selecione...</option>'+tOpts+'</select></div>'
+    +'<div class="form-group"><label class="form-label">Serviço</label>'
+    +'<select class="form-select" id="dup-servico"><option value="">Selecione...</option>'
+    +'<option>Fonoaudiologia Infantil</option><option>Psicologia Infantil</option>'
+    +'<option>Psicologia Adulto</option><option>Fonoaudiologia</option>'
+    +'<option>Psicologia</option><option>Psicopedagogia</option>'
+    +'</select></div>'
+    +'<div class="form-group full"><label class="form-label">Modalidade de cobrança</label>'
+    +'<div style="display:flex;gap:8px;margin-top:4px">'
+    +'<button type="button" id="dup-btn-mensal" class="fin-tipo-btn active" onclick="dupSetModalidade(\'mensal\')">📅 Mensal fixo</button>'
+    +'<button type="button" id="dup-btn-avulso" class="fin-tipo-btn" onclick="dupSetModalidade(\'avulso\')">🗓️ Por sessão</button>'
+    +'<button type="button" id="dup-btn-unica" class="fin-tipo-btn" onclick="dupSetModalidade(\'unica\')">1️⃣ Sessão única</button>'
+    +'</div></div>'
+    +'<div class="form-group" id="dup-bloco-mensal"><label class="form-label">Valor mensal (R$)</label>'
+    +'<input class="form-input" id="dup-valor-mensal" type="number" placeholder="0,00" step="0.01"></div>'
+    +'<div class="form-group" id="dup-bloco-sessao" style="display:none"><label class="form-label">Valor por sessão (R$)</label>'
+    +'<input class="form-input" id="dup-valor" type="number" placeholder="0,00" step="0.01"></div>'
+    +'<div class="form-group" id="dup-bloco-dia" style="display:none"><label class="form-label">Dia da semana</label>'
+    +'<select class="form-select" id="dup-dia-semana">'
+    +'<option value="">Selecione...</option>'
+    +'<option value="0">Domingo</option><option value="1">Segunda</option>'
+    +'<option value="2">Terça</option><option value="3">Quarta</option>'
+    +'<option value="4">Quinta</option><option value="5">Sexta</option>'
+    +'<option value="6">Sábado</option>'
+    +'</select></div>';
+  bd.appendChild(grid);
+
+  const ft=document.createElement('div');
+  ft.className='modal-footer';
+  const cancelBtn=document.createElement('button');
+  cancelBtn.className='btn-ghost'; cancelBtn.textContent='Cancelar'; cancelBtn.onclick=()=>mo.remove();
+  const saveBtn=document.createElement('button');
+  saveBtn.className='btn-save-purple'; saveBtn.textContent='➕ Criar novo vínculo';
+  saveBtn.onclick=function(){
+    const novaTerap=document.getElementById('dup-terapeuta').value;
+    if(!novaTerap){toast('Selecione a nova terapeuta.');return;}
+    const modalidade=['mensal','avulso','unica'].find(m=>document.getElementById('dup-btn-'+m)?.classList.contains('active'))||'mensal';
+    const valorMensal=parseFloat(document.getElementById('dup-valor-mensal')?.value||0)||null;
+    const valorSessao=parseFloat(document.getElementById('dup-valor')?.value||0)||null;
+    const diaSemana=document.getElementById('dup-dia-semana')?.value;
+    const novoId='dup_'+Date.now();
+    const novo={
+      ...p,
+      id: novoId,
+      terapeuta: novaTerap,
+      servico: document.getElementById('dup-servico').value||p.servico,
+      modalidade,
+      valor: modalidade==='mensal'?valorMensal:valorSessao,
+      valorMensal: modalidade==='mensal'?valorMensal:null,
+      diaSemana: modalidade==='avulso'&&diaSemana!==''?parseInt(diaSemana):null,
+      leadConvertido: p.leadConvertido,
+      ativo: true,
+      duplicadoDe: id,
+    };
+    // Salva no cl_conv_antigos
+    const antigos=loadConvAntigos();
+    antigos.push(novo);
+    saveConvAntigos(antigos);
+    mo.remove();
+    toast('✅ Novo vínculo criado para '+novaTerap+'!');
+    showView('convertidos');
+  };
+  ft.appendChild(cancelBtn);
+  ft.appendChild(saveBtn);
+
+  modal.appendChild(hd);
+  modal.appendChild(bd);
+  modal.appendChild(ft);
+  mo.appendChild(modal);
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function dupSetModalidade(tipo){
+  ['mensal','avulso','unica'].forEach(t=>{
+    document.getElementById('dup-btn-'+t)?.classList.toggle('active',t===tipo);
+  });
+  document.getElementById('dup-bloco-mensal').style.display=tipo==='mensal'?'block':'none';
+  document.getElementById('dup-bloco-sessao').style.display=(tipo==='avulso'||tipo==='unica')?'block':'none';
+  document.getElementById('dup-bloco-dia').style.display=tipo==='avulso'?'block':'none';
+}
 
 function openConvModal(id){
   const todos=getConvertidos();
