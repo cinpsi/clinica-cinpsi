@@ -4155,16 +4155,25 @@ function finRenderDRE(){
   // Impostos (categoria Impostos e Taxas)
   const impostos = mDesp.filter(d=>d.cat==='Impostos e Taxas').reduce((s,d)=>s+d.valor,0);
 
-  // Repasses às terapeutas (via regras de repasse)
-  const regras=finLoadRegras();
-  const repasses=Object.entries(
-    mRec.filter(r=>r.status==='Pago'&&r.especialista).reduce((acc,r)=>{
-      acc[r.especialista]=(acc[r.especialista]||0)+r.valor; return acc;
-    },{})
-  ).reduce((s,[ter,fat])=>{
-    const pct=(regras[ter]??finDefaultPct(ter))/100;
-    return s+fat*pct;
-  },0);
+  // Repasses às terapeutas — usa valor real pago se disponível, senão usa total da aba Repasses
+  const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
+  const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
+  const repasseRealMes=repassesReais[mesKey]||{};
+
+  // Verifica se há valores reais preenchidos
+  const temRepasseReal=Object.keys(repasseRealMes).length>0;
+
+  let repasses=0;
+  if(temRepasseReal){
+    // Usa valores reais preenchidos na aba Repasses
+    const fat=finBuildFat();
+    repasses=fat.reduce((s,r)=>{
+      return s+(repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:r.repasse);
+    },0);
+  } else {
+    // Usa o total calculado da aba Repasses (finBuildFat) — mesma base de dados
+    repasses=finBuildFat().reduce((s,r)=>s+r.repasse,0);
+  }
 
   // Despesas Fixas
   const FIXAS=['Aluguel / Condomínio','Utilidades','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento'];
@@ -4551,15 +4560,32 @@ function finRenderRepasses(){
   const tLiq=fat.reduce((s,r)=>s+r.liquido,0);
   const now=new Date();
   const mesLabel=FIN_MONTHS[now.getMonth()]+' '+now.getFullYear();
+  const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
+  const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
+  const repasseRealMes=repassesReais[mesKey]||{};
+
+  // Total real pago (soma valores reais onde preenchidos, senão usa calculado)
+  const tRepReal=fat.reduce((s,r)=>{
+    return s+(repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:r.repasse);
+  },0);
 
   const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   s('fin-rep-fat', finFmt(tFat));
-  s('fin-rep-rep', finFmt(tRep));
-  s('fin-rep-liq', finFmt(tLiq));
+  s('fin-rep-rep', finFmt(tRepReal));
+  s('fin-rep-liq', finFmt(tFat-tRepReal));
   s('fin-rep-mes', mesLabel);
 
   // Tabela previsão
   const tbody=document.getElementById('fin-rep-tbody'); if(!tbody) return;
+  // Atualiza cabeçalho para incluir coluna valor real
+  const thead=tbody.closest('table')?.querySelector('thead tr');
+  if(thead&&!thead.querySelector('.th-real')){
+    const th=document.createElement('th');
+    th.className='th-real';
+    th.style.cssText='text-align:right;color:var(--green)';
+    th.textContent='Valor pago real';
+    thead.appendChild(th);
+  }
   if(!fat.length){
     tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--text3)">Nenhuma consulta importada para este mês.</td></tr>';
   } else {
@@ -4579,6 +4605,7 @@ function finRenderRepasses(){
           <span style="font-size:13px;color:var(--text3)">%</span>
         </div>`;
       }
+      const valorReal=repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:'';
       return `<tr>
         <td><strong>${esc(r.terapeuta)}</strong></td>
         <td style="text-align:right">${r.n_pac}</td>
@@ -4586,6 +4613,16 @@ function finRenderRepasses(){
         <td style="text-align:right">${regraCell}</td>
         <td style="text-align:right">${finFmt(r.repasse)}</td>
         <td style="text-align:right;color:var(--green);font-weight:500">${finFmt(r.liquido)}</td>
+        <td style="text-align:right">
+          <div style="display:inline-flex;align-items:center;gap:4px">
+            <span style="font-size:13px;color:var(--text3)">R$</span>
+            <input type="number" min="0" step="0.01"
+              value="${valorReal}" placeholder="—"
+              title="Valor real pago — usado no DRE"
+              style="width:90px;border:1px solid var(--green);border-radius:var(--radius-sm);padding:4px 7px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);text-align:right;outline:none"
+              onchange="finSalvarRepasseReal('${esc(r.terapeuta)}','${mesKey}',this.value)">
+          </div>
+        </td>
       </tr>`;
     }).join('')+`
     <tr style="border-top:2px solid var(--border);background:var(--surface2)">
@@ -4594,12 +4631,25 @@ function finRenderRepasses(){
       <td style="text-align:right"><strong>${finFmt(tFat)}</strong></td>
       <td style="text-align:right">—</td>
       <td style="text-align:right"><strong>${finFmt(tRep)}</strong></td>
-      <td style="text-align:right;color:var(--green)"><strong>${finFmt(tLiq)}</strong></td>
+      <td style="text-align:right;color:var(--green)"><strong>${finFmt(tFat-tRep)}</strong></td>
+      <td style="text-align:right;color:var(--green)"><strong>${finFmt(tRepReal)}</strong></td>
     </tr>`;
   }
 
   // Histórico
   finRenderHistorico();
+}
+
+function finSalvarRepasseReal(terapeuta, mesKey, valor){
+  const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
+  if(!repassesReais[mesKey]) repassesReais[mesKey]={};
+  const val=parseFloat(valor);
+  if(isNaN(val)||valor===''){ delete repassesReais[mesKey][terapeuta]; }
+  else { repassesReais[mesKey][terapeuta]=val; }
+  localStorage.setItem('cinpsi_repasses_reais', JSON.stringify(repassesReais));
+  _cache['cinpsi_repasses_reais']=repassesReais;
+  _fbWrite('cinpsi_repasses_reais', repassesReais);
+  toast('✅ Valor real salvo — DRE atualizado!');
 }
 
 function finRepUpdateRepasse(terapeuta, val){
