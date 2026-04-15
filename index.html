@@ -1808,7 +1808,9 @@ function getConvertidos(){
     id:'lead_'+l.id, paciente:l.paciente||l.responsavel, responsavel:l.responsavel,
     telefone:l.telefone, origem:l.origem, servico:l.servico, status:'Fechado',
     terapeuta:l.terapeuta, valor:l.valor, observacao:l.observacao, data:l.data,
-    fromLead:true, leadConvertido:true  // leads fechados manualmente são sempre leads reais
+    modalidade:l.modalidade, valorMensal:l.valorMensal, diaSemana:l.diaSemana,
+    ativo:l.ativo!==false, // preserva status ativo/inativo
+    fromLead:true, leadConvertido:true
   }));
   return [...antigos,...fechados];
 }
@@ -2144,24 +2146,9 @@ function saveConv(){
   const valorFinal=modalidade==='mensal'?(valorMensal||null):novoValor;
   const prevCampos={modalidade, valor:valorFinal, valorMensal, diaSemana};
 
-  // Se é um antigo (id começa com "ca"), atualiza na lista de antigos
-  if(editConvId.startsWith('ca')||!editConvId.startsWith('lead_')){
-    const antigos=loadConvAntigos();
-    const idx=antigos.findIndex(x=>x.id===editConvId);
-    if(idx!==-1){
-      antigos[idx]={...antigos[idx],
-        paciente:nome,
-        telefone:document.getElementById('ec-telefone').value.trim()||null,
-        origem:document.getElementById('ec-origem').value||antigos[idx].origem,
-        servico:document.getElementById('ec-servico').value||null,
-        terapeuta:novaTer||null,
-        ...prevCampos,
-        ativo:document.getElementById('ec-ativo').value!=='false',
-        observacao:document.getElementById('ec-obs').value.trim()||null,
-      };
-      saveConvAntigos(antigos);
-    }
-  } else {
+  const ativoVal=document.getElementById('ec-ativo').value!=='false';
+
+  if(editConvId.startsWith('lead_')){
     // É um lead fechado — atualiza no array de leads
     const leadId=editConvId.replace('lead_','');
     const leads=loadLeads();
@@ -2174,9 +2161,27 @@ function saveConv(){
         servico:document.getElementById('ec-servico').value||null,
         terapeuta:novaTer||null,
         ...prevCampos,
+        ativo:ativoVal,
         observacao:document.getElementById('ec-obs').value.trim()||null,
       };
       saveLeads(leads);
+    }
+  } else {
+    // É um antigo (ca...) ou duplicado (dup...) — atualiza na lista de antigos
+    const antigos=loadConvAntigos();
+    const idx=antigos.findIndex(x=>x.id===editConvId);
+    if(idx!==-1){
+      antigos[idx]={...antigos[idx],
+        paciente:nome,
+        telefone:document.getElementById('ec-telefone').value.trim()||null,
+        origem:document.getElementById('ec-origem').value||antigos[idx].origem,
+        servico:document.getElementById('ec-servico').value||null,
+        terapeuta:novaTer||null,
+        ...prevCampos,
+        ativo:ativoVal,
+        observacao:document.getElementById('ec-obs').value.trim()||null,
+      };
+      saveConvAntigos(antigos);
     }
   }
 
