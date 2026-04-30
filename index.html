@@ -1284,6 +1284,7 @@ function launchApp(){
     showView('dash-leads');
     checkLembretes();
     setTimeout(finCheckAlertas, 800);
+    setTimeout(nfCheckLembrete, 1000);
   } else {
     showView('registros');
   }
@@ -1343,6 +1344,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads ativos</button>
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Leads convertidos</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
+      <button class="nav-item" onclick="showView('reunioes')" id="nav-reunioes"><span class="nav-icon">📝</span> Reuniões</button>
       <div class="nav-section">Supervisão Clínica</div>
       <button class="nav-item" onclick="showView('registros')" id="nav-registros"><span class="nav-icon">📋</span> Registros</button>
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
@@ -1391,6 +1393,7 @@ const VM={
   'pacientes':{title:'Pacientes',sub:'Cadastro de pacientes'},
   'pti':{title:'PTI – Plano Terapêutico Individual',sub:'Objetivos terapêuticos por paciente'},
   'meudesenvolvimento':{title:'Meu Desenvolvimento',sub:'Notas de supervisão estruturada'},
+  'reunioes':{title:'Reuniões',sub:'Atas e acompanhamento de decisões'},
   'usuarios':{title:'Usuários',sub:'Gestão de acesso'},
   'minhaconta':{title:'Minha conta',sub:'Alterar senha'},
   'financeiro':{title:'Financeiro',sub:'Controle de receitas e despesas da clínica',role:'admin'},
@@ -1430,6 +1433,14 @@ function showView(name){
     acts.innerHTML=`<button class="btn-purple" onclick="toggleAddPac()">+ Adicionar paciente</button>`;
   }
 
+  if(name==='reunioes'){
+    acts.innerHTML=`<button class="btn-purple" onclick="reuniaoNova()">+ Nova reunião</button>`;
+  }
+
+  if(name==='convertidos'){
+    acts.innerHTML=`<button class="btn-ghost" onclick="nfAbrirLista()" style="margin-right:8px">🧾 Lista de NF</button>`;
+  }
+
   const c=document.getElementById('main-content');
   c.innerHTML='';
 
@@ -1442,6 +1453,7 @@ function showView(name){
   else if(name==='pacientes') renderPacientes(c);
   else if(name==='pti') renderPTI(c);
   else if(name==='meudesenvolvimento') renderMeuDesenvolvimento(c);
+  else if(name==='reunioes') renderReunioes(c);
   else if(name==='usuarios') renderUsuarios(c);
   else if(name==='minhaconta') renderMinhaConta(c);
 }
@@ -2072,6 +2084,13 @@ function openConvModal(id){
             </select></div>
           <div class="form-group full"><label class="form-label">Observação</label>
             <textarea class="form-textarea" id="ec-obs"></textarea></div>
+          <div class="form-group full">
+            <label class="form-label">🧾 Nota Fiscal</label>
+            <select class="form-select" id="ec-nf">
+              <option value="nao">Não precisa de NF</option>
+              <option value="sim">Precisa de NF todo mês</option>
+            </select>
+          </div>
         </div>
         <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:12px">📅 Previsão de Receita</div>
@@ -2112,6 +2131,7 @@ function openConvModal(id){
   document.getElementById('ec-valor-mensal').value=p.valorMensal||p.valor||'';
   document.getElementById('ec-ativo').value=p.ativo===false?'false':'true';
   document.getElementById('ec-obs').value=p.observacao||'';
+  document.getElementById('ec-nf').value=p.notaFiscal==='sim'?'sim':'nao';
   // Modalidade
   const mod=p.modalidade||'mensal';
   ecSetModalidade(mod);
@@ -2162,6 +2182,7 @@ function saveConv(){
         terapeuta:novaTer||null,
         ...prevCampos,
         ativo:ativoVal,
+        notaFiscal:document.getElementById('ec-nf').value||'nao',
         observacao:document.getElementById('ec-obs').value.trim()||null,
       };
       saveLeads(leads);
@@ -2179,6 +2200,7 @@ function saveConv(){
         terapeuta:novaTer||null,
         ...prevCampos,
         ativo:ativoVal,
+        notaFiscal:document.getElementById('ec-nf').value||'nao',
         observacao:document.getElementById('ec-obs').value.trim()||null,
       };
       saveConvAntigos(antigos);
@@ -3548,6 +3570,290 @@ function deletePac(id){
 // ════════════════════════════════════════════════════════════
 // USUÁRIOS
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// REUNIÕES
+// ════════════════════════════════════════════════════════════
+function loadReunioes(){ return JSON.parse(localStorage.getItem('cinpsi_reunioes')||'[]'); }
+function saveReunioes(d){ localStorage.setItem('cinpsi_reunioes',JSON.stringify(d)); _fbWrite('cinpsi_reunioes',d); }
+
+let _reuniaoAtual=null;
+let _reuDragId=null;
+
+function renderReunioes(c){
+  const lista=loadReunioes().sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const wrap=document.createElement('div');
+  wrap.style.cssText='max-width:900px;margin:0 auto;padding:0 0 40px';
+
+  if(_reuniaoAtual){
+    wrap.appendChild(buildAtaEditor(_reuniaoAtual));
+    c.innerHTML=''; c.appendChild(wrap); return;
+  }
+
+  if(!lista.length){
+    const empty=document.createElement('div');
+    empty.style.cssText='text-align:center;padding:80px 20px;color:var(--text3)';
+    empty.innerHTML='<div style="font-size:48px;margin-bottom:12px">📝</div>'
+      +'<div style="font-size:15px;margin-bottom:16px">Nenhuma reunião registrada ainda.</div>'
+      +'<button class="btn-purple" onclick="reuniaoNova()">+ Nova reunião</button>';
+    wrap.appendChild(empty);
+    c.innerHTML=''; c.appendChild(wrap); return;
+  }
+
+  lista.forEach(r=>{
+    const nDec=(r.decisoes||[]).length;
+    const nAco=(r.acoes||[]).length;
+    const pendentes=(r.decisoes||[]).filter(d=>((r.kbStatus||{})['d'+d.id]||'pendente')==='pendente').length
+                  +(r.acoes||[]).filter(a=>((r.kbStatus||{})['a'+a.id]||'pendente')==='pendente').length;
+    const card=document.createElement('div');
+    card.className='card';
+    card.style.cssText='display:flex;align-items:center;gap:16px;padding:16px 20px;margin-bottom:10px;cursor:pointer';
+    card.onclick=()=>{ _reuniaoAtual=JSON.parse(JSON.stringify(r)); showView('reunioes'); };
+    card.innerHTML='<div style="width:48px;height:48px;border-radius:12px;background:var(--purple-light);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📝</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:600;font-size:15px;color:var(--text)">'+esc(r.titulo||'Reunião sem título')+'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:3px">'+fmtDate(r.data)+(r.hora?' · '+esc(r.hora):'')+(r.participantes?' · '+esc(r.participantes):'')+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-shrink:0;align-items:center">'
+      +(pendentes>0?'<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:3px 10px;border-radius:20px;font-weight:500">'+pendentes+' pendente'+(pendentes>1?'s':'')+'</span>':'')
+      +'<span style="font-size:11px;background:var(--surface2);color:var(--text3);padding:3px 10px;border-radius:20px">'+nDec+' dec · '+nAco+' ações</span>'
+      +'<button class="btn-ghost" style="font-size:12px;padding:4px 10px" onclick="event.stopPropagation();_reuniaoAtual=JSON.parse(JSON.stringify(loadReunioes().find(x=>x.id===\''+r.id+'\')));showView(\'reunioes\')">Abrir</button>'
+      +'<button class="btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--red)" onclick="event.stopPropagation();reuniaoExcluir(\''+r.id+'\')">Excluir</button>'
+      +'</div>';
+    wrap.appendChild(card);
+  });
+
+  c.innerHTML=''; c.appendChild(wrap);
+}
+
+function reuniaoNova(){
+  const hoje=new Date().toISOString().split('T')[0];
+  _reuniaoAtual={id:'reu_'+Date.now(),titulo:'',data:hoje,hora:'',participantes:'',pauta:'',discussoes:'',proxReuniao:'',obs:'',decisoes:[],acoes:[],kbStatus:{},_nextId:1};
+  showView('reunioes');
+}
+
+function reuniaoExcluir(id){
+  if(!confirm('Excluir esta reunião?')) return;
+  saveReunioes(loadReunioes().filter(r=>r.id!==id));
+  toast('Reunião excluída.');
+  _reuniaoAtual=null;
+  showView('reunioes');
+}
+
+function reuniaoVoltar(){
+  _reuniaoAtual=null;
+  showView('reunioes');
+}
+
+function reuniaoSalvar(){
+  if(!_reuniaoAtual) return;
+  _reuniaoAtual.titulo=document.getElementById('reu-titulo')?.value||'';
+  _reuniaoAtual.data=document.getElementById('reu-data')?.value||'';
+  _reuniaoAtual.hora=document.getElementById('reu-hora')?.value||'';
+  _reuniaoAtual.participantes=document.getElementById('reu-part')?.value||'';
+  _reuniaoAtual.pauta=document.getElementById('reu-pauta')?.value||'';
+  _reuniaoAtual.discussoes=document.getElementById('reu-disc')?.value||'';
+  _reuniaoAtual.proxReuniao=document.getElementById('reu-prox')?.value||'';
+  _reuniaoAtual.obs=document.getElementById('reu-obs')?.value||'';
+  const lista=loadReunioes();
+  const idx=lista.findIndex(r=>r.id===_reuniaoAtual.id);
+  if(idx!==-1) lista[idx]=_reuniaoAtual; else lista.push(_reuniaoAtual);
+  saveReunioes(lista);
+  toast('✅ Reunião salva!');
+}
+
+function buildAtaEditor(r){
+  const wrap=document.createElement('div');
+
+  // Header
+  const hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px';
+  hdr.innerHTML='<button class="btn-ghost" onclick="reuniaoVoltar()">← Voltar</button>'
+    +'<input id="reu-titulo" class="form-input" style="flex:1;font-size:16px;font-weight:600" placeholder="Título da reunião..." value="'+esc(r.titulo||'')+'">'
+    +'<button class="btn-save-purple" onclick="reuniaoSalvar()">💾 Salvar</button>';
+  wrap.appendChild(hdr);
+
+  // Abas
+  const tabs=document.createElement('div');
+  tabs.style.cssText='display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px';
+  tabs.innerHTML='<button id="reu-tab-ata" style="background:none;border:none;border-bottom:2px solid var(--purple);color:var(--purple);font-weight:600;padding:10px 18px;cursor:pointer;font-family:var(--font);font-size:13px" onclick="reuSwitchTab(\'ata\')">📋 Ata da reunião</button>'
+    +'<button id="reu-tab-kanban" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;padding:10px 18px;cursor:pointer;font-family:var(--font);font-size:13px" onclick="reuSwitchTab(\'kanban\')">🗂️ Kanban de decisões</button>';
+  wrap.appendChild(tabs);
+
+  // Painel ATA
+  const pAta=document.createElement('div');
+  pAta.id='reu-panel-ata';
+  const card=document.createElement('div');
+  card.className='card';
+  card.innerHTML=
+    '<div class="form-grid">'
+    +'<div class="form-group"><label class="form-label">Data</label><input class="form-input" id="reu-data" type="date" value="'+esc(r.data||'')+'"></div>'
+    +'<div class="form-group"><label class="form-label">Horário</label><input class="form-input" id="reu-hora" type="text" placeholder="Ex: 09:00 – 10:00" value="'+esc(r.hora||'')+'"></div>'
+    +'<div class="form-group full"><label class="form-label">Participantes</label><input class="form-input" id="reu-part" type="text" placeholder="Nomes separados por vírgula..." value="'+esc(r.participantes||'')+'"></div>'
+    +'<div class="form-group full"><label class="form-label">Pauta</label><textarea class="form-textarea" id="reu-pauta" rows="3" placeholder="Temas a discutir...">'+esc(r.pauta||'')+'</textarea></div>'
+    +'</div>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<label class="form-label" style="display:block;margin-bottom:8px">Discussões &amp; anotações</label>'
+    +'<textarea class="form-textarea" id="reu-disc" rows="5" placeholder="Registre o que foi discutido em cada tema..." style="margin-bottom:16px">'+esc(r.discussoes||'')+'</textarea>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<label class="form-label" style="display:block;margin-bottom:8px">Decisões tomadas</label>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:58%">Decisão</th>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:30%">Responsável</th>'
+    +'<th style="width:30px;background:var(--surface2)"></th>'
+    +'</tr></thead>'
+    +'<tbody id="reu-dec-tbody"></tbody></table>'
+    +'<button class="btn-ghost" style="font-size:12px;color:var(--purple);padding:4px 0;margin-bottom:16px" onclick="reuAddDecisao()">+ Adicionar decisão</button>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<label class="form-label" style="display:block;margin-bottom:8px">Ações &amp; encaminhamentos</label>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:46%">Ação</th>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:22%">Responsável</th>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:18%">Prazo</th>'
+    +'<th style="width:30px;background:var(--surface2)"></th>'
+    +'</tr></thead>'
+    +'<tbody id="reu-aco-tbody"></tbody></table>'
+    +'<button class="btn-ghost" style="font-size:12px;color:var(--purple);padding:4px 0;margin-bottom:16px" onclick="reuAddAcao()">+ Adicionar ação</button>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<div class="form-grid">'
+    +'<div class="form-group"><label class="form-label">Próxima reunião</label><input class="form-input" id="reu-prox" type="date" value="'+esc(r.proxReuniao||'')+'"></div>'
+    +'<div class="form-group"><label class="form-label">Observações finais</label><input class="form-input" id="reu-obs" type="text" placeholder="Observações..." value="'+esc(r.obs||'')+'"></div>'
+    +'</div>';
+  pAta.appendChild(card);
+  wrap.appendChild(pAta);
+
+  // Painel KANBAN
+  const pKan=document.createElement('div');
+  pKan.id='reu-panel-kanban';
+  pKan.style.display='none';
+  const board=document.createElement('div');
+  board.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:12px';
+  [{col:'pendente',label:'Pendente',color:'#888780'},{col:'andamento',label:'Em andamento',color:'#185FA5'},{col:'concluido',label:'Concluído',color:'#0F6E56'}].forEach(({col,label,color})=>{
+    const colDiv=document.createElement('div');
+    colDiv.style.cssText='background:var(--surface2);border-radius:var(--radius);padding:12px';
+    colDiv.ondragover=e=>e.preventDefault();
+    colDiv.ondrop=e=>{ e.preventDefault(); if(_reuDragId){ _reuniaoAtual.kbStatus[_reuDragId]=col; reuRenderKanban(); } };
+    colDiv.innerHTML='<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+color+';display:inline-block"></span>'+label
+      +'<span id="reu-cnt-'+col+'" style="background:var(--surface);border-radius:9px;font-size:10px;padding:1px 6px;color:var(--text3)">0</span></div>'
+      +'<div id="reu-kb-'+col+'"></div>';
+    board.appendChild(colDiv);
+  });
+  pKan.appendChild(board);
+  wrap.appendChild(pKan);
+
+  setTimeout(()=>{ reuRenderTabelas(); reuRenderKanban(); },50);
+  return wrap;
+}
+
+function reuSwitchTab(tab){
+  document.getElementById('reu-panel-ata').style.display=tab==='ata'?'block':'none';
+  document.getElementById('reu-panel-kanban').style.display=tab==='kanban'?'block':'none';
+  const btnAta=document.getElementById('reu-tab-ata');
+  const btnKan=document.getElementById('reu-tab-kanban');
+  if(btnAta){ btnAta.style.borderBottom='2px solid '+(tab==='ata'?'var(--purple)':'transparent'); btnAta.style.color=tab==='ata'?'var(--purple)':'var(--text2)'; btnAta.style.fontWeight=tab==='ata'?'600':'400'; }
+  if(btnKan){ btnKan.style.borderBottom='2px solid '+(tab==='kanban'?'var(--purple)':'transparent'); btnKan.style.color=tab==='kanban'?'var(--purple)':'var(--text2)'; btnKan.style.fontWeight=tab==='kanban'?'600':'400'; }
+  if(tab==='kanban') reuRenderKanban();
+}
+
+function reuAddDecisao(){
+  if(!_reuniaoAtual) return;
+  const id=(_reuniaoAtual._nextId||1); _reuniaoAtual._nextId=id+1;
+  _reuniaoAtual.decisoes=_reuniaoAtual.decisoes||[];
+  _reuniaoAtual.decisoes.push({id,texto:'',resp:''});
+  _reuniaoAtual.kbStatus=_reuniaoAtual.kbStatus||{};
+  if(!_reuniaoAtual.kbStatus['d'+id]) _reuniaoAtual.kbStatus['d'+id]='pendente';
+  reuRenderTabelas();
+}
+
+function reuAddAcao(){
+  if(!_reuniaoAtual) return;
+  const id=(_reuniaoAtual._nextId||1); _reuniaoAtual._nextId=id+1;
+  _reuniaoAtual.acoes=_reuniaoAtual.acoes||[];
+  _reuniaoAtual.acoes.push({id,texto:'',resp:'',prazo:''});
+  _reuniaoAtual.kbStatus=_reuniaoAtual.kbStatus||{};
+  if(!_reuniaoAtual.kbStatus['a'+id]) _reuniaoAtual.kbStatus['a'+id]='pendente';
+  reuRenderTabelas();
+}
+
+function reuDelDecisao(id){
+  _reuniaoAtual.decisoes=(_reuniaoAtual.decisoes||[]).filter(x=>x.id!==id);
+  delete (_reuniaoAtual.kbStatus||{})['d'+id];
+  reuRenderTabelas();
+}
+
+function reuDelAcao(id){
+  _reuniaoAtual.acoes=(_reuniaoAtual.acoes||[]).filter(x=>x.id!==id);
+  delete (_reuniaoAtual.kbStatus||{})['a'+id];
+  reuRenderTabelas();
+}
+
+function reuRenderTabelas(){
+  const dtb=document.getElementById('reu-dec-tbody'); if(!dtb) return;
+  dtb.innerHTML='';
+  (_reuniaoAtual.decisoes||[]).forEach(d=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Descreva a decisão..." value="'+esc(d.texto)+'" oninput="(_reuniaoAtual.decisoes.find(x=>x.id==='+d.id+')||{}).texto=this.value"></td>'
+      +'<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Nome..." value="'+esc(d.resp)+'" oninput="(_reuniaoAtual.decisoes.find(x=>x.id==='+d.id+')||{}).resp=this.value"></td>'
+      +'<td style="padding:5px 4px;border-bottom:1px solid var(--border2);text-align:center">'
+      +'<button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="reuDelDecisao('+d.id+')">×</button></td>';
+    dtb.appendChild(tr);
+  });
+
+  const atb=document.getElementById('reu-aco-tbody'); if(!atb) return;
+  atb.innerHTML='';
+  (_reuniaoAtual.acoes||[]).forEach(a=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Descreva a ação..." value="'+esc(a.texto)+'" oninput="(_reuniaoAtual.acoes.find(x=>x.id==='+a.id+')||{}).texto=this.value"></td>'
+      +'<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Nome..." value="'+esc(a.resp)+'" oninput="(_reuniaoAtual.acoes.find(x=>x.id==='+a.id+')||{}).resp=this.value"></td>'
+      +'<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="date" value="'+esc(a.prazo)+'" oninput="(_reuniaoAtual.acoes.find(x=>x.id==='+a.id+')||{}).prazo=this.value"></td>'
+      +'<td style="padding:5px 4px;border-bottom:1px solid var(--border2);text-align:center">'
+      +'<button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="reuDelAcao('+a.id+')">×</button></td>';
+    atb.appendChild(tr);
+  });
+}
+
+function reuRenderKanban(){
+  if(!_reuniaoAtual) return;
+  const cols={pendente:[],andamento:[],concluido:[]};
+  (_reuniaoAtual.decisoes||[]).forEach(d=>{
+    const st=(_reuniaoAtual.kbStatus||{})['d'+d.id]||'pendente';
+    cols[st].push({key:'d'+d.id,title:d.texto||'(sem título)',meta:d.resp,type:'decisao'});
+  });
+  (_reuniaoAtual.acoes||[]).forEach(a=>{
+    const st=(_reuniaoAtual.kbStatus||{})['a'+a.id]||'pendente';
+    const meta=[a.resp,a.prazo?fmtDate(a.prazo):''].filter(Boolean).join(' · ');
+    cols[st].push({key:'a'+a.id,title:a.texto||'(sem título)',meta,type:'acao'});
+  });
+  ['pendente','andamento','concluido'].forEach(col=>{
+    const cont=document.getElementById('reu-kb-'+col); if(!cont) return;
+    const cnt=document.getElementById('reu-cnt-'+col);
+    if(cnt) cnt.textContent=cols[col].length;
+    cont.innerHTML='';
+    if(!cols[col].length){ cont.innerHTML='<p style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">Nenhum item</p>'; return; }
+    cols[col].forEach(item=>{
+      const typeBg=item.type==='decisao'?'#EEEDFE':'#E6F1FB';
+      const typeColor=item.type==='decisao'?'#3C3489':'#0C447C';
+      const typeLabel=item.type==='decisao'?'Decisão':'Ação';
+      const div=document.createElement('div');
+      div.style.cssText='background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 12px;cursor:grab;margin-bottom:8px';
+      div.draggable=true;
+      div.innerHTML='<div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px">'+esc(item.title)+'</div>'
+        +(item.meta?'<div style="font-size:11px;color:var(--text3)">'+esc(item.meta)+'</div>':'')
+        +'<span style="display:inline-block;font-size:10px;padding:1px 7px;border-radius:20px;margin-top:5px;font-weight:500;background:'+typeBg+';color:'+typeColor+'">'+typeLabel+'</span>';
+      div.addEventListener('dragstart',()=>{ _reuDragId=item.key; });
+      div.addEventListener('dragend',()=>{ _reuDragId=null; });
+      cont.appendChild(div);
+    });
+  });
+}
+
 function renderUsuarios(c){
   const users=loadUsers();
   c.innerHTML=`
@@ -4751,6 +5057,99 @@ function finDelHistorico(idx){
   saveHistorico(hist);
   finRenderHistorico();
   toast('Registro excluído do histórico.');
+}
+
+// ── LEMBRETE NOTA FISCAL ─────────────────────────────────────────────────
+function nfCheckLembrete(){
+  const hoje=new Date();
+  if(hoje.getDate()!==30) return;
+
+  const mesKey=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  const visto=localStorage.getItem('cinpsi_nf_visto_'+mesKey);
+  if(visto) return; // já mostrou esse mês
+
+  const pendentes=getConvertidos().filter(p=>p.ativo!==false&&p.notaFiscal==='sim');
+  if(!pendentes.length) return;
+
+  // Marca como visto
+  localStorage.setItem('cinpsi_nf_visto_'+mesKey,'1');
+
+  // Abre modal com a lista
+  nfAbrirLista(pendentes, mesKey);
+}
+
+function nfAbrirLista(pendentes, mesKey){
+  const hoje=new Date();
+  if(!mesKey) mesKey=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  if(!pendentes) pendentes=getConvertidos().filter(p=>p.ativo!==false&&p.notaFiscal==='sim');
+
+  document.getElementById('modal-nf-lista')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-nf-lista';
+
+  const [ano,mes]=mesKey.split('-');
+  const nomeMes=new Date(parseInt(ano),parseInt(mes)-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  const linhas=pendentes.map(p=>
+    '<tr>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">'+esc(p.paciente||'—')+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">'+esc(p.terapeuta||'—')+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">'+esc(p.servico||'—')+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right">'+(p.valorMensal||p.valor?'R$ '+parseFloat(p.valorMensal||p.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—')+'</td>'
+    +'</tr>'
+  ).join('');
+
+  mo.innerHTML=`<div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title">🧾 Notas Fiscais — ${nomeMes}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-nf-lista').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text3);margin:0 0 16px">${pendentes.length} paciente${pendentes.length>1?'s precisam':'precisa'} de nota fiscal este mês.</p>
+      <div id="nf-print-area">
+        <div style="text-align:center;margin-bottom:16px;display:none" class="print-only">
+          <strong style="font-size:16px">Clínica CINPSI</strong><br>
+          <span style="font-size:13px;color:#666">Notas Fiscais a emitir — ${nomeMes}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--surface2)">
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Paciente</th>
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Terapeuta</th>
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Serviço</th>
+              <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Valor</th>
+            </tr>
+          </thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-nf-lista').remove()">Fechar</button>
+      <button class="btn-ghost" onclick="nfImprimir()">🖨️ Imprimir</button>
+      <button class="btn-save-purple" onclick="nfSalvarPDF()">💾 Salvar como PDF</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function nfImprimir(){
+  const area=document.getElementById('nf-print-area');
+  if(!area) return;
+  const w=window.open('','_blank','width=700,height=600');
+  w.document.write('<html><head><title>Notas Fiscais</title>'
+    +'<style>body{font-family:Arial,sans-serif;padding:30px}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;padding:8px 12px;background:#f3f4f6;font-size:11px;text-transform:uppercase;color:#6b7280}td{padding:8px 12px;border-bottom:1px solid #e5e7eb}h2{margin:0 0 4px}p{margin:0 0 20px;color:#6b7280;font-size:13px}</style>'
+    +'</head><body>'+area.innerHTML+'</body></html>');
+  w.document.close();
+  w.print();
+}
+
+function nfSalvarPDF(){
+  nfImprimir(); // no browser, print → salvar como PDF
+  toast('Use "Salvar como PDF" na janela de impressão.');
 }
 
 // ── ALERTAS ───────────────────────────────────────────────────────────────
