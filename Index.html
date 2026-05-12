@@ -1284,6 +1284,7 @@ function launchApp(){
     showView('dash-leads');
     checkLembretes();
     setTimeout(finCheckAlertas, 800);
+    setTimeout(nfCheckLembrete, 1000);
   } else {
     showView('registros');
   }
@@ -1343,6 +1344,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads ativos</button>
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Leads convertidos</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
+      <button class="nav-item" onclick="showView('reunioes')" id="nav-reunioes"><span class="nav-icon">📝</span> Reuniões</button>
       <div class="nav-section">Supervisão Clínica</div>
       <button class="nav-item" onclick="showView('registros')" id="nav-registros"><span class="nav-icon">📋</span> Registros</button>
       <button class="nav-item" onclick="showView('novo-registro')" id="nav-novo-registro"><span class="nav-icon">✏️</span> Novo registro</button>
@@ -1391,6 +1393,7 @@ const VM={
   'pacientes':{title:'Pacientes',sub:'Cadastro de pacientes'},
   'pti':{title:'PTI – Plano Terapêutico Individual',sub:'Objetivos terapêuticos por paciente'},
   'meudesenvolvimento':{title:'Meu Desenvolvimento',sub:'Notas de supervisão estruturada'},
+  'reunioes':{title:'Reuniões',sub:'Atas e acompanhamento de decisões'},
   'usuarios':{title:'Usuários',sub:'Gestão de acesso'},
   'minhaconta':{title:'Minha conta',sub:'Alterar senha'},
   'financeiro':{title:'Financeiro',sub:'Controle de receitas e despesas da clínica',role:'admin'},
@@ -1430,6 +1433,14 @@ function showView(name){
     acts.innerHTML=`<button class="btn-purple" onclick="toggleAddPac()">+ Adicionar paciente</button>`;
   }
 
+  if(name==='reunioes'){
+    acts.innerHTML=`<button class="btn-purple" onclick="reuniaoNova()">+ Nova reunião</button>`;
+  }
+
+  if(name==='convertidos'){
+    acts.innerHTML=`<button class="btn-ghost" onclick="nfAbrirLista()" style="margin-right:8px">🧾 Lista de NF</button>`;
+  }
+
   const c=document.getElementById('main-content');
   c.innerHTML='';
 
@@ -1442,6 +1453,7 @@ function showView(name){
   else if(name==='pacientes') renderPacientes(c);
   else if(name==='pti') renderPTI(c);
   else if(name==='meudesenvolvimento') renderMeuDesenvolvimento(c);
+  else if(name==='reunioes') renderReunioes(c);
   else if(name==='usuarios') renderUsuarios(c);
   else if(name==='minhaconta') renderMinhaConta(c);
 }
@@ -1534,7 +1546,6 @@ function renderDashLeads(c){
   const ag=leads.filter(l=>l.status==='Aguardando').length;
   const pct=total>0?Math.round(fech/total*100)+'%':'0%';
 
-  // Convertidos reais (marcados como leadConvertido) + leads fechados manualmente no mês
   const convMes=loadConvAntigos().filter(p=>p.leadConvertido===true).length
     + leads.filter(l=>l.status==='Fechado'&&l.data&&l.data.startsWith(anoMes)).length;
   const statusOrder=['Novo','Em Contato','Interessado','Proposta Enviada','Aguardando','Fechado','Perdido'];
@@ -1543,41 +1554,229 @@ function renderDashLeads(c){
   leads.forEach(l=>{if(l.origem)origens[l.origem]=(origens[l.origem]||0)+1;if(l.servico)servs[l.servico]=(servs[l.servico]||0)+1;});
   const maxO=Math.max(...Object.values(origens),1),maxS=Math.max(...Object.values(servs),1);
 
-  c.innerHTML=`
-  <div class="stats-bar" style="grid-template-columns:repeat(5,1fr)">
-    <div class="stat-card"><div class="stat-label">Total leads</div><div class="stat-value">${total}</div></div>
-    <div class="stat-card"><div class="stat-label">🎉 Convertidos em ${nomeMes}</div><div class="stat-value" style="color:var(--green)">${convMes}</div></div>
-    <div class="stat-card"><div class="stat-label">📈 Conversão geral</div><div class="stat-value">${pct}</div></div>
-    <div class="stat-card"><div class="stat-label">⏳ Aguardando</div><div class="stat-value">${ag}</div></div>
-    <div class="stat-card"><div class="stat-label">❌ Perdidos</div><div class="stat-value">${perd}</div></div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+  // ── Dados de convertidos para análise (todos, inclusive inativos)
+  const todosConv=getConvertidos();
+
+  // Mês corrente como padrão
+  const mesIni=anoMes+'-01';
+  const ultimoDia=new Date(hoje.getFullYear(),hoje.getMonth()+1,0).getDate();
+  const mesFim=anoMes+'-'+String(ultimoDia).padStart(2,'0');
+
+  c.innerHTML+=`
+  <!-- ── SEÇÃO LEADS CONVERTIDOS ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div>
-      <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px">🔽 Funil de conversão</h3>
-      <div class="funil-wrap">${statusOrder.map(s=>{const n=leads.filter(l=>l.status===s).length;return`
-        <div class="funil-row">
-          <div class="funil-label"><span class="status-pill ${sClass(s)}">${s}</span></div>
-          <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/maxN*100,3)}%;background:${sColors[s]}">${n>0?`<span>${n}</span>`:''}</div></div>
-          <div class="funil-num">${n}</div><div class="funil-pct">${total>0?Math.round(n/total*100)+'%':'0%'}</div>
-        </div>`}).join('')}</div>
+      <h2 style="font-size:14px;font-weight:700;color:var(--text);margin:0">✅ Pacientes Convertidos</h2>
+      <p style="font-size:12px;color:var(--text3);margin:4px 0 0">Filtre por período para visualizar origem, especialidade e profissional</p>
     </div>
-    <div>
-      <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px">🎯 Por origem</h3>
-      <div class="funil-wrap">${Object.entries(origens).sort((a,b)=>b[1]-a[1]).map(([o,n])=>`
-        <div class="funil-row">
-          <div class="funil-label" style="font-size:12px">${esc(o)}</div>
-          <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/maxO*100,3)}%;background:var(--accent)">${n>0?`<span>${n}</span>`:''}</div></div>
-          <div class="funil-num">${n}</div><div class="funil-pct">${Math.round(n/total*100)}%</div>
-        </div>`).join('')}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="dash-conv-ini" class="form-input" style="font-size:12px;padding:6px 10px;width:140px" value="${mesIni}" onchange="dashFiltrarConv()">
+      <span style="font-size:12px;color:var(--text3)">até</span>
+      <input type="date" id="dash-conv-fim" class="form-input" style="font-size:12px;padding:6px 10px;width:140px" value="${mesFim}" onchange="dashFiltrarConv()">
+      <select id="dash-conv-origem" class="form-select" style="font-size:12px;padding:6px 10px;width:150px" onchange="dashFiltrarConv()">
+        <option value="">Todas as origens</option>
+      </select>
+      <button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="dashFiltrarConvTodos()">Ver todos</button>
+      <button class="btn-ghost" style="font-size:13px" onclick="dashImprimirConvertidos()">🖨️ Imprimir</button>
     </div>
   </div>
-  <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px">🩺 Por serviço</h3>
-  <div class="funil-wrap">${Object.entries(servs).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`
-    <div class="funil-row">
-      <div class="funil-label" style="font-size:12px">${esc(s)}</div>
-      <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/maxS*100,3)}%;background:var(--purple)">${n>0?`<span>${n}</span>`:''}</div></div>
-      <div class="funil-num">${n}</div><div class="funil-pct">${Math.round(n/total*100)}%</div>
-    </div>`).join('')}</div>`;
+  <div id="dash-conv-section"></div>`;
+
+  // Armazena todos para uso no filtro
+  window._dashTodosConv=todosConv;
+
+  // Preenche select de origens via JS
+  setTimeout(()=>{
+    const sel=document.getElementById('dash-conv-origem');
+    if(sel){
+      const origens=[...new Set(todosConv.map(p=>p.origem).filter(Boolean))].sort();
+      origens.forEach(o=>{
+        const opt=document.createElement('option');
+        opt.value=o; opt.textContent=o;
+        sel.appendChild(opt);
+      });
+    }
+    dashFiltrarConv();
+  }, 50);
+}
+
+function dashFiltrarConv(){
+  const ini=document.getElementById('dash-conv-ini')?.value||'';
+  const fim=document.getElementById('dash-conv-fim')?.value||'';
+  const orig=document.getElementById('dash-conv-origem')?.value||'';
+  const todos=window._dashTodosConv||[];
+
+  const filtrados=todos.filter(p=>{
+    // Filtro de origem
+    if(orig && (p.origem||'')!==orig) return false;
+
+    // Filtro de data — pacientes sem data só aparecem se não há filtro de data
+    if(!p.data){
+      return !ini && !fim;
+    }
+
+    // Com data — aplica o período
+    if(ini && p.data < ini) return false;
+    if(fim && p.data > fim) return false;
+
+    return true;
+  });
+
+  dashRenderConvSection(filtrados, ini, fim);
+}
+
+function dashFiltrarConvTodos(){
+  const todos=window._dashTodosConv||[];
+  document.getElementById('dash-conv-ini').value='';
+  document.getElementById('dash-conv-fim').value='';
+  const sel=document.getElementById('dash-conv-origem');
+  if(sel) sel.value='';
+  dashRenderConvSection(todos,'','');
+}
+
+function dashRenderConvSection(lista, ini, fim){
+  const sec=document.getElementById('dash-conv-section'); if(!sec) return;
+  const total=lista.length;
+
+  if(!total){
+    sec.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Nenhum paciente convertido no período selecionado.</div>';
+    return;
+  }
+
+  // Agrupa por origem, especialidade e profissional (só ativos para os gráficos)
+  const origens={}, esps={}, profs={};
+  lista.forEach(p=>{
+    const o=p.origem||'Não informado';
+    const e=p.servico||'Não informado';
+    const pr=p.terapeuta||'Não informado';
+    origens[o]=(origens[o]||0)+1;
+    esps[e]=(esps[e]||0)+1;
+    profs[pr]=(profs[pr]||0)+1;
+  });
+  const maxO=Math.max(...Object.values(origens),1);
+  const maxE=Math.max(...Object.values(esps),1);
+  const maxP=Math.max(...Object.values(profs),1);
+
+  const barRow=(label,n,max,cor)=>`
+    <div class="funil-row" style="margin-bottom:8px">
+      <div class="funil-label" style="font-size:12px;width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(label)}">${esc(label)}</div>
+      <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/max*100,4)}%;background:${cor};border-radius:4px">${n>0?`<span>${n}</span>`:''}</div></div>
+      <div class="funil-num">${n}</div>
+      <div class="funil-pct">${Math.round(n/total*100)}%</div>
+    </div>`;
+
+  // Tabela de pacientes
+  const linhasPac=lista.sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map(p=>`
+    <tr style="opacity:${p.ativo===false?'0.6':'1'}">
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:13px">
+        <strong>${esc(p.paciente||p.responsavel||'—')}</strong>
+        ${p.ativo===false?'<span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:2px 7px;border-radius:20px;margin-left:6px;font-weight:500">Inativo</span>':''}
+      </td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">${esc(p.origem||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">${esc(p.servico||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">${esc(p.terapeuta||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text3)">${p.data?fmtDate(p.data):'<span style="color:var(--text3);font-style:italic">Sem data</span>'}</td>
+    </tr>`).join('');
+
+  sec.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:20px" id="dash-conv-graficos">
+      <div class="card" style="padding:16px 18px">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:0 0 14px">🎯 Por origem</h3>
+        ${Object.entries(origens).sort((a,b)=>b[1]-a[1]).map(([o,n])=>barRow(o,n,maxO,'var(--accent)')).join('')}
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:0 0 14px">🩺 Por especialidade</h3>
+        ${Object.entries(esps).sort((a,b)=>b[1]-a[1]).map(([e,n])=>barRow(e,n,maxE,'var(--teal)')).join('')}
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:0 0 14px">👩‍⚕️ Por profissional</h3>
+        ${Object.entries(profs).sort((a,b)=>b[1]-a[1]).map(([p,n])=>barRow(p,n,maxP,'var(--purple)')).join('')}
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden" id="dash-conv-tabela">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${total} paciente${total!==1?'s':''} no período</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Paciente</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Origem</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Especialidade</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Profissional</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Data</th>
+        </tr></thead>
+        <tbody>${linhasPac}</tbody>
+      </table>
+    </div>`;
+
+  // Guarda dados filtrados para impressão
+  window._dashConvFiltrados=lista;
+  window._dashConvPeriodo={ini,fim};
+}
+
+function dashImprimirConvertidos(){
+  const lista=window._dashConvFiltrados||[];
+  const periodo=window._dashConvPeriodo||{};
+  if(!lista.length){ toast('Nenhum dado para imprimir.'); return; }
+
+  const ini=periodo.ini?fmtDate(periodo.ini):'início';
+  const fim=periodo.fim?fmtDate(periodo.fim):'hoje';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+
+  const linhas=lista.sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map((p,i)=>`
+    <tr style="background:${i%2===0?'#f9fafb':'#fff'}${p.ativo===false?';color:#999':''}">
+      <td>${esc(p.paciente||p.responsavel||'—')}${p.ativo===false?' <span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:10px">Inativo</span>':''}</td>
+      <td>${esc(p.origem||'—')}</td>
+      <td>${esc(p.servico||'—')}</td>
+      <td>${esc(p.terapeuta||'—')}</td>
+      <td>${fmtDate(p.data)}</td>
+    </tr>`).join('');
+
+  // Resumos
+  const origens={},esps={},profs={};
+  lista.forEach(p=>{
+    const o=p.origem||'Não informado'; origens[o]=(origens[o]||0)+1;
+    const e=p.servico||'Não informado'; esps[e]=(esps[e]||0)+1;
+    const pr=p.terapeuta||'Não informado'; profs[pr]=(profs[pr]||0)+1;
+  });
+
+  const resumoBloco=(titulo,obj)=>`
+    <div style="flex:1;min-width:180px">
+      <strong style="font-size:12px;display:block;margin-bottom:6px">${titulo}</strong>
+      ${Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f0f0f0"><span>${esc(k)}</span><strong>${v}</strong></div>`).join('')}
+    </div>`;
+
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<html><head><title>Relatório Convertidos - CINPSI</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;font-size:13px}
+    h1{font-size:18px;margin:0 0 2px}
+    .sub{font-size:12px;color:#666;margin:0 0 6px}
+    .meta{font-size:12px;color:#666;margin:0 0 24px}
+    .resumos{display:flex;gap:24px;margin-bottom:24px;padding:16px;background:#f9fafb;border-radius:6px;flex-wrap:wrap}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th{background:#f3f4f6;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600}
+    td{padding:8px 10px;font-size:12px;border-bottom:1px solid #e5e7eb}
+    .total{font-size:13px;font-weight:600;margin-bottom:8px}
+    @media print{body{padding:15px}}
+  </style></head><body>
+  <h1>Clínica CINPSI — Relatório de Pacientes Convertidos</h1>
+  <p class="sub">Período: ${ini} até ${fim}</p>
+  <p class="meta">Gerado em ${hoje} · ${lista.length} paciente${lista.length!==1?'s':''}</p>
+  <div class="resumos">
+    ${resumoBloco('🎯 Por origem',origens)}
+    ${resumoBloco('🩺 Por especialidade',esps)}
+    ${resumoBloco('👩‍⚕️ Por profissional',profs)}
+  </div>
+  <p class="total">Lista de pacientes (${lista.length})</p>
+  <table>
+    <thead><tr><th>Paciente</th><th>Origem</th><th>Especialidade</th><th>Profissional</th><th>Data</th></tr></thead>
+    <tbody>${linhas}</tbody>
+  </table>
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1808,7 +2007,9 @@ function getConvertidos(){
     id:'lead_'+l.id, paciente:l.paciente||l.responsavel, responsavel:l.responsavel,
     telefone:l.telefone, origem:l.origem, servico:l.servico, status:'Fechado',
     terapeuta:l.terapeuta, valor:l.valor, observacao:l.observacao, data:l.data,
-    fromLead:true, leadConvertido:true  // leads fechados manualmente são sempre leads reais
+    modalidade:l.modalidade, valorMensal:l.valorMensal, diaSemana:l.diaSemana,
+    ativo:l.ativo!==false, // preserva status ativo/inativo
+    fromLead:true, leadConvertido:true
   }));
   return [...antigos,...fechados];
 }
@@ -2070,6 +2271,13 @@ function openConvModal(id){
             </select></div>
           <div class="form-group full"><label class="form-label">Observação</label>
             <textarea class="form-textarea" id="ec-obs"></textarea></div>
+          <div class="form-group full">
+            <label class="form-label">🧾 Nota Fiscal</label>
+            <select class="form-select" id="ec-nf">
+              <option value="nao">Não precisa de NF</option>
+              <option value="sim">Precisa de NF todo mês</option>
+            </select>
+          </div>
         </div>
         <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px">
           <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:12px">📅 Previsão de Receita</div>
@@ -2110,6 +2318,7 @@ function openConvModal(id){
   document.getElementById('ec-valor-mensal').value=p.valorMensal||p.valor||'';
   document.getElementById('ec-ativo').value=p.ativo===false?'false':'true';
   document.getElementById('ec-obs').value=p.observacao||'';
+  document.getElementById('ec-nf').value=p.notaFiscal==='sim'?'sim':'nao';
   // Modalidade
   const mod=p.modalidade||'mensal';
   ecSetModalidade(mod);
@@ -2144,24 +2353,9 @@ function saveConv(){
   const valorFinal=modalidade==='mensal'?(valorMensal||null):novoValor;
   const prevCampos={modalidade, valor:valorFinal, valorMensal, diaSemana};
 
-  // Se é um antigo (id começa com "ca"), atualiza na lista de antigos
-  if(editConvId.startsWith('ca')||!editConvId.startsWith('lead_')){
-    const antigos=loadConvAntigos();
-    const idx=antigos.findIndex(x=>x.id===editConvId);
-    if(idx!==-1){
-      antigos[idx]={...antigos[idx],
-        paciente:nome,
-        telefone:document.getElementById('ec-telefone').value.trim()||null,
-        origem:document.getElementById('ec-origem').value||antigos[idx].origem,
-        servico:document.getElementById('ec-servico').value||null,
-        terapeuta:novaTer||null,
-        ...prevCampos,
-        ativo:document.getElementById('ec-ativo').value!=='false',
-        observacao:document.getElementById('ec-obs').value.trim()||null,
-      };
-      saveConvAntigos(antigos);
-    }
-  } else {
+  const ativoVal=document.getElementById('ec-ativo').value!=='false';
+
+  if(editConvId.startsWith('lead_')){
     // É um lead fechado — atualiza no array de leads
     const leadId=editConvId.replace('lead_','');
     const leads=loadLeads();
@@ -2174,9 +2368,29 @@ function saveConv(){
         servico:document.getElementById('ec-servico').value||null,
         terapeuta:novaTer||null,
         ...prevCampos,
+        ativo:ativoVal,
+        notaFiscal:document.getElementById('ec-nf').value||'nao',
         observacao:document.getElementById('ec-obs').value.trim()||null,
       };
       saveLeads(leads);
+    }
+  } else {
+    // É um antigo (ca...) ou duplicado (dup...) — atualiza na lista de antigos
+    const antigos=loadConvAntigos();
+    const idx=antigos.findIndex(x=>x.id===editConvId);
+    if(idx!==-1){
+      antigos[idx]={...antigos[idx],
+        paciente:nome,
+        telefone:document.getElementById('ec-telefone').value.trim()||null,
+        origem:document.getElementById('ec-origem').value||antigos[idx].origem,
+        servico:document.getElementById('ec-servico').value||null,
+        terapeuta:novaTer||null,
+        ...prevCampos,
+        ativo:ativoVal,
+        notaFiscal:document.getElementById('ec-nf').value||'nao',
+        observacao:document.getElementById('ec-obs').value.trim()||null,
+      };
+      saveConvAntigos(antigos);
     }
   }
 
@@ -3543,6 +3757,290 @@ function deletePac(id){
 // ════════════════════════════════════════════════════════════
 // USUÁRIOS
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// REUNIÕES
+// ════════════════════════════════════════════════════════════
+function loadReunioes(){ return JSON.parse(localStorage.getItem('cinpsi_reunioes')||'[]'); }
+function saveReunioes(d){ localStorage.setItem('cinpsi_reunioes',JSON.stringify(d)); _fbWrite('cinpsi_reunioes',d); }
+
+let _reuniaoAtual=null;
+let _reuDragId=null;
+
+function renderReunioes(c){
+  const lista=loadReunioes().sort((a,b)=>(b.data||'').localeCompare(a.data||''));
+  const wrap=document.createElement('div');
+  wrap.style.cssText='max-width:900px;margin:0 auto;padding:0 0 40px';
+
+  if(_reuniaoAtual){
+    wrap.appendChild(buildAtaEditor(_reuniaoAtual));
+    c.innerHTML=''; c.appendChild(wrap); return;
+  }
+
+  if(!lista.length){
+    const empty=document.createElement('div');
+    empty.style.cssText='text-align:center;padding:80px 20px;color:var(--text3)';
+    empty.innerHTML='<div style="font-size:48px;margin-bottom:12px">📝</div>'
+      +'<div style="font-size:15px;margin-bottom:16px">Nenhuma reunião registrada ainda.</div>'
+      +'<button class="btn-purple" onclick="reuniaoNova()">+ Nova reunião</button>';
+    wrap.appendChild(empty);
+    c.innerHTML=''; c.appendChild(wrap); return;
+  }
+
+  lista.forEach(r=>{
+    const nDec=(r.decisoes||[]).length;
+    const nAco=(r.acoes||[]).length;
+    const pendentes=(r.decisoes||[]).filter(d=>((r.kbStatus||{})['d'+d.id]||'pendente')==='pendente').length
+                  +(r.acoes||[]).filter(a=>((r.kbStatus||{})['a'+a.id]||'pendente')==='pendente').length;
+    const card=document.createElement('div');
+    card.className='card';
+    card.style.cssText='display:flex;align-items:center;gap:16px;padding:16px 20px;margin-bottom:10px;cursor:pointer';
+    card.onclick=()=>{ _reuniaoAtual=JSON.parse(JSON.stringify(r)); showView('reunioes'); };
+    card.innerHTML='<div style="width:48px;height:48px;border-radius:12px;background:var(--purple-light);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">📝</div>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-weight:600;font-size:15px;color:var(--text)">'+esc(r.titulo||'Reunião sem título')+'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:3px">'+fmtDate(r.data)+(r.hora?' · '+esc(r.hora):'')+(r.participantes?' · '+esc(r.participantes):'')+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;flex-shrink:0;align-items:center">'
+      +(pendentes>0?'<span style="font-size:11px;background:#FEF3C7;color:#92400E;padding:3px 10px;border-radius:20px;font-weight:500">'+pendentes+' pendente'+(pendentes>1?'s':'')+'</span>':'')
+      +'<span style="font-size:11px;background:var(--surface2);color:var(--text3);padding:3px 10px;border-radius:20px">'+nDec+' dec · '+nAco+' ações</span>'
+      +'<button class="btn-ghost" style="font-size:12px;padding:4px 10px" onclick="event.stopPropagation();_reuniaoAtual=JSON.parse(JSON.stringify(loadReunioes().find(x=>x.id===\''+r.id+'\')));showView(\'reunioes\')">Abrir</button>'
+      +'<button class="btn-ghost" style="font-size:12px;padding:4px 10px;color:var(--red)" onclick="event.stopPropagation();reuniaoExcluir(\''+r.id+'\')">Excluir</button>'
+      +'</div>';
+    wrap.appendChild(card);
+  });
+
+  c.innerHTML=''; c.appendChild(wrap);
+}
+
+function reuniaoNova(){
+  const hoje=new Date().toISOString().split('T')[0];
+  _reuniaoAtual={id:'reu_'+Date.now(),titulo:'',data:hoje,hora:'',participantes:'',pauta:'',discussoes:'',proxReuniao:'',obs:'',decisoes:[],acoes:[],kbStatus:{},_nextId:1};
+  showView('reunioes');
+}
+
+function reuniaoExcluir(id){
+  if(!confirm('Excluir esta reunião?')) return;
+  saveReunioes(loadReunioes().filter(r=>r.id!==id));
+  toast('Reunião excluída.');
+  _reuniaoAtual=null;
+  showView('reunioes');
+}
+
+function reuniaoVoltar(){
+  _reuniaoAtual=null;
+  showView('reunioes');
+}
+
+function reuniaoSalvar(){
+  if(!_reuniaoAtual) return;
+  _reuniaoAtual.titulo=document.getElementById('reu-titulo')?.value||'';
+  _reuniaoAtual.data=document.getElementById('reu-data')?.value||'';
+  _reuniaoAtual.hora=document.getElementById('reu-hora')?.value||'';
+  _reuniaoAtual.participantes=document.getElementById('reu-part')?.value||'';
+  _reuniaoAtual.pauta=document.getElementById('reu-pauta')?.value||'';
+  _reuniaoAtual.discussoes=document.getElementById('reu-disc')?.value||'';
+  _reuniaoAtual.proxReuniao=document.getElementById('reu-prox')?.value||'';
+  _reuniaoAtual.obs=document.getElementById('reu-obs')?.value||'';
+  const lista=loadReunioes();
+  const idx=lista.findIndex(r=>r.id===_reuniaoAtual.id);
+  if(idx!==-1) lista[idx]=_reuniaoAtual; else lista.push(_reuniaoAtual);
+  saveReunioes(lista);
+  toast('✅ Reunião salva!');
+}
+
+function buildAtaEditor(r){
+  const wrap=document.createElement('div');
+
+  // Header
+  const hdr=document.createElement('div');
+  hdr.style.cssText='display:flex;align-items:center;gap:12px;margin-bottom:20px';
+  hdr.innerHTML='<button class="btn-ghost" onclick="reuniaoVoltar()">← Voltar</button>'
+    +'<input id="reu-titulo" class="form-input" style="flex:1;font-size:16px;font-weight:600" placeholder="Título da reunião..." value="'+esc(r.titulo||'')+'">'
+    +'<button class="btn-save-purple" onclick="reuniaoSalvar()">💾 Salvar</button>';
+  wrap.appendChild(hdr);
+
+  // Abas
+  const tabs=document.createElement('div');
+  tabs.style.cssText='display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:20px';
+  tabs.innerHTML='<button id="reu-tab-ata" style="background:none;border:none;border-bottom:2px solid var(--purple);color:var(--purple);font-weight:600;padding:10px 18px;cursor:pointer;font-family:var(--font);font-size:13px" onclick="reuSwitchTab(\'ata\')">📋 Ata da reunião</button>'
+    +'<button id="reu-tab-kanban" style="background:none;border:none;border-bottom:2px solid transparent;color:var(--text2);font-weight:400;padding:10px 18px;cursor:pointer;font-family:var(--font);font-size:13px" onclick="reuSwitchTab(\'kanban\')">🗂️ Kanban de decisões</button>';
+  wrap.appendChild(tabs);
+
+  // Painel ATA
+  const pAta=document.createElement('div');
+  pAta.id='reu-panel-ata';
+  const card=document.createElement('div');
+  card.className='card';
+  card.innerHTML=
+    '<div class="form-grid">'
+    +'<div class="form-group"><label class="form-label">Data</label><input class="form-input" id="reu-data" type="date" value="'+esc(r.data||'')+'"></div>'
+    +'<div class="form-group"><label class="form-label">Horário</label><input class="form-input" id="reu-hora" type="text" placeholder="Ex: 09:00 – 10:00" value="'+esc(r.hora||'')+'"></div>'
+    +'<div class="form-group full"><label class="form-label">Participantes</label><input class="form-input" id="reu-part" type="text" placeholder="Nomes separados por vírgula..." value="'+esc(r.participantes||'')+'"></div>'
+    +'<div class="form-group full"><label class="form-label">Pauta</label><textarea class="form-textarea" id="reu-pauta" rows="3" placeholder="Temas a discutir...">'+esc(r.pauta||'')+'</textarea></div>'
+    +'</div>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<label class="form-label" style="display:block;margin-bottom:8px">Discussões &amp; anotações</label>'
+    +'<textarea class="form-textarea" id="reu-disc" rows="5" placeholder="Registre o que foi discutido em cada tema..." style="margin-bottom:16px">'+esc(r.discussoes||'')+'</textarea>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<label class="form-label" style="display:block;margin-bottom:8px">Decisões tomadas</label>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:58%">Decisão</th>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:30%">Responsável</th>'
+    +'<th style="width:30px;background:var(--surface2)"></th>'
+    +'</tr></thead>'
+    +'<tbody id="reu-dec-tbody"></tbody></table>'
+    +'<button class="btn-ghost" style="font-size:12px;color:var(--purple);padding:4px 0;margin-bottom:16px" onclick="reuAddDecisao()">+ Adicionar decisão</button>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<label class="form-label" style="display:block;margin-bottom:8px">Ações &amp; encaminhamentos</label>'
+    +'<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:6px">'
+    +'<thead><tr>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:46%">Ação</th>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:22%">Responsável</th>'
+    +'<th style="text-align:left;padding:7px 10px;font-size:11px;font-weight:500;color:var(--text3);background:var(--surface2);width:18%">Prazo</th>'
+    +'<th style="width:30px;background:var(--surface2)"></th>'
+    +'</tr></thead>'
+    +'<tbody id="reu-aco-tbody"></tbody></table>'
+    +'<button class="btn-ghost" style="font-size:12px;color:var(--purple);padding:4px 0;margin-bottom:16px" onclick="reuAddAcao()">+ Adicionar ação</button>'
+    +'<hr style="border:none;border-top:1px solid var(--border);margin:16px 0">'
+    +'<div class="form-grid">'
+    +'<div class="form-group"><label class="form-label">Próxima reunião</label><input class="form-input" id="reu-prox" type="date" value="'+esc(r.proxReuniao||'')+'"></div>'
+    +'<div class="form-group"><label class="form-label">Observações finais</label><input class="form-input" id="reu-obs" type="text" placeholder="Observações..." value="'+esc(r.obs||'')+'"></div>'
+    +'</div>';
+  pAta.appendChild(card);
+  wrap.appendChild(pAta);
+
+  // Painel KANBAN
+  const pKan=document.createElement('div');
+  pKan.id='reu-panel-kanban';
+  pKan.style.display='none';
+  const board=document.createElement('div');
+  board.style.cssText='display:grid;grid-template-columns:repeat(3,1fr);gap:12px';
+  [{col:'pendente',label:'Pendente',color:'#888780'},{col:'andamento',label:'Em andamento',color:'#185FA5'},{col:'concluido',label:'Concluído',color:'#0F6E56'}].forEach(({col,label,color})=>{
+    const colDiv=document.createElement('div');
+    colDiv.style.cssText='background:var(--surface2);border-radius:var(--radius);padding:12px';
+    colDiv.ondragover=e=>e.preventDefault();
+    colDiv.ondrop=e=>{ e.preventDefault(); if(_reuDragId){ _reuniaoAtual.kbStatus[_reuDragId]=col; reuRenderKanban(); } };
+    colDiv.innerHTML='<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;display:flex;align-items:center;gap:6px">'
+      +'<span style="width:8px;height:8px;border-radius:50%;background:'+color+';display:inline-block"></span>'+label
+      +'<span id="reu-cnt-'+col+'" style="background:var(--surface);border-radius:9px;font-size:10px;padding:1px 6px;color:var(--text3)">0</span></div>'
+      +'<div id="reu-kb-'+col+'"></div>';
+    board.appendChild(colDiv);
+  });
+  pKan.appendChild(board);
+  wrap.appendChild(pKan);
+
+  setTimeout(()=>{ reuRenderTabelas(); reuRenderKanban(); },50);
+  return wrap;
+}
+
+function reuSwitchTab(tab){
+  document.getElementById('reu-panel-ata').style.display=tab==='ata'?'block':'none';
+  document.getElementById('reu-panel-kanban').style.display=tab==='kanban'?'block':'none';
+  const btnAta=document.getElementById('reu-tab-ata');
+  const btnKan=document.getElementById('reu-tab-kanban');
+  if(btnAta){ btnAta.style.borderBottom='2px solid '+(tab==='ata'?'var(--purple)':'transparent'); btnAta.style.color=tab==='ata'?'var(--purple)':'var(--text2)'; btnAta.style.fontWeight=tab==='ata'?'600':'400'; }
+  if(btnKan){ btnKan.style.borderBottom='2px solid '+(tab==='kanban'?'var(--purple)':'transparent'); btnKan.style.color=tab==='kanban'?'var(--purple)':'var(--text2)'; btnKan.style.fontWeight=tab==='kanban'?'600':'400'; }
+  if(tab==='kanban') reuRenderKanban();
+}
+
+function reuAddDecisao(){
+  if(!_reuniaoAtual) return;
+  const id=(_reuniaoAtual._nextId||1); _reuniaoAtual._nextId=id+1;
+  _reuniaoAtual.decisoes=_reuniaoAtual.decisoes||[];
+  _reuniaoAtual.decisoes.push({id,texto:'',resp:''});
+  _reuniaoAtual.kbStatus=_reuniaoAtual.kbStatus||{};
+  if(!_reuniaoAtual.kbStatus['d'+id]) _reuniaoAtual.kbStatus['d'+id]='pendente';
+  reuRenderTabelas();
+}
+
+function reuAddAcao(){
+  if(!_reuniaoAtual) return;
+  const id=(_reuniaoAtual._nextId||1); _reuniaoAtual._nextId=id+1;
+  _reuniaoAtual.acoes=_reuniaoAtual.acoes||[];
+  _reuniaoAtual.acoes.push({id,texto:'',resp:'',prazo:''});
+  _reuniaoAtual.kbStatus=_reuniaoAtual.kbStatus||{};
+  if(!_reuniaoAtual.kbStatus['a'+id]) _reuniaoAtual.kbStatus['a'+id]='pendente';
+  reuRenderTabelas();
+}
+
+function reuDelDecisao(id){
+  _reuniaoAtual.decisoes=(_reuniaoAtual.decisoes||[]).filter(x=>x.id!==id);
+  delete (_reuniaoAtual.kbStatus||{})['d'+id];
+  reuRenderTabelas();
+}
+
+function reuDelAcao(id){
+  _reuniaoAtual.acoes=(_reuniaoAtual.acoes||[]).filter(x=>x.id!==id);
+  delete (_reuniaoAtual.kbStatus||{})['a'+id];
+  reuRenderTabelas();
+}
+
+function reuRenderTabelas(){
+  const dtb=document.getElementById('reu-dec-tbody'); if(!dtb) return;
+  dtb.innerHTML='';
+  (_reuniaoAtual.decisoes||[]).forEach(d=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Descreva a decisão..." value="'+esc(d.texto)+'" oninput="(_reuniaoAtual.decisoes.find(x=>x.id==='+d.id+')||{}).texto=this.value"></td>'
+      +'<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Nome..." value="'+esc(d.resp)+'" oninput="(_reuniaoAtual.decisoes.find(x=>x.id==='+d.id+')||{}).resp=this.value"></td>'
+      +'<td style="padding:5px 4px;border-bottom:1px solid var(--border2);text-align:center">'
+      +'<button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="reuDelDecisao('+d.id+')">×</button></td>';
+    dtb.appendChild(tr);
+  });
+
+  const atb=document.getElementById('reu-aco-tbody'); if(!atb) return;
+  atb.innerHTML='';
+  (_reuniaoAtual.acoes||[]).forEach(a=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Descreva a ação..." value="'+esc(a.texto)+'" oninput="(_reuniaoAtual.acoes.find(x=>x.id==='+a.id+')||{}).texto=this.value"></td>'
+      +'<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="text" placeholder="Nome..." value="'+esc(a.resp)+'" oninput="(_reuniaoAtual.acoes.find(x=>x.id==='+a.id+')||{}).resp=this.value"></td>'
+      +'<td style="padding:5px 8px;border-bottom:1px solid var(--border2)">'
+      +'<input style="width:100%;background:transparent;border:none;outline:none;font-size:13px;color:var(--text);font-family:inherit" type="date" value="'+esc(a.prazo)+'" oninput="(_reuniaoAtual.acoes.find(x=>x.id==='+a.id+')||{}).prazo=this.value"></td>'
+      +'<td style="padding:5px 4px;border-bottom:1px solid var(--border2);text-align:center">'
+      +'<button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="reuDelAcao('+a.id+')">×</button></td>';
+    atb.appendChild(tr);
+  });
+}
+
+function reuRenderKanban(){
+  if(!_reuniaoAtual) return;
+  const cols={pendente:[],andamento:[],concluido:[]};
+  (_reuniaoAtual.decisoes||[]).forEach(d=>{
+    const st=(_reuniaoAtual.kbStatus||{})['d'+d.id]||'pendente';
+    cols[st].push({key:'d'+d.id,title:d.texto||'(sem título)',meta:d.resp,type:'decisao'});
+  });
+  (_reuniaoAtual.acoes||[]).forEach(a=>{
+    const st=(_reuniaoAtual.kbStatus||{})['a'+a.id]||'pendente';
+    const meta=[a.resp,a.prazo?fmtDate(a.prazo):''].filter(Boolean).join(' · ');
+    cols[st].push({key:'a'+a.id,title:a.texto||'(sem título)',meta,type:'acao'});
+  });
+  ['pendente','andamento','concluido'].forEach(col=>{
+    const cont=document.getElementById('reu-kb-'+col); if(!cont) return;
+    const cnt=document.getElementById('reu-cnt-'+col);
+    if(cnt) cnt.textContent=cols[col].length;
+    cont.innerHTML='';
+    if(!cols[col].length){ cont.innerHTML='<p style="font-size:12px;color:var(--text3);text-align:center;padding:16px 0">Nenhum item</p>'; return; }
+    cols[col].forEach(item=>{
+      const typeBg=item.type==='decisao'?'#EEEDFE':'#E6F1FB';
+      const typeColor=item.type==='decisao'?'#3C3489':'#0C447C';
+      const typeLabel=item.type==='decisao'?'Decisão':'Ação';
+      const div=document.createElement('div');
+      div.style.cssText='background:var(--surface);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:10px 12px;cursor:grab;margin-bottom:8px';
+      div.draggable=true;
+      div.innerHTML='<div style="font-size:13px;font-weight:500;color:var(--text);margin-bottom:3px">'+esc(item.title)+'</div>'
+        +(item.meta?'<div style="font-size:11px;color:var(--text3)">'+esc(item.meta)+'</div>':'')
+        +'<span style="display:inline-block;font-size:10px;padding:1px 7px;border-radius:20px;margin-top:5px;font-weight:500;background:'+typeBg+';color:'+typeColor+'">'+typeLabel+'</span>';
+      div.addEventListener('dragstart',()=>{ _reuDragId=item.key; });
+      div.addEventListener('dragend',()=>{ _reuDragId=null; });
+      cont.appendChild(div);
+    });
+  });
+}
+
 function renderUsuarios(c){
   const users=loadUsers();
   c.innerHTML=`
@@ -3704,6 +4202,7 @@ function renderFinanceiro(c){
         <select class="fin-filter-select" id="fin-filter-desp-cat" onchange="finRenderDespesas()"><option value="">Todas as categorias</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Consumo</option><option>Outras Despesas</option></select>
         <select class="fin-filter-select" id="fin-filter-desp-tipo" onchange="finRenderDespesas()"><option value="">Todos os tipos</option><option value="unica">Avulsa</option><option value="recorrente">Recorrente</option><option value="parcelada">Parcelada</option></select>
         <button class="btn-ghost" onclick="finOpenGestaoFornecedores()" style="margin-right:6px">🏢 Fornecedores</button>
+        <button class="btn-ghost" onclick="finImportarFatura()" style="margin-right:6px">📄 Importar fatura</button>
         <button class="btn-primary" onclick="finOpenModal('despesa')">+ Nova Despesa</button>
       </div>
     </div>
@@ -4155,24 +4654,25 @@ function finRenderDRE(){
   // Impostos (categoria Impostos e Taxas)
   const impostos = mDesp.filter(d=>d.cat==='Impostos e Taxas').reduce((s,d)=>s+d.valor,0);
 
-  // Repasses às terapeutas — usa valor real pago se disponível, senão calcula pelo %
-  const regras=finLoadRegras();
+  // Repasses às terapeutas — usa valor real pago se disponível, senão usa total da aba Repasses
   const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
   const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
   const repasseRealMes=repassesReais[mesKey]||{};
 
-  // Calcula repasse por terapeuta
-  const repassePorTer=mRec.filter(r=>r.status==='Pago'&&r.especialista).reduce((acc,r)=>{
-    acc[r.especialista]=(acc[r.especialista]||0)+r.valor; return acc;
-  },{});
+  // Verifica se há valores reais preenchidos
+  const temRepasseReal=Object.keys(repasseRealMes).length>0;
 
-  const repasses=Object.entries(repassePorTer).reduce((s,[ter,fat])=>{
-    // Se tem valor real pago para este mês, usa ele
-    if(repasseRealMes[ter]!=null) return s+repasseRealMes[ter];
-    // Senão calcula pelo %
-    const pct=(regras[ter]??finDefaultPct(ter))/100;
-    return s+fat*pct;
-  },0);
+  let repasses=0;
+  if(temRepasseReal){
+    // Usa valores reais preenchidos na aba Repasses
+    const fat=finBuildFat();
+    repasses=fat.reduce((s,r)=>{
+      return s+(repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:r.repasse);
+    },0);
+  } else {
+    // Usa o total calculado da aba Repasses (finBuildFat) — mesma base de dados
+    repasses=finBuildFat().reduce((s,r)=>s+r.repasse,0);
+  }
 
   // Despesas Fixas
   const FIXAS=['Aluguel / Condomínio','Utilidades','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento'];
@@ -4745,6 +5245,404 @@ function finDelHistorico(idx){
   saveHistorico(hist);
   finRenderHistorico();
   toast('Registro excluído do histórico.');
+}
+
+// ════════════════════════════════════════════════════════════
+// IMPORTAR FATURA CARTÃO
+// ════════════════════════════════════════════════════════════
+function finImportarFatura(){
+  document.getElementById('modal-importar-fatura')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-importar-fatura';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  mo.innerHTML=`<div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">📄 Importar fatura do cartão</div>
+      <button class="modal-close" onclick="document.getElementById('modal-importar-fatura').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.6">
+        Selecione o PDF da fatura do cartão. O sistema vai extrair as transações automaticamente.
+      </p>
+      <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer"
+           onclick="document.getElementById('fatura-pdf-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="event.preventDefault();finHandlePdfDrop(event)">
+        <div style="font-size:36px;margin-bottom:8px">📂</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Clique ou arraste o PDF aqui</div>
+        <div style="font-size:12px;color:var(--text3)">Fatura Santander, Itaú, Bradesco, Nubank...</div>
+      </div>
+      <input type="file" id="fatura-pdf-input" accept=".pdf" style="display:none" onchange="finHandlePdfFile(this.files[0])">
+      <div id="fatura-status" style="display:none;margin-top:12px;font-size:13px;color:var(--text3);text-align:center"></div>
+      <div id="fatura-erro" style="display:none;color:var(--red);font-size:13px;margin-top:12px"></div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <p style="font-size:12px;color:var(--text3);margin:0 0 8px">Outras opções:</p>
+        <button class="btn-ghost" style="font-size:13px;width:100%;margin-bottom:8px" onclick="document.getElementById('modal-importar-fatura').remove();finColarTextoFatura()">📋 Colar texto do Internet Banking</button>
+        <button class="btn-ghost" style="font-size:13px;width:100%;margin-bottom:8px" onclick="document.getElementById('modal-importar-fatura').remove();finRevisarFatura([])">✏️ Inserir manualmente</button>
+        <button class="btn-ghost" style="font-size:13px;width:100%;color:var(--purple)" onclick="document.getElementById('modal-importar-fatura').remove();finCarregarFaturaSantander()">🏦 Carregar fatura Santander (Mai/26)</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finHandlePdfDrop(e){
+  const file=e.dataTransfer.files[0];
+  if(file&&file.type==='application/pdf') finHandlePdfFile(file);
+}
+
+function finHandlePdfFile(file){
+  if(!file) return;
+  const status=document.getElementById('fatura-status');
+  const erro=document.getElementById('fatura-erro');
+  status.textContent='⏳ Processando PDF...';
+  status.style.display='block';
+  erro.style.display='none';
+
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      if(!window.pdfjsLib){
+        await new Promise((res,rej)=>{
+          const script=document.createElement('script');
+          script.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          script.onload=res; script.onerror=rej;
+          document.head.appendChild(script);
+        });
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const pdfData=new Uint8Array(e.target.result);
+      const pdf=await pdfjsLib.getDocument({data:pdfData}).promise;
+      let textoTotal='';
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const content=await page.getTextContent();
+        textoTotal+=content.items.map(it=>it.str).join(' ')+'\n';
+      }
+      const transacoes=finParseFatura(textoTotal);
+      status.style.display='none';
+      if(!transacoes.length){
+        erro.textContent='Nenhuma transação encontrada. Use "Inserir manualmente".';
+        erro.style.display='block';
+        return;
+      }
+      document.getElementById('modal-importar-fatura').remove();
+      finRevisarFatura(transacoes);
+    }catch(err){
+      status.style.display='none';
+      erro.textContent='Erro ao processar PDF. Use "Inserir manualmente".';
+      erro.style.display='block';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function finParseFatura(texto){
+  const transacoes=[];
+  const linhas=texto.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const reData=/(\d{2}\/\d{2}\/\d{4})/;
+  const reValor=/([\d]{1,3}(?:\.\d{3})*,\d{2})/g;
+  linhas.forEach(linha=>{
+    if(/pagamento de fatura|total de|fatura anterior|saldo em|encargos|multas|parcelas a vencer|limite|vencimento|pagamento m[ií]nimo|pagamento recebido|portador|nr\.|encargos financeiros|central|ouvidoria|sac|atendimento|cotação/i.test(linha)) return;
+    const mData=reData.exec(linha); if(!mData) return;
+    const valores=[...linha.matchAll(reValor)].map(m=>parseFloat(m[1].replace(/\./g,'').replace(',','.')));
+    const valor=valores.find(v=>v>0&&v<50000); if(!valor) return;
+    const [d,mm,a]=mData[1].split('/');
+    const data=`${a}-${mm}-${d}`;
+    let desc=linha.replace(mData[1],'').replace(/[\d.,]+/g,' ').replace(/\s+/g,' ').trim();
+    if(!desc||desc.length<3) return;
+    if(/^iof /i.test(desc)) return;
+    transacoes.push({data,desc,valor});
+  });
+  return transacoes;
+}
+
+function finRevisarFatura(transacoes){
+  document.getElementById('modal-revisar-fatura')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-revisar-fatura';
+
+  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Marketing','Consumo','Outras Despesas'];
+
+  function sugerirCat(desc){
+    const d=(desc||'').toLowerCase();
+    if(/google ads|doctoralia|meta ads|facebook ads/i.test(d)) return 'Marketing';
+    if(/shopee|amazon|carrefour|hortifruti|comercial radar|sitio verde/i.test(d)) return 'Consumo';
+    if(/canva|openai|chatgpt|neurocortex|microsoft|google one|scp basico/i.test(d)) return 'Serviços Terceirizados';
+    if(/vivo|claro|tim|oi |telecom/i.test(d)) return 'Utilidades';
+    if(/anuidade/i.test(d)) return 'Cartão Crédito Empresa';
+    return 'Outras Despesas';
+  }
+
+  if(!transacoes.length) transacoes=[{data:new Date().toISOString().split('T')[0],desc:'',valor:0}];
+  window._faturaImport=transacoes.map((t,i)=>({...t,cat:sugerirCat(t.desc),idx:i,ativo:true}));
+
+  const hoje=new Date().toISOString().split('T')[0];
+  const renderLinhas=()=>window._faturaImport.map((t,i)=>
+    `<tr id="fatura-row-${i}">
+      <td style="padding:5px 6px"><input type="date" class="form-input" style="font-size:12px;padding:4px 6px;width:130px" value="${t.data||hoje}" onchange="window._faturaImport[${i}].data=this.value"></td>
+      <td style="padding:5px 6px"><input class="form-input" style="font-size:12px;padding:4px 6px" value="${esc(t.desc)}" onchange="window._faturaImport[${i}].desc=this.value"></td>
+      <td style="padding:5px 6px"><select class="form-select" style="font-size:12px;padding:4px 6px" onchange="window._faturaImport[${i}].cat=this.value">${cats.map(c=>`<option value="${c}" ${c===sugerirCat(t.desc)?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td style="padding:5px 6px"><input type="number" class="form-input" style="font-size:12px;padding:4px 6px;width:90px;text-align:right" value="${t.valor||''}" step="0.01" onchange="window._faturaImport[${i}].valor=parseFloat(this.value)||0;finAtualizarTotalFatura()"></td>
+      <td style="padding:5px 4px;text-align:center"><button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="finRemoverLinhaFatura(${i})">×</button></td>
+    </tr>`
+  ).join('');
+
+  const total=transacoes.reduce((s,t)=>s+(t.valor||0),0);
+
+  mo.innerHTML=`<div class="modal" style="max-width:820px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">✅ Revisar transações — ${transacoes.length} item${transacoes.length!==1?'s':''}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-revisar-fatura').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
+          <th style="padding:8px 6px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Data</th>
+          <th style="padding:8px 6px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Descrição</th>
+          <th style="padding:8px 6px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Categoria</th>
+          <th style="padding:8px 6px;text-align:right;font-size:11px;font-weight:600;color:var(--text3)">Valor (R$)</th>
+          <th style="width:30px"></th>
+        </tr></thead>
+        <tbody id="fatura-tbody">${renderLinhas()}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer" style="border-top:1px solid var(--border);justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:12px;align-items:center">
+        <span style="font-size:14px;font-weight:600">Total: <span id="fatura-total-val" style="color:var(--red)">R$ ${total.toLocaleString('pt-BR',{minimumFractionDigits:2})}</span></span>
+        <button class="btn-ghost" style="font-size:12px" onclick="finAdicionarLinhaFatura()">+ Linha</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" onclick="document.getElementById('modal-revisar-fatura').remove()">Cancelar</button>
+        <button class="btn-save-purple" onclick="finConfirmarImportacao()">💾 Importar tudo</button>
+      </div>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finColarTextoFatura(){
+  document.getElementById('modal-colar-fatura')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-colar-fatura';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  mo.innerHTML=`<div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <div class="modal-title">📋 Colar texto do Internet Banking</div>
+      <button class="modal-close" onclick="document.getElementById('modal-colar-fatura').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.7">
+        <strong>Como fazer:</strong><br>
+        1. Acesse o <strong>Internet Banking Santander</strong><br>
+        2. Vá em <strong>Cartões → Ver fatura detalhada</strong><br>
+        3. Selecione tudo na página (<strong>Ctrl+A</strong>)<br>
+        4. Copie (<strong>Ctrl+C</strong>) e cole abaixo (<strong>Ctrl+V</strong>)
+      </div>
+      <textarea id="fatura-texto-colar" class="form-textarea" rows="8" placeholder="Cole aqui o texto copiado do Internet Banking..."></textarea>
+      <div id="fatura-colar-erro" style="display:none;color:var(--red);font-size:13px;margin-top:8px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-colar-fatura').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="finProcessarTextoColar()">🔍 Processar</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finProcessarTextoColar(){
+  const texto=document.getElementById('fatura-texto-colar')?.value||'';
+  if(!texto.trim()){
+    document.getElementById('fatura-colar-erro').textContent='Cole o texto antes de processar.';
+    document.getElementById('fatura-colar-erro').style.display='block';
+    return;
+  }
+
+  const transacoes=finParseFatura(texto);
+
+  if(!transacoes.length){
+    document.getElementById('fatura-colar-erro').textContent='Nenhuma transação encontrada. Verifique se o texto foi copiado corretamente do Internet Banking.';
+    document.getElementById('fatura-colar-erro').style.display='block';
+    return;
+  }
+
+  document.getElementById('modal-colar-fatura').remove();
+  finRevisarFatura(transacoes);
+}
+
+function finCarregarFaturaSantander(){
+  // Transações extraídas da fatura Santander - cartão 4750 - vencimento 10/05/2026
+  const transacoes=[
+    {data:'2026-02-24',desc:'SHOPEE*TECH SHOPCOMBR - Parc 03/05',valor:61.17},
+    {data:'2026-03-01',desc:'AMAZON MARKETPLACE - Parc 02/10',valor:62.41},
+    {data:'2026-03-18',desc:'LOJA GUARULHOS PAULO F - Parc 02/02',valor:39.30},
+    {data:'2026-03-31',desc:'NEUROCORTEX',valor:109.90},
+    {data:'2026-04-01',desc:'GOOGLE ADS',valor:1489.79},
+    {data:'2026-04-06',desc:'SCP BASICO - ABR/26',valor:7.99},
+    {data:'2026-04-06',desc:'CANVA',valor:34.90},
+    {data:'2026-04-06',desc:'DOCTORALIA - Avulso',valor:79.16},
+    {data:'2026-04-14',desc:'DOCTORALIA - Mensalidade',valor:1116.88},
+    {data:'2026-04-14',desc:'COMERCIAL RADAR - Parc 01/02',valor:91.65},
+    {data:'2026-04-16',desc:'CARREFOUR GUARULHOS',valor:42.66},
+    {data:'2026-04-16',desc:'OPENAI CHATGPT - USD 20,00',valor:105.84},
+    {data:'2026-04-17',desc:'SITIO VERDE HORTIFRUTI',valor:29.37},
+    {data:'2026-04-24',desc:'SITIO VERDE HORTIFRUTI',valor:50.06},
+    {data:'2026-04-25',desc:'CONTA VIVO',valor:135.84},
+  ];
+  finRevisarFatura(transacoes);
+}
+
+function finAtualizarTotalFatura(){
+  const total=(window._faturaImport||[]).filter(t=>t.ativo!==false).reduce((s,t)=>s+(t.valor||0),0);
+  const el=document.getElementById('fatura-total-val');
+  if(el) el.textContent='R$ '+total.toLocaleString('pt-BR',{minimumFractionDigits:2});
+}
+
+function finRemoverLinhaFatura(i){
+  const row=document.getElementById('fatura-row-'+i);
+  if(row){ row.remove(); if(window._faturaImport[i]) window._faturaImport[i].ativo=false; finAtualizarTotalFatura(); }
+}
+
+function finAdicionarLinhaFatura(){
+  const i=(window._faturaImport||[]).length;
+  const hoje=new Date().toISOString().split('T')[0];
+  window._faturaImport=window._faturaImport||[];
+  window._faturaImport.push({data:hoje,desc:'',cat:'Outras Despesas',valor:0,ativo:true,idx:i});
+  const tbody=document.getElementById('fatura-tbody'); if(!tbody) return;
+  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Marketing','Consumo','Outras Despesas'];
+  const tr=document.createElement('tr');
+  tr.id='fatura-row-'+i;
+  tr.innerHTML=`<td style="padding:5px 6px"><input type="date" class="form-input" style="font-size:12px;padding:4px 6px;width:130px" value="${hoje}" onchange="window._faturaImport[${i}].data=this.value"></td>`
+    +`<td style="padding:5px 6px"><input class="form-input" style="font-size:12px;padding:4px 6px" value="" onchange="window._faturaImport[${i}].desc=this.value"></td>`
+    +`<td style="padding:5px 6px"><select class="form-select" style="font-size:12px;padding:4px 6px" onchange="window._faturaImport[${i}].cat=this.value">${cats.map(c=>`<option>${c}</option>`).join('')}</select></td>`
+    +`<td style="padding:5px 6px"><input type="number" class="form-input" style="font-size:12px;padding:4px 6px;width:90px;text-align:right" value="" step="0.01" onchange="window._faturaImport[${i}].valor=parseFloat(this.value)||0;finAtualizarTotalFatura()"></td>`
+    +`<td style="padding:5px 4px;text-align:center"><button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="finRemoverLinhaFatura(${i})">×</button></td>`;
+  tbody.appendChild(tr);
+}
+
+function finConfirmarImportacao(){
+  const ativos=(window._faturaImport||[]).filter(t=>t.ativo!==false&&t.desc&&t.valor>0);
+  if(!ativos.length){ toast('Nenhum item válido para importar.'); return; }
+  const desps=finLoad(FK.DESP);
+  const grupoId='g_fatura_'+Date.now();
+  ativos.forEach((t,i)=>{
+    desps.push({
+      id:Date.now()+i+Math.random(),
+      desc:t.desc, cat:t.cat||'Outras Despesas',
+      valor:t.valor, data:t.data,
+      vencimento:null, tipo:'unica',
+      grupoId, parcelaAtual:1, totalParcelas:1,
+      status:'Pendente', importado:true,
+    });
+  });
+  finSave(FK.DESP,desps);
+  document.getElementById('modal-revisar-fatura')?.remove();
+  fin_refresh();
+  toast('✅ '+ativos.length+' despesas importadas!');
+}
+
+// ── LEMBRETE NOTA FISCAL ─────────────────────────────────────────────────
+function nfCheckLembrete(){
+  const hoje=new Date();
+  if(hoje.getDate()!==30) return;
+
+  const mesKey=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  const visto=localStorage.getItem('cinpsi_nf_visto_'+mesKey);
+  if(visto) return; // já mostrou esse mês
+
+  const pendentes=getConvertidos().filter(p=>p.ativo!==false&&p.notaFiscal==='sim');
+  if(!pendentes.length) return;
+
+  // Marca como visto
+  localStorage.setItem('cinpsi_nf_visto_'+mesKey,'1');
+
+  // Abre modal com a lista
+  nfAbrirLista(pendentes, mesKey);
+}
+
+function nfAbrirLista(pendentes, mesKey){
+  const hoje=new Date();
+  if(!mesKey) mesKey=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  if(!pendentes) pendentes=getConvertidos().filter(p=>p.ativo!==false&&p.notaFiscal==='sim');
+
+  document.getElementById('modal-nf-lista')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-nf-lista';
+
+  const [ano,mes]=mesKey.split('-');
+  const nomeMes=new Date(parseInt(ano),parseInt(mes)-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  const linhas=pendentes.map(p=>
+    '<tr>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">'+esc(p.paciente||'—')+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">'+esc(p.terapeuta||'—')+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb">'+esc(p.servico||'—')+'</td>'
+    +'<td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;text-align:right">'+(p.valorMensal||p.valor?'R$ '+parseFloat(p.valorMensal||p.valor||0).toLocaleString('pt-BR',{minimumFractionDigits:2}):'—')+'</td>'
+    +'</tr>'
+  ).join('');
+
+  mo.innerHTML=`<div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title">🧾 Notas Fiscais — ${nomeMes}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-nf-lista').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text3);margin:0 0 16px">${pendentes.length} paciente${pendentes.length>1?'s precisam':'precisa'} de nota fiscal este mês.</p>
+      <div id="nf-print-area">
+        <div style="text-align:center;margin-bottom:16px;display:none" class="print-only">
+          <strong style="font-size:16px">Clínica CINPSI</strong><br>
+          <span style="font-size:13px;color:#666">Notas Fiscais a emitir — ${nomeMes}</span>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:var(--surface2)">
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Paciente</th>
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Terapeuta</th>
+              <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Serviço</th>
+              <th style="text-align:right;padding:8px 12px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Valor</th>
+            </tr>
+          </thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-nf-lista').remove()">Fechar</button>
+      <button class="btn-ghost" onclick="nfImprimir()">🖨️ Imprimir</button>
+      <button class="btn-save-purple" onclick="nfSalvarPDF()">💾 Salvar como PDF</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function nfImprimir(){
+  const area=document.getElementById('nf-print-area');
+  if(!area) return;
+  const w=window.open('','_blank','width=700,height=600');
+  w.document.write('<html><head><title>Notas Fiscais</title>'
+    +'<style>body{font-family:Arial,sans-serif;padding:30px}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;padding:8px 12px;background:#f3f4f6;font-size:11px;text-transform:uppercase;color:#6b7280}td{padding:8px 12px;border-bottom:1px solid #e5e7eb}h2{margin:0 0 4px}p{margin:0 0 20px;color:#6b7280;font-size:13px}</style>'
+    +'</head><body>'+area.innerHTML+'</body></html>');
+  w.document.close();
+  w.print();
+}
+
+function nfSalvarPDF(){
+  nfImprimir(); // no browser, print → salvar como PDF
+  toast('Use "Salvar como PDF" na janela de impressão.');
 }
 
 // ── ALERTAS ───────────────────────────────────────────────────────────────
