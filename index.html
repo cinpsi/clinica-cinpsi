@@ -1546,7 +1546,6 @@ function renderDashLeads(c){
   const ag=leads.filter(l=>l.status==='Aguardando').length;
   const pct=total>0?Math.round(fech/total*100)+'%':'0%';
 
-  // Convertidos reais (marcados como leadConvertido) + leads fechados manualmente no mês
   const convMes=loadConvAntigos().filter(p=>p.leadConvertido===true).length
     + leads.filter(l=>l.status==='Fechado'&&l.data&&l.data.startsWith(anoMes)).length;
   const statusOrder=['Novo','Em Contato','Interessado','Proposta Enviada','Aguardando','Fechado','Perdido'];
@@ -1555,41 +1554,229 @@ function renderDashLeads(c){
   leads.forEach(l=>{if(l.origem)origens[l.origem]=(origens[l.origem]||0)+1;if(l.servico)servs[l.servico]=(servs[l.servico]||0)+1;});
   const maxO=Math.max(...Object.values(origens),1),maxS=Math.max(...Object.values(servs),1);
 
-  c.innerHTML=`
-  <div class="stats-bar" style="grid-template-columns:repeat(5,1fr)">
-    <div class="stat-card"><div class="stat-label">Total leads</div><div class="stat-value">${total}</div></div>
-    <div class="stat-card"><div class="stat-label">🎉 Convertidos em ${nomeMes}</div><div class="stat-value" style="color:var(--green)">${convMes}</div></div>
-    <div class="stat-card"><div class="stat-label">📈 Conversão geral</div><div class="stat-value">${pct}</div></div>
-    <div class="stat-card"><div class="stat-label">⏳ Aguardando</div><div class="stat-value">${ag}</div></div>
-    <div class="stat-card"><div class="stat-label">❌ Perdidos</div><div class="stat-value">${perd}</div></div>
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px">
+  // ── Dados de convertidos para análise (todos, inclusive inativos)
+  const todosConv=getConvertidos();
+
+  // Mês corrente como padrão
+  const mesIni=anoMes+'-01';
+  const ultimoDia=new Date(hoje.getFullYear(),hoje.getMonth()+1,0).getDate();
+  const mesFim=anoMes+'-'+String(ultimoDia).padStart(2,'0');
+
+  c.innerHTML+=`
+  <!-- ── SEÇÃO LEADS CONVERTIDOS ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px">
     <div>
-      <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px">🔽 Funil de conversão</h3>
-      <div class="funil-wrap">${statusOrder.map(s=>{const n=leads.filter(l=>l.status===s).length;return`
-        <div class="funil-row">
-          <div class="funil-label"><span class="status-pill ${sClass(s)}">${s}</span></div>
-          <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/maxN*100,3)}%;background:${sColors[s]}">${n>0?`<span>${n}</span>`:''}</div></div>
-          <div class="funil-num">${n}</div><div class="funil-pct">${total>0?Math.round(n/total*100)+'%':'0%'}</div>
-        </div>`}).join('')}</div>
+      <h2 style="font-size:14px;font-weight:700;color:var(--text);margin:0">✅ Pacientes Convertidos</h2>
+      <p style="font-size:12px;color:var(--text3);margin:4px 0 0">Filtre por período para visualizar origem, especialidade e profissional</p>
     </div>
-    <div>
-      <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px">🎯 Por origem</h3>
-      <div class="funil-wrap">${Object.entries(origens).sort((a,b)=>b[1]-a[1]).map(([o,n])=>`
-        <div class="funil-row">
-          <div class="funil-label" style="font-size:12px">${esc(o)}</div>
-          <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/maxO*100,3)}%;background:var(--accent)">${n>0?`<span>${n}</span>`:''}</div></div>
-          <div class="funil-num">${n}</div><div class="funil-pct">${Math.round(n/total*100)}%</div>
-        </div>`).join('')}</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input type="date" id="dash-conv-ini" class="form-input" style="font-size:12px;padding:6px 10px;width:140px" value="${mesIni}" onchange="dashFiltrarConv()">
+      <span style="font-size:12px;color:var(--text3)">até</span>
+      <input type="date" id="dash-conv-fim" class="form-input" style="font-size:12px;padding:6px 10px;width:140px" value="${mesFim}" onchange="dashFiltrarConv()">
+      <select id="dash-conv-origem" class="form-select" style="font-size:12px;padding:6px 10px;width:150px" onchange="dashFiltrarConv()">
+        <option value="">Todas as origens</option>
+      </select>
+      <button class="btn-ghost" style="font-size:12px;padding:6px 12px" onclick="dashFiltrarConvTodos()">Ver todos</button>
+      <button class="btn-ghost" style="font-size:13px" onclick="dashImprimirConvertidos()">🖨️ Imprimir</button>
     </div>
   </div>
-  <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:10px">🩺 Por serviço</h3>
-  <div class="funil-wrap">${Object.entries(servs).sort((a,b)=>b[1]-a[1]).map(([s,n])=>`
-    <div class="funil-row">
-      <div class="funil-label" style="font-size:12px">${esc(s)}</div>
-      <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/maxS*100,3)}%;background:var(--purple)">${n>0?`<span>${n}</span>`:''}</div></div>
-      <div class="funil-num">${n}</div><div class="funil-pct">${Math.round(n/total*100)}%</div>
-    </div>`).join('')}</div>`;
+  <div id="dash-conv-section"></div>`;
+
+  // Armazena todos para uso no filtro
+  window._dashTodosConv=todosConv;
+
+  // Preenche select de origens via JS
+  setTimeout(()=>{
+    const sel=document.getElementById('dash-conv-origem');
+    if(sel){
+      const origens=[...new Set(todosConv.map(p=>p.origem).filter(Boolean))].sort();
+      origens.forEach(o=>{
+        const opt=document.createElement('option');
+        opt.value=o; opt.textContent=o;
+        sel.appendChild(opt);
+      });
+    }
+    dashFiltrarConv();
+  }, 50);
+}
+
+function dashFiltrarConv(){
+  const ini=document.getElementById('dash-conv-ini')?.value||'';
+  const fim=document.getElementById('dash-conv-fim')?.value||'';
+  const orig=document.getElementById('dash-conv-origem')?.value||'';
+  const todos=window._dashTodosConv||[];
+
+  const filtrados=todos.filter(p=>{
+    // Filtro de origem
+    if(orig && (p.origem||'')!==orig) return false;
+
+    // Filtro de data — pacientes sem data só aparecem se não há filtro de data
+    if(!p.data){
+      return !ini && !fim;
+    }
+
+    // Com data — aplica o período
+    if(ini && p.data < ini) return false;
+    if(fim && p.data > fim) return false;
+
+    return true;
+  });
+
+  dashRenderConvSection(filtrados, ini, fim);
+}
+
+function dashFiltrarConvTodos(){
+  const todos=window._dashTodosConv||[];
+  document.getElementById('dash-conv-ini').value='';
+  document.getElementById('dash-conv-fim').value='';
+  const sel=document.getElementById('dash-conv-origem');
+  if(sel) sel.value='';
+  dashRenderConvSection(todos,'','');
+}
+
+function dashRenderConvSection(lista, ini, fim){
+  const sec=document.getElementById('dash-conv-section'); if(!sec) return;
+  const total=lista.length;
+
+  if(!total){
+    sec.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">Nenhum paciente convertido no período selecionado.</div>';
+    return;
+  }
+
+  // Agrupa por origem, especialidade e profissional (só ativos para os gráficos)
+  const origens={}, esps={}, profs={};
+  lista.forEach(p=>{
+    const o=p.origem||'Não informado';
+    const e=p.servico||'Não informado';
+    const pr=p.terapeuta||'Não informado';
+    origens[o]=(origens[o]||0)+1;
+    esps[e]=(esps[e]||0)+1;
+    profs[pr]=(profs[pr]||0)+1;
+  });
+  const maxO=Math.max(...Object.values(origens),1);
+  const maxE=Math.max(...Object.values(esps),1);
+  const maxP=Math.max(...Object.values(profs),1);
+
+  const barRow=(label,n,max,cor)=>`
+    <div class="funil-row" style="margin-bottom:8px">
+      <div class="funil-label" style="font-size:12px;width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(label)}">${esc(label)}</div>
+      <div class="funil-bar-wrap"><div class="funil-bar" style="width:${Math.max(n/max*100,4)}%;background:${cor};border-radius:4px">${n>0?`<span>${n}</span>`:''}</div></div>
+      <div class="funil-num">${n}</div>
+      <div class="funil-pct">${Math.round(n/total*100)}%</div>
+    </div>`;
+
+  // Tabela de pacientes
+  const linhasPac=lista.sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map(p=>`
+    <tr style="opacity:${p.ativo===false?'0.6':'1'}">
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:13px">
+        <strong>${esc(p.paciente||p.responsavel||'—')}</strong>
+        ${p.ativo===false?'<span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:2px 7px;border-radius:20px;margin-left:6px;font-weight:500">Inativo</span>':''}
+      </td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">${esc(p.origem||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">${esc(p.servico||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text2)">${esc(p.terapeuta||'—')}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2);font-size:12px;color:var(--text3)">${p.data?fmtDate(p.data):'<span style="color:var(--text3);font-style:italic">Sem data</span>'}</td>
+    </tr>`).join('');
+
+  sec.innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-bottom:20px" id="dash-conv-graficos">
+      <div class="card" style="padding:16px 18px">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:0 0 14px">🎯 Por origem</h3>
+        ${Object.entries(origens).sort((a,b)=>b[1]-a[1]).map(([o,n])=>barRow(o,n,maxO,'var(--accent)')).join('')}
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:0 0 14px">🩺 Por especialidade</h3>
+        ${Object.entries(esps).sort((a,b)=>b[1]-a[1]).map(([e,n])=>barRow(e,n,maxE,'var(--teal)')).join('')}
+      </div>
+      <div class="card" style="padding:16px 18px">
+        <h3 style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin:0 0 14px">👩‍⚕️ Por profissional</h3>
+        ${Object.entries(profs).sort((a,b)=>b[1]-a[1]).map(([p,n])=>barRow(p,n,maxP,'var(--purple)')).join('')}
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:hidden" id="dash-conv-tabela">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;font-weight:600;color:var(--text)">${total} paciente${total!==1?'s':''} no período</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Paciente</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Origem</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Especialidade</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Profissional</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Data</th>
+        </tr></thead>
+        <tbody>${linhasPac}</tbody>
+      </table>
+    </div>`;
+
+  // Guarda dados filtrados para impressão
+  window._dashConvFiltrados=lista;
+  window._dashConvPeriodo={ini,fim};
+}
+
+function dashImprimirConvertidos(){
+  const lista=window._dashConvFiltrados||[];
+  const periodo=window._dashConvPeriodo||{};
+  if(!lista.length){ toast('Nenhum dado para imprimir.'); return; }
+
+  const ini=periodo.ini?fmtDate(periodo.ini):'início';
+  const fim=periodo.fim?fmtDate(periodo.fim):'hoje';
+  const hoje=new Date().toLocaleDateString('pt-BR');
+
+  const linhas=lista.sort((a,b)=>(b.data||'').localeCompare(a.data||'')).map((p,i)=>`
+    <tr style="background:${i%2===0?'#f9fafb':'#fff'}${p.ativo===false?';color:#999':''}">
+      <td>${esc(p.paciente||p.responsavel||'—')}${p.ativo===false?' <span style="font-size:10px;background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:10px">Inativo</span>':''}</td>
+      <td>${esc(p.origem||'—')}</td>
+      <td>${esc(p.servico||'—')}</td>
+      <td>${esc(p.terapeuta||'—')}</td>
+      <td>${fmtDate(p.data)}</td>
+    </tr>`).join('');
+
+  // Resumos
+  const origens={},esps={},profs={};
+  lista.forEach(p=>{
+    const o=p.origem||'Não informado'; origens[o]=(origens[o]||0)+1;
+    const e=p.servico||'Não informado'; esps[e]=(esps[e]||0)+1;
+    const pr=p.terapeuta||'Não informado'; profs[pr]=(profs[pr]||0)+1;
+  });
+
+  const resumoBloco=(titulo,obj)=>`
+    <div style="flex:1;min-width:180px">
+      <strong style="font-size:12px;display:block;margin-bottom:6px">${titulo}</strong>
+      ${Object.entries(obj).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid #f0f0f0"><span>${esc(k)}</span><strong>${v}</strong></div>`).join('')}
+    </div>`;
+
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<html><head><title>Relatório Convertidos - CINPSI</title>
+  <style>
+    *{box-sizing:border-box}
+    body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;font-size:13px}
+    h1{font-size:18px;margin:0 0 2px}
+    .sub{font-size:12px;color:#666;margin:0 0 6px}
+    .meta{font-size:12px;color:#666;margin:0 0 24px}
+    .resumos{display:flex;gap:24px;margin-bottom:24px;padding:16px;background:#f9fafb;border-radius:6px;flex-wrap:wrap}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th{background:#f3f4f6;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600}
+    td{padding:8px 10px;font-size:12px;border-bottom:1px solid #e5e7eb}
+    .total{font-size:13px;font-weight:600;margin-bottom:8px}
+    @media print{body{padding:15px}}
+  </style></head><body>
+  <h1>Clínica CINPSI — Relatório de Pacientes Convertidos</h1>
+  <p class="sub">Período: ${ini} até ${fim}</p>
+  <p class="meta">Gerado em ${hoje} · ${lista.length} paciente${lista.length!==1?'s':''}</p>
+  <div class="resumos">
+    ${resumoBloco('🎯 Por origem',origens)}
+    ${resumoBloco('🩺 Por especialidade',esps)}
+    ${resumoBloco('👩‍⚕️ Por profissional',profs)}
+  </div>
+  <p class="total">Lista de pacientes (${lista.length})</p>
+  <table>
+    <thead><tr><th>Paciente</th><th>Origem</th><th>Especialidade</th><th>Profissional</th><th>Data</th></tr></thead>
+    <tbody>${linhas}</tbody>
+  </table>
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -5091,7 +5278,8 @@ function finImportarFatura(){
       <div id="fatura-status" style="display:none;margin-top:12px;font-size:13px;color:var(--text3);text-align:center"></div>
       <div id="fatura-erro" style="display:none;color:var(--red);font-size:13px;margin-top:12px"></div>
       <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-        <p style="font-size:12px;color:var(--text3);margin:0 0 8px">Ou insira as transações manualmente:</p>
+        <p style="font-size:12px;color:var(--text3);margin:0 0 8px">Outras opções:</p>
+        <button class="btn-ghost" style="font-size:13px;width:100%;margin-bottom:8px" onclick="document.getElementById('modal-importar-fatura').remove();finColarTextoFatura()">📋 Colar texto do Internet Banking</button>
         <button class="btn-ghost" style="font-size:13px;width:100%;margin-bottom:8px" onclick="document.getElementById('modal-importar-fatura').remove();finRevisarFatura([])">✏️ Inserir manualmente</button>
         <button class="btn-ghost" style="font-size:13px;width:100%;color:var(--purple)" onclick="document.getElementById('modal-importar-fatura').remove();finCarregarFaturaSantander()">🏦 Carregar fatura Santander (Mai/26)</button>
       </div>
@@ -5238,6 +5426,59 @@ function finRevisarFatura(transacoes){
 
   document.body.appendChild(mo);
   setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finColarTextoFatura(){
+  document.getElementById('modal-colar-fatura')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-colar-fatura';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  mo.innerHTML=`<div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <div class="modal-title">📋 Colar texto do Internet Banking</div>
+      <button class="modal-close" onclick="document.getElementById('modal-colar-fatura').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--text2);line-height:1.7">
+        <strong>Como fazer:</strong><br>
+        1. Acesse o <strong>Internet Banking Santander</strong><br>
+        2. Vá em <strong>Cartões → Ver fatura detalhada</strong><br>
+        3. Selecione tudo na página (<strong>Ctrl+A</strong>)<br>
+        4. Copie (<strong>Ctrl+C</strong>) e cole abaixo (<strong>Ctrl+V</strong>)
+      </div>
+      <textarea id="fatura-texto-colar" class="form-textarea" rows="8" placeholder="Cole aqui o texto copiado do Internet Banking..."></textarea>
+      <div id="fatura-colar-erro" style="display:none;color:var(--red);font-size:13px;margin-top:8px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-colar-fatura').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="finProcessarTextoColar()">🔍 Processar</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finProcessarTextoColar(){
+  const texto=document.getElementById('fatura-texto-colar')?.value||'';
+  if(!texto.trim()){
+    document.getElementById('fatura-colar-erro').textContent='Cole o texto antes de processar.';
+    document.getElementById('fatura-colar-erro').style.display='block';
+    return;
+  }
+
+  const transacoes=finParseFatura(texto);
+
+  if(!transacoes.length){
+    document.getElementById('fatura-colar-erro').textContent='Nenhuma transação encontrada. Verifique se o texto foi copiado corretamente do Internet Banking.';
+    document.getElementById('fatura-colar-erro').style.display='block';
+    return;
+  }
+
+  document.getElementById('modal-colar-fatura').remove();
+  finRevisarFatura(transacoes);
 }
 
 function finCarregarFaturaSantander(){
