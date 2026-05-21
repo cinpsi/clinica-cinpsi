@@ -2039,8 +2039,10 @@ function getConvertidos(){
     id:'lead_'+l.id, paciente:l.paciente||l.responsavel, responsavel:l.responsavel,
     telefone:l.telefone, origem:l.origem, servico:l.servico, status:'Fechado',
     terapeuta:l.terapeuta, valor:l.valor, observacao:l.observacao, data:l.data,
-    modalidade:l.modalidade, valorMensal:l.valorMensal, diaSemana:l.diaSemana,
-    ativo:l.ativo!==false, // preserva status ativo/inativo
+    modalidade:l.modalidade, valorMensal:l.valorMensal, valorProporcional:l.valorProporcional,
+    diaSemana:l.diaSemana, nascimento:l.nascimento, escola:l.escola,
+    notaFiscal:l.notaFiscal,
+    ativo:l.ativo!==false,
     fromLead:true, leadConvertido:true
   }));
   return [...antigos,...fechados];
@@ -2415,29 +2417,35 @@ function saveConv(){
 
   const ativoVal=document.getElementById('ec-ativo').value!=='false';
 
-  if(editConvId.startsWith('lead_')){
-    // É um lead fechado — atualiza no array de leads
-    const leadId=editConvId.replace('lead_','');
-    const leads=loadLeads();
-    const idx=leads.findIndex(l=>l.id===leadId);
-    if(idx!==-1){
-      leads[idx]={...leads[idx],
-        paciente:nome,
-        telefone:document.getElementById('ec-telefone').value.trim()||null,
-        nascimento:document.getElementById('ec-nasc').value||null,
-        escola:document.getElementById('ec-escola').value.trim()||null,
-        origem:document.getElementById('ec-origem').value||leads[idx].origem,
-        servico:document.getElementById('ec-servico').value||null,
-        terapeuta:novaTer||null,
-        ...prevCampos,
-        ativo:ativoVal,
-        notaFiscal:document.getElementById('ec-nf').value||'nao',
-        observacao:document.getElementById('ec-obs').value.trim()||null,
-      };
-      saveLeads(leads);
-    }
+  // Determina onde salvar: leads têm prefixo 'lead_', antigos têm 'ca', 'dup', 'conv_'
+  const isLead=editConvId.startsWith('lead_');
+  const leadId=isLead?editConvId.replace('lead_',''):null;
+
+  // Verifica também se o ID existe nos leads diretamente (sem prefixo)
+  const leadsAll=loadLeads();
+  const leadsIdx=isLead
+    ? leadsAll.findIndex(l=>l.id===leadId)
+    : leadsAll.findIndex(l=>l.id===editConvId||'lead_'+l.id===editConvId);
+
+  if(leadsIdx!==-1){
+    // É um lead — salva no array de leads
+    const realLeadId=leadsAll[leadsIdx].id;
+    leadsAll[leadsIdx]={...leadsAll[leadsIdx],
+      paciente:nome,
+      telefone:document.getElementById('ec-telefone').value.trim()||null,
+      nascimento:document.getElementById('ec-nasc').value||null,
+      escola:document.getElementById('ec-escola').value.trim()||null,
+      origem:document.getElementById('ec-origem').value||leadsAll[leadsIdx].origem,
+      servico:document.getElementById('ec-servico').value||null,
+      terapeuta:novaTer||null,
+      ...prevCampos,
+      ativo:ativoVal,
+      notaFiscal:document.getElementById('ec-nf').value||'nao',
+      observacao:document.getElementById('ec-obs').value.trim()||null,
+    };
+    saveLeads(leadsAll);
   } else {
-    // É um antigo (ca...) ou duplicado (dup...) — atualiza na lista de antigos
+    // É um antigo (ca...) ou duplicado (dup...) — salva na lista de antigos
     const antigos=loadConvAntigos();
     const idx=antigos.findIndex(x=>x.id===editConvId);
     if(idx!==-1){
