@@ -533,7 +533,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <div class="form-group"><label class="form-label">Responsável *</label><input class="form-input" id="fl-responsavel" placeholder="Nome do responsável"></div>
           <div class="form-group"><label class="form-label">Nome do paciente</label><input class="form-input" id="fl-paciente" placeholder="Nome do paciente"></div>
           <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="fl-telefone" placeholder="(11) 99999-9999"></div>
-          <div class="form-group"><label class="form-label">Data *</label><input class="form-input" id="fl-data" type="date"></div>
+          <div class="form-group"><label class="form-label">Data de entrada *</label><input class="form-input" id="fl-data" type="date"></div>
+          <div class="form-group"><label class="form-label">🎂 Data de nascimento</label><input class="form-input" id="fl-nasc" type="date"></div>
+          <div class="form-group"><label class="form-label">🏫 Escola</label><input class="form-input" id="fl-escola" placeholder="Nome da escola"></div>
         </div>
       </div>
       <div class="form-section">
@@ -1317,7 +1319,7 @@ function checkLembretes(){
         return`<div class="lembrete-item ${atrasado?'lembrete-atrasado':'lembrete-hoje'}">
           <div>
             <div style="font-weight:600;font-size:13px">${esc(l.responsavel)}${l.paciente?` <span style="font-weight:400;color:var(--text2)">/ ${esc(l.paciente)}</span>`:''}</div>
-            <div style="font-size:12px;color:var(--text2)">${esc(l.servico||'—')} · ${esc(l.telefone||'—')}</div>
+            <div style="font-size:12px;color:var(--text2)">${esc(l.servico||'—')} · ${esc(l.telefone||'—')}${l.escola?` · 🏫 ${esc(l.escola)}`:''}</div>
           </div>
           <div style="display:flex;align-items:center;gap:10px">
             <span class="lembrete-badge">${atrasado?'Atrasado: '+fmtDate(l.prox_contato):'Hoje'}</span>
@@ -1347,8 +1349,8 @@ function buildNav(){
   if(CU.role==='admin'){
     html+=`<div class="nav-section">Leads & Financeiro</div>
       <button class="nav-item" onclick="showView('dash-leads')" id="nav-dash-leads"><span class="nav-icon">📊</span> Dashboard</button>
-      <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads ativos</button>
-      <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Leads convertidos</button>
+      <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads</button>
+      <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Pacientes</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('reunioes')" id="nav-reunioes"><span class="nav-icon">📝</span> Reuniões</button>
       <div class="nav-section">Supervisão Clínica</div>
@@ -1391,8 +1393,8 @@ function buildNav(){
 // ════════════════════════════════════════════════════════════
 const VM={
   'dash-leads':{title:'Dashboard de Leads',sub:'Visão geral e funil de conversão',role:'admin'},
-  'leads':{title:'Leads ativos',sub:'Gerencie e acompanhe seus leads',role:'admin'},
-  'convertidos':{title:'Leads convertidos',sub:'Pacientes fechados e recorrentes',role:'admin'},
+  'leads':{title:'Leads',sub:'Gerencie e acompanhe seus leads',role:'admin'},
+  'convertidos':{title:'Pacientes',sub:'Pacientes ativos e histórico',role:'admin'},
   'registros':{title:'Registros de Supervisão',sub:'Histórico de supervisões'},
   'novo-registro':{title:'Novo Registro',sub:'Preencha os dados da supervisão'},
   'detalhe':{title:'Detalhe',sub:''},
@@ -1833,7 +1835,7 @@ function getFilteredLeads(){
   const fs=(document.getElementById('lfs')?.value||'').toLowerCase();
   const fo=(document.getElementById('lfo')?.value||'').toLowerCase();
   return loadLeads().filter(l=>{
-    const mQ=!q||[l.responsavel,l.paciente,l.telefone,l.observacao].some(v=>(v||'').toLowerCase().includes(q));
+    const mQ=!q||[l.responsavel,l.paciente,l.telefone,l.observacao,l.escola].some(v=>(v||'').toLowerCase().includes(q));
     const mS=!fs||(l.status||'').toLowerCase()===fs;
     const mO=!fo||(l.origem||'').toLowerCase()===fo;
     return mQ&&mS&&mO;
@@ -1857,7 +1859,7 @@ function refreshLeads(){
       <thead><tr><th>Responsável</th><th>Paciente</th><th>Serviço</th><th>Origem</th><th>Status</th><th>Próx. contato</th><th>Terapeuta</th><th></th></tr></thead>
       <tbody>${fl.map(l=>`<tr>
         <td><strong>${esc(l.responsavel)}</strong><br><span style="font-size:11px;color:var(--text3)">${esc(l.telefone||'')}</span></td>
-        <td>${esc(l.paciente||'—')}</td><td>${esc(l.servico||'—')}</td><td>${esc(l.origem||'—')}</td>
+        <td>${esc(l.paciente||'—')}</td><td>${esc(l.servico||'—')}</td><td>${esc(l.origem||'—')}</td><td>${esc(l.escola||'—')}</td>
         <td><span class="status-pill ${sClass(l.status)}">${esc(l.status||'')}</span></td>
         <td>${fmtDate(l.prox_contato)}</td><td>${esc(l.terapeuta||'—')}</td>
         <td style="display:flex;gap:5px">
@@ -1963,6 +1965,8 @@ function openLeadModal(id){
   document.getElementById('fl-paciente').value=l?.paciente||'';
   document.getElementById('fl-telefone').value=l?.telefone||'';
   document.getElementById('fl-data').value=l?.data||new Date().toISOString().slice(0,10);
+  document.getElementById('fl-nasc').value=l?.nascimento||'';
+  document.getElementById('fl-escola').value=l?.escola||'';
   document.getElementById('fl-origem').value=l?.origem||'';
   document.getElementById('fl-servico').value=l?.servico||'';
   document.getElementById('fl-status').value=l?.status||'Novo';
@@ -1989,6 +1993,8 @@ function saveLead(){
     paciente:document.getElementById('fl-paciente').value.trim()||null,
     responsavel,
     telefone:document.getElementById('fl-telefone').value.trim()||null,
+    nascimento:document.getElementById('fl-nasc').value||null,
+    escola:document.getElementById('fl-escola').value.trim()||null,
     origem:document.getElementById('fl-origem').value||null,
     servico:document.getElementById('fl-servico').value||null,
     status:document.getElementById('fl-status').value,
@@ -2082,11 +2088,16 @@ function renderConvertidos(c){
       <option value="lead">✅ Leads convertidos</option>
       <option value="antigo">👤 Pacientes antigos</option>
     </select>
+    <select class="filter-input filter-select" id="cv-status" onchange="refreshConv()">
+      <option value="ativo">🟢 Ativos</option>
+      <option value="inativo">🔴 Inativos</option>
+      <option value="">Todos</option>
+    </select>
   </div>
   <div id="cv-stats" style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px"></div>
   <div class="data-table">
     <table>
-      <thead><tr><th>Paciente</th><th>Tipo</th><th>Origem</th><th>Serviço</th><th>Terapeuta</th><th>Valor/sessão</th><th></th></tr></thead>
+      <thead><tr><th>Paciente</th><th>Tipo</th><th>Origem</th><th>Serviço</th><th>Terapeuta</th><th>Valor/sessão</th><th>Status</th><th></th></tr></thead>
       <tbody id="cv-tbody"></tbody>
     </table>
   </div>`;
@@ -2098,33 +2109,47 @@ function refreshConv(){
   const q=(document.getElementById('cv-s')?.value||'').toLowerCase();
   const fT=(document.getElementById('cv-ter')?.value||'').toLowerCase();
   const fTipo=(document.getElementById('cv-tipo')?.value||'');
+  const fStatus=(document.getElementById('cv-status')?.value||'');
+
   const fl=todos.filter(p=>{
     const mQ=!q||[p.paciente,p.responsavel,p.terapeuta].some(v=>(v||'').toLowerCase().includes(q));
     const mT=!fT||(p.terapeuta||'').toLowerCase()===fT;
     const isLead=p.leadConvertido===true;
     const mTipo=!fTipo||(fTipo==='lead'?isLead:!isLead);
-    return mQ&&mT&&mTipo;
+    const isAtivo=p.ativo!==false;
+    const mStatus=!fStatus||(fStatus==='ativo'?isAtivo:!isAtivo);
+    return mQ&&mT&&mTipo&&mStatus;
   });
-  const totalLeads=todos.filter(p=>p.leadConvertido===true).length;
-  const totalVal=fl.filter(p=>p.leadConvertido===true).reduce((s,p)=>s+(p.valor||0),0);
+
+  const totalFiltrado=fl.length;
+  const totalGeral=todos.length;
+  const totalVal=fl.reduce((s,p)=>s+(p.valor||0),0);
   const nTers=[...new Set(fl.map(p=>p.terapeuta).filter(Boolean))].length;
+  const labelCount=fTipo==='lead'?'Leads convertidos':fTipo==='antigo'?'Pacientes antigos':'Total de pacientes';
+
   const stats=document.getElementById('cv-stats');
   if(stats) stats.innerHTML=`
-    <div class="stat-card"><div class="stat-label">Leads convertidos</div><div class="stat-value" style="color:var(--green)">${totalLeads}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">de ${todos.length} total</div></div>
-    <div class="stat-card"><div class="stat-label">Faturamento (leads)</div><div class="stat-value" style="font-size:19px">${fmtBRL(totalVal)}</div></div>
+    <div class="stat-card"><div class="stat-label">${labelCount}</div><div class="stat-value" style="color:var(--green)">${totalFiltrado}</div><div style="font-size:11px;color:var(--text3);margin-top:2px">de ${totalGeral} total</div></div>
+    <div class="stat-card"><div class="stat-label">Faturamento</div><div class="stat-value" style="font-size:19px">${fmtBRL(totalVal)}</div></div>
     <div class="stat-card"><div class="stat-label">Terapeutas</div><div class="stat-value">${nTers}</div></div>`;
+
   const tbody=document.getElementById('cv-tbody');
   if(!tbody) return;
-  if(!fl.length){tbody.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:32px">Nenhum resultado encontrado.</td></tr>`;return;}
+  if(!fl.length){tbody.innerHTML=`<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Nenhum resultado encontrado.</td></tr>`;return;}
   tbody.innerHTML=fl.map(p=>{
     const isLead=p.leadConvertido===true;
-    return`<tr>
+    const isAtivo=p.ativo!==false;
+    return`<tr style="${!isAtivo?'opacity:0.6;':''}">
     <td><strong>${esc(p.paciente||'—')}</strong></td>
     <td>${isLead?'<span class="status-pill s-fechado" style="font-size:10px">Lead</span>':'<span style="font-size:11px;color:var(--text3)">Paciente antigo</span>'}</td>
     <td>${esc(p.origem||'—')}</td>
     <td>${esc(p.servico||'—')}</td>
     <td>${esc(p.terapeuta||'—')}</td>
     <td>${fmtBRL(p.valor)}</td>
+    <td>${isAtivo
+      ?'<span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:20px;font-weight:500">Ativo</span>'
+      :'<span style="font-size:11px;background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:20px;font-weight:500">Inativo</span>'
+    }</td>
     <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--accent)" onclick="duplicarConvertido('${esc(p.id)}')">➕ Duplicar</button></td>
   </tr>`;}).join('');
 }
@@ -2275,6 +2300,8 @@ function openConvModal(id){
         <div class="form-grid">
           <div class="form-group"><label class="form-label">Nome do paciente *</label><input class="form-input" id="ec-paciente"></div>
           <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="ec-telefone"></div>
+          <div class="form-group"><label class="form-label">🎂 Data de nascimento</label><input class="form-input" id="ec-nasc" type="date"></div>
+          <div class="form-group"><label class="form-label">🏫 Escola</label><input class="form-input" id="ec-escola" placeholder="Nome da escola"></div>
           <div class="form-group"><label class="form-label">Origem</label>
             <select class="form-select" id="ec-origem">
               <option value="">Selecione...</option>
@@ -2317,6 +2344,9 @@ function openConvModal(id){
             </div>
             <div class="form-group" id="ec-bloco-mensal"><label class="form-label">Valor mensal (R$)</label>
               <input class="form-input" id="ec-valor-mensal" type="number" placeholder="0,00" step="0.01"></div>
+            <div class="form-group" id="ec-bloco-proporcional"><label class="form-label">💡 Valor proporcional 1º mês (R$)</label>
+              <input class="form-input" id="ec-valor-proporcional" type="number" placeholder="Deixe em branco se não houver" step="0.01">
+              <small style="color:var(--text3);font-size:11px;margin-top:4px;display:block">Usado apenas no mês de entrada. A partir do mês seguinte usa o valor mensal cheio.</small></div>
             <div class="form-group" id="ec-bloco-sessao" style="display:none"><label class="form-label">Valor por sessão (R$)</label>
               <input class="form-input" id="ec-valor" type="number" placeholder="0,00" step="0.01"></div>
             <div class="form-group" id="ec-bloco-dia" style="display:none"><label class="form-label">Dia da semana</label>
@@ -2342,8 +2372,11 @@ function openConvModal(id){
   document.getElementById('ec-servico').value=p.servico||'';
   document.getElementById('ec-valor').value=p.valor||'';
   document.getElementById('ec-valor-mensal').value=p.valorMensal||p.valor||'';
+  document.getElementById('ec-valor-proporcional').value=p.valorProporcional||'';
   document.getElementById('ec-ativo').value=p.ativo===false?'false':'true';
   document.getElementById('ec-obs').value=p.observacao||'';
+  document.getElementById('ec-nasc').value=p.nascimento||'';
+  document.getElementById('ec-escola').value=p.escola||'';
   document.getElementById('ec-nf').value=p.notaFiscal==='sim'?'sim':'nao';
   // Modalidade
   const mod=p.modalidade||'mensal';
@@ -2374,10 +2407,11 @@ function saveConv(){
   const modalidade=document.getElementById('ec-btn-avulso')?.classList.contains('active')?'avulso':document.getElementById('ec-btn-unica')?.classList.contains('active')?'unica':'mensal';
   const novoValor=document.getElementById('ec-valor').value?Number(document.getElementById('ec-valor').value):null;
   const valorMensal=document.getElementById('ec-valor-mensal').value?Number(document.getElementById('ec-valor-mensal').value):null;
+  const valorProporcional=document.getElementById('ec-valor-proporcional').value?Number(document.getElementById('ec-valor-proporcional').value):null;
   const diaSemana=document.getElementById('ec-dia-semana').value!==''?parseInt(document.getElementById('ec-dia-semana').value):null;
   // Para mensal, valor = valorMensal; para avulso/unica, valor = valor por sessão
   const valorFinal=modalidade==='mensal'?(valorMensal||null):novoValor;
-  const prevCampos={modalidade, valor:valorFinal, valorMensal, diaSemana};
+  const prevCampos={modalidade, valor:valorFinal, valorMensal, valorProporcional, diaSemana};
 
   const ativoVal=document.getElementById('ec-ativo').value!=='false';
 
@@ -2390,6 +2424,8 @@ function saveConv(){
       leads[idx]={...leads[idx],
         paciente:nome,
         telefone:document.getElementById('ec-telefone').value.trim()||null,
+        nascimento:document.getElementById('ec-nasc').value||null,
+        escola:document.getElementById('ec-escola').value.trim()||null,
         origem:document.getElementById('ec-origem').value||leads[idx].origem,
         servico:document.getElementById('ec-servico').value||null,
         terapeuta:novaTer||null,
@@ -2408,6 +2444,8 @@ function saveConv(){
       antigos[idx]={...antigos[idx],
         paciente:nome,
         telefone:document.getElementById('ec-telefone').value.trim()||null,
+        nascimento:document.getElementById('ec-nasc').value||null,
+        escola:document.getElementById('ec-escola').value.trim()||null,
         origem:document.getElementById('ec-origem').value||antigos[idx].origem,
         servico:document.getElementById('ec-servico').value||null,
         terapeuta:novaTer||null,
@@ -3582,6 +3620,7 @@ function renderPacientes(c){
       <div class="form-group"><label class="form-label">Idade</label><input class="form-input" id="np-idade" type="number" placeholder="Ex: 34"></div>
       <div class="form-group"><label class="form-label">Início do tratamento</label><input class="form-input" id="np-inicio" type="date"></div>
       <div class="form-group"><label class="form-label">🎂 Data de nascimento</label><input class="form-input" id="np-nasc" type="date"></div>
+      <div class="form-group"><label class="form-label">🏫 Escola</label><input class="form-input" id="np-escola" placeholder="Nome da escola"></div>
       <div class="form-group"><label class="form-label">Fase da terapia</label><input class="form-input" id="np-fase" placeholder="Ex: Inicial, Intermediária, Final..."></div>
       <div class="form-group"><label class="form-label">Nome dos pais / responsáveis</label><input class="form-input" id="np-pais" placeholder="Nome dos pais ou responsáveis"></div>
       <div class="form-group"><label class="form-label">Diagnóstico</label><input class="form-input" id="np-diag" placeholder="Ex: TDAH, TEA, Ansiedade..."></div>
@@ -3593,22 +3632,165 @@ function renderPacientes(c){
     </div>
   </div>
   <div class="data-table"><table>
-    <thead><tr><th>Nome</th><th>Terapeuta</th><th>Idade</th><th>Início</th><th>Fase</th><th>Diagnóstico</th><th>Demanda inicial</th><th>Origem</th><th></th></tr></thead>
-    <tbody id="pac-tbody">${pacs.length?pacs.map(p=>`<tr style="${p._inativo?'opacity:0.5;':''}">
+    <thead><tr><th>Nome</th><th>Terapeuta</th><th>Idade</th><th>Nascimento</th><th>Escola</th><th>Início</th><th>Fase</th><th>Diagnóstico</th><th>Origem</th><th></th></tr></thead>
+    <tbody id="pac-tbody">${pacs.length?pacs.map(p=>{
+      // Calcula idade pela data de nascimento se disponível
+      let idadeCalc=p.idade||'—';
+      if(p.nascimento){
+        const nasc=new Date(p.nascimento);
+        const hoje=new Date();
+        let anos=hoje.getFullYear()-nasc.getFullYear();
+        const m=hoje.getMonth()-nasc.getMonth();
+        if(m<0||(m===0&&hoje.getDate()<nasc.getDate())) anos--;
+        idadeCalc=anos+' anos';
+      }
+      return`<tr style="${p._inativo?'opacity:0.5;':''}">
       <td><strong>${esc(p.nome)}</strong>${p._inativo?` <span class="status-pill s-perdido" style="font-size:10px">Inativo</span>`:''}${p.fromLead?` <span class="sync-badge" title="Sincronizado de lead">⟳ Lead</span>`:''}${p.telefone?`<br><span style="font-size:11px;color:var(--text3)">${esc(p.telefone)}</span>`:''}${p.pais?`<br><span style="font-size:11px;color:var(--text3)">👨‍👩‍👧 ${esc(p.pais)}</span>`:''}${p.diag?`<br><span style="font-size:11px;color:var(--accent)">🏷️ ${esc(p.diag)}</span>`:''}</td>
       <td>${esc(p.terapeuta||'—')}</td>
-      <td>${p.idade||'—'}</td>
+      <td>${idadeCalc}</td>
+      <td style="font-size:12px;color:var(--text3)">${p.nascimento?fmtDate(p.nascimento):'—'}</td>
+      <td style="font-size:12px">${esc(p.escola||'—')}</td>
       <td>${fmtDate(p.inicio)||'—'}</td>
       <td>${esc(p.fase||'—')}</td>
       <td>${esc(p.diag||'—')}</td>
-      <td>${esc(p.queixa||'—')}</td>
       <td>${esc(p.origem||'—')}</td>
       <td><div style="display:flex;gap:5px"><button class="btn-ghost" style="font-size:12px;padding:5px 9px" onclick="openEditPac('${p.id}')">Editar</button><button class="btn-ghost" style="font-size:12px;padding:5px 9px;color:var(--accent)" onclick="openVincularTer('${p.id}')">+ Terapeuta</button>${isSup?`<button class="btn-delete" onclick="deletePac('${p.id}')">Excluir</button>`:''}</div></td>
-    </tr>`).join(''):`<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:32px">Nenhum paciente cadastrado.</td></tr>`}</tbody>
-  </table></div>`;
+    </tr>`;}).join(''):`<tr><td colspan="10" style="text-align:center;color:var(--text3);padding:32px">Nenhum paciente cadastrado.</td></tr>`}</tbody>
+  </table></div>
+  <div style="margin-top:16px;display:flex;justify-content:flex-end">
+    <button class="btn-ghost" onclick="pacRelatorioIdade()">📊 Relatório por faixa etária</button>
+  </div>`;
   populateTerapeutaDropdown('np-ter','');
   if(addPacOpen) document.getElementById('add-pac-wrap').style.display='block';
 }
+function pacRelatorioIdade(){
+  // Modal com opções de faixa etária
+  document.getElementById('modal-rel-idade')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-rel-idade';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  mo.innerHTML=`<div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">📊 Relatório por faixa etária</div>
+      <button class="modal-close" onclick="document.getElementById('modal-rel-idade').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text3);margin:0 0 16px">Defina a faixa etária para o relatório:</p>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Idade mínima (anos)</label>
+          <input class="form-input" id="rel-idade-min" type="number" min="0" max="99" placeholder="Ex: 0" value="0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Idade máxima (anos)</label>
+          <input class="form-input" id="rel-idade-max" type="number" min="0" max="99" placeholder="Ex: 6" value="6">
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <p style="font-size:12px;color:var(--text3);margin-bottom:8px">Atalhos rápidos:</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          ${[[0,5],[0,6],[0,12],[6,12],[13,17],[18,99]].map(([a,b])=>
+            `<button class="btn-ghost" style="font-size:12px;padding:5px 12px" onclick="document.getElementById('rel-idade-min').value=${a};document.getElementById('rel-idade-max').value=${b}">
+              ${a===0?'Até '+b+' anos':a+' a '+b+' anos'}
+            </button>`
+          ).join('')}
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-rel-idade').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="pacGerarRelatorioIdade()">🖨️ Gerar relatório</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function pacCalcIdade(nascimento){
+  if(!nascimento) return null;
+  const nasc=new Date(nascimento);
+  const hoje=new Date();
+  let anos=hoje.getFullYear()-nasc.getFullYear();
+  const m=hoje.getMonth()-nasc.getMonth();
+  if(m<0||(m===0&&hoje.getDate()<nasc.getDate())) anos--;
+  return anos;
+}
+
+function pacGerarRelatorioIdade(){
+  const min=parseInt(document.getElementById('rel-idade-min')?.value||'0');
+  const max=parseInt(document.getElementById('rel-idade-max')?.value||'99');
+  document.getElementById('modal-rel-idade')?.remove();
+
+  const pacs=loadPac().filter(p=>!p._inativo);
+  const filtrados=pacs.filter(p=>{
+    if(!p.nascimento) return false;
+    const idade=pacCalcIdade(p.nascimento);
+    return idade>=min && idade<=max;
+  }).sort((a,b)=>pacCalcIdade(a.nascimento)-pacCalcIdade(b.nascimento));
+
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const linhas=filtrados.map((p,i)=>{
+    const idade=pacCalcIdade(p.nascimento);
+    const nasc=fmtDate(p.nascimento);
+    return `<tr style="background:${i%2===0?'#f9fafb':'#fff'}">
+      <td>${esc(p.nome)}</td>
+      <td style="text-align:center">${idade} anos</td>
+      <td style="text-align:center">${nasc}</td>
+      <td>${esc(p.terapeuta||'—')}</td>
+      <td>${esc(p.escola||'—')}</td>
+      <td>${esc(p.diag||'—')}</td>
+    </tr>`;
+  }).join('');
+
+  // Agrupa por faixa para resumo
+  const faixas={};
+  filtrados.forEach(p=>{
+    const idade=pacCalcIdade(p.nascimento);
+    const faixa=idade+' anos';
+    faixas[faixa]=(faixas[faixa]||0)+1;
+  });
+  const resumo=Object.entries(faixas).map(([f,n])=>
+    `<span style="display:inline-block;background:#e0f2fe;color:#0369a1;border-radius:20px;padding:3px 12px;font-size:12px;margin:2px">${f}: <strong>${n}</strong></span>`
+  ).join('');
+
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>Relatório por Faixa Etária - CINPSI</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;font-size:13px}
+    h1{font-size:18px;font-weight:700;margin-bottom:4px}
+    .sub{color:#666;font-size:12px;margin-bottom:20px}
+    .resumo{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;margin-bottom:20px}
+    .resumo-title{font-size:12px;font-weight:700;color:#0369a1;margin-bottom:8px;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse}
+    th{background:#f3f4f6;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;color:#6b7280;font-weight:600}
+    td{padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px}
+    .total{margin-top:16px;font-size:13px;color:#374151}
+    @media print{body{padding:15px}}
+  </style></head><body>
+  <h1>Clínica CINPSI — Relatório por Faixa Etária</h1>
+  <p class="sub">Pacientes de ${min} a ${max} anos · Gerado em ${hoje}</p>
+  <div class="resumo">
+    <div class="resumo-title">Distribuição por idade</div>
+    ${resumo||'<span style="color:#666">Nenhum dado</span>'}
+  </div>
+  ${filtrados.length?`
+  <table>
+    <thead><tr>
+      <th>Paciente</th><th style="text-align:center">Idade</th><th style="text-align:center">Nascimento</th>
+      <th>Terapeuta</th><th>Escola</th><th>Diagnóstico</th>
+    </tr></thead>
+    <tbody>${linhas}</tbody>
+  </table>
+  <p class="total"><strong>${filtrados.length}</strong> paciente${filtrados.length!==1?'s':''} encontrado${filtrados.length!==1?'s':''}.</p>
+  `:`<p style="text-align:center;padding:40px;color:#6b7280">Nenhum paciente encontrado nesta faixa etária.</p>`}
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
+}
+
 function toggleAddPac(){
   addPacOpen=!addPacOpen;
   const wrap=document.getElementById('add-pac-wrap');
@@ -3624,6 +3806,7 @@ function savePaciente(){
     idade:document.getElementById('np-idade').value,
     inicio:document.getElementById('np-inicio').value,
     nascimento:document.getElementById('np-nasc').value||null,
+    escola:document.getElementById('np-escola').value.trim()||null,
     fase:document.getElementById('np-fase').value.trim(),
     pais:document.getElementById('np-pais').value.trim(),
     diag:document.getElementById('np-diag').value.trim(),
@@ -3731,6 +3914,8 @@ function openEditPac(id){
           <input class="form-input" id="ep-inicio" type="date" value="${p.inicio||''}"></div>
         <div class="form-group"><label class="form-label">🎂 Data de nascimento</label>
           <input class="form-input" id="ep-nasc" type="date" value="${p.nascimento||''}"></div>
+        <div class="form-group"><label class="form-label">🏫 Escola</label>
+          <input class="form-input" id="ep-escola" placeholder="Nome da escola" value="${esc(p.escola||'')}"></div>
         <div class="form-group"><label class="form-label">Fase da terapia</label>
           <input class="form-input" id="ep-fase" placeholder="Ex: Inicial, Intermediária, Final..." value="${esc(p.fase||'')}"></div>
         <div class="form-group"><label class="form-label">Nome dos pais / responsáveis</label>
@@ -3768,6 +3953,7 @@ function saveEditPac(id){
     idade:document.getElementById('ep-idade').value,
     inicio:document.getElementById('ep-inicio').value,
     nascimento:document.getElementById('ep-nasc').value||null,
+    escola:document.getElementById('ep-escola').value.trim()||null,
     fase:document.getElementById('ep-fase').value.trim(),
     pais:document.getElementById('ep-pais').value.trim(),
     diag:document.getElementById('ep-diag').value.trim(),
@@ -5116,14 +5302,23 @@ function finBuildFat(){
 
   // ── FALLBACK: sem receitas importadas → usa leads/convertidos ──
   if(Object.keys(porTer).length === 0){
+    const hoje=new Date();
+    const mesAtual=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+
     const addTer=(ter,val)=>{
       if(!ter) return;
       if(!porTer[ter]) porTer[ter]={n_pac:0,fat_total:0,repasse:0,temRegra:false};
       porTer[ter].n_pac++;
       porTer[ter].fat_total+=Number(val)||0;
     };
-    loadConvAntigos().filter(p=>p.ativo!==false).forEach(p=>addTer(p.terapeuta,p.valor||0));
-    loadLeads().filter(l=>l.status==='Fechado'&&l.terapeuta).forEach(l=>addTer(l.terapeuta,l.valor||0));
+
+    getConvertidos().filter(p=>p.ativo!==false).forEach(p=>{
+      // Usa valorProporcional se paciente entrou no mês atual e tem valor proporcional definido
+      const entradaMes=(p.data||'').substring(0,7);
+      const usaProporcional=p.valorProporcional&&entradaMes===mesAtual;
+      const val=usaProporcional?p.valorProporcional:(p.valorMensal||p.valor||0);
+      addTer(p.terapeuta, val);
+    });
   }
 
   return Object.entries(porTer).sort((a,b)=>a[0].localeCompare(b[0])).map(([terapeuta,d])=>{
