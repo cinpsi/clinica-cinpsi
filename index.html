@@ -6194,15 +6194,21 @@ function finConfirmarImportacao(){
   const ativos=(window._faturaImport||[]).filter(t=>t.ativo!==false&&t.desc&&t.valor>0);
   if(!ativos.length){ toast('Nenhum item válido para importar.'); return; }
   const desps=finLoad(FK.DESP);
-  const grupoId='g_fatura_'+Date.now();
   ativos.forEach((t,i)=>{
+    const id=Date.now()+i+(Math.random()*100|0);
     desps.push({
-      id:Date.now()+i+Math.random(),
-      desc:t.desc, cat:t.cat||'Outras Despesas',
-      valor:t.valor, data:t.data,
-      vencimento:null, tipo:'unica',
-      grupoId, parcelaAtual:1, totalParcelas:1,
-      status:'Pendente', importado:true,
+      id,
+      desc:t.desc,
+      cat:t.cat||'Outras Despesas',
+      valor:t.valor,
+      data:t.data,
+      vencimento:t.data,
+      tipo:'unica',
+      grupoId:'g_'+id,
+      parcelaAtual:1,
+      totalParcelas:1,
+      pago:false,
+      importado:true,
     });
   });
   finSave(FK.DESP,desps);
