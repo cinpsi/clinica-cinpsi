@@ -6060,6 +6060,11 @@ function finRevisarFatura(transacoes){
       <button class="modal-close" onclick="document.getElementById('modal-revisar-fatura').remove()">×</button>
     </div>
     <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
+      <div style="padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <label style="font-size:13px;font-weight:600;color:var(--text2)">📅 Competência (mês do lançamento):</label>
+        <input type="month" id="fatura-competencia" class="form-input" style="font-size:13px;padding:5px 10px;width:160px" value="${new Date().toISOString().slice(0,7)}">
+        <span style="font-size:12px;color:var(--text3)">As datas serão ajustadas para este mês</span>
+      </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="background:var(--surface2);position:sticky;top:0;z-index:1">
           <th style="padding:8px 6px;text-align:left;font-size:11px;font-weight:600;color:var(--text3)">Data</th>
@@ -6193,16 +6198,29 @@ function finAdicionarLinhaFatura(){
 function finConfirmarImportacao(){
   const ativos=(window._faturaImport||[]).filter(t=>t.ativo!==false&&t.desc&&t.valor>0);
   if(!ativos.length){ toast('Nenhum item válido para importar.'); return; }
+
+  // Usa a competência selecionada — mantém o dia original mas troca ano/mês
+  const comp=document.getElementById('fatura-competencia')?.value||new Date().toISOString().slice(0,7);
+  const [compAno,compMes]=comp.split('-');
+
   const desps=finLoad(FK.DESP);
   ativos.forEach((t,i)=>{
     const id=Date.now()+i+(Math.random()*100|0);
+    // Ajusta a data para o mês de competência, mantendo o dia
+    let dataFinal=t.data;
+    if(t.data){
+      const dia=t.data.split('-')[2]||'01';
+      dataFinal=`${compAno}-${compMes}-${dia}`;
+    } else {
+      dataFinal=`${compAno}-${compMes}-01`;
+    }
     desps.push({
       id,
       desc:t.desc,
       cat:t.cat||'Outras Despesas',
       valor:t.valor,
-      data:t.data,
-      vencimento:t.data,
+      data:dataFinal,
+      vencimento:dataFinal,
       tipo:'unica',
       grupoId:'g_'+id,
       parcelaAtual:1,
@@ -6214,7 +6232,7 @@ function finConfirmarImportacao(){
   finSave(FK.DESP,desps);
   document.getElementById('modal-revisar-fatura')?.remove();
   fin_refresh();
-  toast('✅ '+ativos.length+' despesas importadas!');
+  toast('✅ '+ativos.length+' despesas lançadas em '+compMes+'/'+compAno+'!');
 }
 
 // ── LEMBRETE NOTA FISCAL ─────────────────────────────────────────────────
