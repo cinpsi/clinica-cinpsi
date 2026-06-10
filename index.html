@@ -5260,7 +5260,7 @@ function finMarcarPago(id){
 // ── REGRAS DE REPASSE ────────────────────────────────────────────────────
 // Carrega regras salvas + aplica defaults fixos para terapeutas com regra especial
 function finDefaultPct(ter){
-  const defaults={Leticia:35,Adriana:35,Erika:35,Tatiane:80,Mayara:35,Luciana:45.5};
+  const defaults={Leticia:35,Adriana:35,Erika:35,Tatiane:80,Mayara:35,Luciana:45.5,'Juliana Callef':35,Juliana:35,'Licença ClinPsi Administrativo':35};
   return defaults[ter]??35;
 }
 function finLoadRegras(){
