@@ -5792,14 +5792,27 @@ function checkAniversarios(){
   const diaHoje=hoje.getDate();
   const mesHoje=hoje.getMonth()+1;
 
-  // Pacientes com nascimento
-  const pacs=loadPac().filter(p=>p.nascimento);
+  // Pacientes da tabela de pacientes (clínica)
+  const pacsClinica=loadPac().filter(p=>p.nascimento);
+  // Pacientes convertidos (leads fechados + antigos) com nascimento
+  const convertidos=getConvertidos().filter(p=>p.nascimento);
+
+  // Junta pacientes evitando duplicatas por nome
+  const pacMap={};
+  [...pacsClinica, ...convertidos].forEach(p=>{
+    const nome=(p.paciente||p.nome||p.responsavel||'').trim();
+    if(nome && p.nascimento && !pacMap[nome.toLowerCase()]){
+      pacMap[nome.toLowerCase()]={...p, nome, tipo:'paciente'};
+    }
+  });
+  const pacs=Object.values(pacMap);
+
   // Profissionais com nascimento
   const profis=loadUsers().filter(u=>u.nascimento&&u.role!=='admin').map(u=>({
     ...u, tipo:'profissional', nome:u.nome, terapeuta:u.especialidade||u.role
   }));
 
-  const todos=[...pacs.map(p=>({...p,tipo:'paciente'})),...profis];
+  const todos=[...pacs, ...profis];
 
   const anivHoje=todos.filter(p=>{
     const [,mm,dd]=p.nascimento.split('-');
