@@ -4452,6 +4452,7 @@ function renderFinanceiro(c){
     <button class="fin-tab" onclick="finSwitchTab('dre')">📊 DRE</button>
     <button class="fin-tab" onclick="finSwitchTab('comparativo')">📈 Comparativo</button>
     <button class="fin-tab" onclick="finSwitchTab('previsao-caixa')">💰 Previsão de Caixa</button>
+    <button class="fin-tab" onclick="finSwitchTab('orcamento')">🎯 Orçamento Anual</button>
   </div>
 
   <!-- VISÃO GERAL -->
@@ -4513,6 +4514,7 @@ function renderFinanceiro(c){
         <select class="fin-filter-select" id="fin-filter-desp-cat" onchange="finRenderDespesas()"><option value="">Todas as categorias</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Consumo</option><option>Outras Despesas</option></select>
         <select class="fin-filter-select" id="fin-filter-desp-tipo" onchange="finRenderDespesas()"><option value="">Todos os tipos</option><option value="unica">Avulsa</option><option value="recorrente">Recorrente</option><option value="parcelada">Parcelada</option></select>
         <button class="btn-ghost" onclick="finOpenGestaoFornecedores()" style="margin-right:6px">🏢 Fornecedores</button>
+        <button class="btn-ghost" onclick="finImportarExtrato()" style="margin-right:6px">🏦 Importar extrato</button>
         <button class="btn-ghost" onclick="finImportarFatura()" style="margin-right:6px">📄 Importar fatura</button>
         <button class="btn-primary" onclick="finOpenModal('despesa')">+ Nova Despesa</button>
       </div>
@@ -4589,6 +4591,14 @@ function renderFinanceiro(c){
       <div style="font-size:12px;color:var(--text3)">Projeção para os próximos 3 meses</div>
     </div>
     <div id="fin-previsao-caixa-content"></div>
+  </div>
+
+  <div class="fin-panel" id="fin-panel-orcamento">
+    <div class="fin-section-header">
+      <div class="fin-section-title">Orçamento Anual</div>
+      <div style="font-size:12px;color:var(--text3)">Planeje metas por categoria e compare com o realizado</div>
+    </div>
+    <div id="fin-orcamento-content"></div>
   </div>
   `;
 
@@ -4706,7 +4716,7 @@ function finChangeMonth(d){
   fin_refresh();
 }
 function finSwitchTab(name){
-  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','comparativo','previsao-caixa'];
+  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','comparativo','previsao-caixa','orcamento'];
   document.querySelectorAll('.fin-tab').forEach((t,i)=>{
     t.classList.toggle('active',tabs[i]===name);
   });
@@ -4718,6 +4728,7 @@ function finSwitchTab(name){
   if(name==='previsao-rec') finRenderPrevisaoRec();
   if(name==='comparativo') finRenderComparativo();
   if(name==='previsao-caixa') finRenderPrevisaoCaixa();
+  if(name==='orcamento') finRenderOrcamento();
 }
 
 let _finRepTab='prev';
@@ -5954,6 +5965,422 @@ function gerarRelatorioMensal(){
 // ════════════════════════════════════════════════════════════
 // IMPORTAR FATURA CARTÃO
 // ════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════
+// ORÇAMENTO ANUAL
+// ════════════════════════════════════════════════════════════
+function orcLoad(){ try{ return JSON.parse(localStorage.getItem('cinpsi_orcamento')||'{}'); }catch(e){ return {}; } }
+function orcSave(d){ localStorage.setItem('cinpsi_orcamento',JSON.stringify(d)); _cache['cinpsi_orcamento']=d; if(typeof _fbWrite==='function')_fbWrite('cinpsi_orcamento',d); }
+
+const ORC_CATS_DESP=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Marketing','Consumo','Outras Despesas'];
+let _orcAno=2026;
+let _orcView='metas'; // metas | comparativo | resumo
+
+function finRenderOrcamento(){
+  const el=document.getElementById('fin-orcamento-content'); if(!el) return;
+
+  el.innerHTML=`
+    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
+      <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
+        <button class="orc-view-btn" id="orc-btn-metas" onclick="orcSwitchView('metas')" style="padding:8px 16px;border:none;background:var(--purple);color:#fff;font-size:13px;font-weight:600;cursor:pointer">📝 Definir metas</button>
+        <button class="orc-view-btn" id="orc-btn-comparativo" onclick="orcSwitchView('comparativo')" style="padding:8px 16px;border:none;background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer">📊 Orçado vs Realizado</button>
+        <button class="orc-view-btn" id="orc-btn-resumo" onclick="orcSwitchView('resumo')" style="padding:8px 16px;border:none;background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer">📅 Resumo anual</button>
+      </div>
+      <div style="flex:1"></div>
+      <button class="btn-ghost" style="font-size:13px" onclick="orcImprimir()">🖨️ Imprimir</button>
+    </div>
+    <div id="orc-view-content"></div>`;
+
+  orcRenderView();
+}
+
+function orcSwitchView(v){
+  _orcView=v;
+  ['metas','comparativo','resumo'].forEach(x=>{
+    const btn=document.getElementById('orc-btn-'+x);
+    if(btn){
+      btn.style.background=x===v?'var(--purple)':'var(--surface)';
+      btn.style.color=x===v?'#fff':'var(--text2)';
+      btn.style.fontWeight=x===v?'600':'400';
+    }
+  });
+  orcRenderView();
+}
+
+const ORC_MESES=['Jul','Ago','Set','Out','Nov','Dez'];
+const ORC_MESES_IDX=[6,7,8,9,10,11]; // julho a dezembro (0-indexed)
+
+function orcRenderView(){
+  const c=document.getElementById('orc-view-content'); if(!c) return;
+  if(_orcView==='metas') c.innerHTML=orcViewMetas();
+  else if(_orcView==='comparativo') c.innerHTML=orcViewComparativo();
+  else c.innerHTML=orcViewResumo();
+}
+
+function orcViewMetas(){
+  const orc=orcLoad();
+  const rowMeta=(tipo,cat)=>{
+    const cells=ORC_MESES_IDX.map((mIdx,i)=>{
+      const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
+      const val=(orc[key]?.[tipo]?.[cat])||'';
+      return `<td style="padding:3px 4px"><input type="number" class="form-input" style="font-size:11px;padding:4px;width:80px;text-align:right" value="${val}" placeholder="0" onchange="orcSetMeta('${key}','${tipo}','${esc(cat)}',this.value)"></td>`;
+    }).join('');
+    return `<tr><td style="padding:6px 10px;font-size:12px;font-weight:500;white-space:nowrap">${esc(cat)}</td>${cells}</tr>`;
+  };
+
+  return `
+    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:13px;color:#3730A3">
+      💡 Defina as metas de receita e despesa por categoria para cada mês. Os valores são usados na comparação com o realizado.
+    </div>
+
+    <h3 style="font-size:13px;font-weight:700;color:var(--green);margin:0 0 8px">📈 RECEITA (meta mensal)</h3>
+    <div class="fin-table-wrap" style="margin-bottom:24px;overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:640px">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Categoria</th>
+          ${ORC_MESES.map(m=>`<th style="padding:8px 4px;text-align:center;font-size:11px;color:var(--text3)">${m}</th>`).join('')}
+        </tr></thead>
+        <tbody>${rowMeta('receita','Receita de Consultas')}${rowMeta('receita','Outras Receitas')}</tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:13px;font-weight:700;color:var(--red);margin:0 0 8px">📉 DESPESAS (meta mensal por categoria)</h3>
+    <div class="fin-table-wrap" style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:640px">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Categoria</th>
+          ${ORC_MESES.map(m=>`<th style="padding:8px 4px;text-align:center;font-size:11px;color:var(--text3)">${m}</th>`).join('')}
+        </tr></thead>
+        <tbody>${ORC_CATS_DESP.map(cat=>rowMeta('despesa',cat)).join('')}</tbody>
+      </table>
+    </div>`;
+}
+
+function orcSetMeta(mesKey,tipo,cat,valor){
+  const orc=orcLoad();
+  if(!orc[mesKey]) orc[mesKey]={};
+  if(!orc[mesKey][tipo]) orc[mesKey][tipo]={};
+  const v=parseFloat(valor)||0;
+  if(v>0) orc[mesKey][tipo][cat]=v;
+  else delete orc[mesKey][tipo][cat];
+  orcSave(orc);
+}
+
+// Realizado: soma receitas pagas e despesas por mês/categoria
+function orcRealizado(mesKey){
+  const recs=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey));
+  const desps=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
+  const receita=recs.reduce((s,r)=>s+(r.valor||0),0);
+  const despPorCat={};
+  desps.forEach(d=>{ const c=d.cat||'Outras Despesas'; despPorCat[c]=(despPorCat[c]||0)+(d.valor||0); });
+  const despesaTotal=desps.reduce((s,d)=>s+(d.valor||0),0);
+  return {receita, despesaTotal, despPorCat};
+}
+
+function orcMetaMes(mesKey){
+  const orc=orcLoad();
+  const m=orc[mesKey]||{};
+  const recMeta=Object.values(m.receita||{}).reduce((s,v)=>s+v,0);
+  const despMeta=Object.values(m.despesa||{}).reduce((s,v)=>s+v,0);
+  return {recMeta, despMeta, despCats:m.despesa||{}};
+}
+
+function orcViewComparativo(){
+  let linhas='';
+  ORC_MESES_IDX.forEach((mIdx,i)=>{
+    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
+    const meta=orcMetaMes(key);
+    const real=orcRealizado(key);
+
+    const recDesvio=meta.recMeta>0?((real.receita-meta.recMeta)/meta.recMeta*100):0;
+    const despDesvio=meta.despMeta>0?((real.despesaTotal-meta.despMeta)/meta.despMeta*100):0;
+    const resultMeta=meta.recMeta-meta.despMeta;
+    const resultReal=real.receita-real.despesaTotal;
+
+    const corDesvio=(d,inv)=>{ if(!d) return 'var(--text3)'; return (inv?d<0:d>0)?'var(--green)':'var(--red)'; };
+
+    linhas+=`
+      <div class="card" style="margin-bottom:14px;padding:16px 20px">
+        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">${ORC_MESES[i]}/${_orcAno}</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead><tr style="color:var(--text3);font-size:11px;text-transform:uppercase">
+            <th style="text-align:left;padding:4px 8px"></th>
+            <th style="text-align:right;padding:4px 8px">Orçado</th>
+            <th style="text-align:right;padding:4px 8px">Realizado</th>
+            <th style="text-align:right;padding:4px 8px">Desvio</th>
+          </tr></thead>
+          <tbody>
+            <tr>
+              <td style="padding:6px 8px;color:var(--green);font-weight:600">Receita</td>
+              <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.recMeta)}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.receita)}</td>
+              <td style="padding:6px 8px;text-align:right;color:${corDesvio(recDesvio,false)}">${meta.recMeta>0?(recDesvio>=0?'+':'')+recDesvio.toFixed(0)+'%':'—'}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 8px;color:var(--red);font-weight:600">Despesas</td>
+              <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.despMeta)}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.despesaTotal)}</td>
+              <td style="padding:6px 8px;text-align:right;color:${corDesvio(despDesvio,true)}">${meta.despMeta>0?(despDesvio>=0?'+':'')+despDesvio.toFixed(0)+'%':'—'}</td>
+            </tr>
+            <tr style="border-top:2px solid var(--border)">
+              <td style="padding:6px 8px;font-weight:700">Resultado</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(resultMeta)}</td>
+              <td style="padding:6px 8px;text-align:right;font-weight:700;color:${resultReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resultReal)}</td>
+              <td style="padding:6px 8px"></td>
+            </tr>
+          </tbody>
+        </table>
+        ${orcDetalheDespesas(key, meta, real)}
+      </div>`;
+  });
+  return linhas;
+}
+
+function orcDetalheDespesas(key, meta, real){
+  // Mostra categorias que estouraram o orçamento
+  const alertas=[];
+  Object.entries(meta.despCats).forEach(([cat,metaVal])=>{
+    const realVal=real.despPorCat[cat]||0;
+    if(realVal>metaVal && metaVal>0){
+      alertas.push(`<span style="font-size:11px;background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:20px;margin:2px;display:inline-block">${esc(cat)}: ${fmtBRL(realVal)} (meta ${fmtBRL(metaVal)})</span>`);
+    }
+  });
+  if(!alertas.length) return '';
+  return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border2)"><span style="font-size:11px;color:var(--text3);font-weight:600">⚠️ Categorias acima da meta:</span><br>${alertas.join('')}</div>`;
+}
+
+function orcViewResumo(){
+  let totRecMeta=0,totRecReal=0,totDespMeta=0,totDespReal=0;
+  const linhas=ORC_MESES_IDX.map((mIdx,i)=>{
+    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
+    const meta=orcMetaMes(key);
+    const real=orcRealizado(key);
+    totRecMeta+=meta.recMeta; totRecReal+=real.receita;
+    totDespMeta+=meta.despMeta; totDespReal+=real.despesaTotal;
+    const resMeta=meta.recMeta-meta.despMeta;
+    const resReal=real.receita-real.despesaTotal;
+    return `<tr>
+      <td style="padding:8px 10px;font-weight:600">${ORC_MESES[i]}</td>
+      <td style="padding:8px 10px;text-align:right;color:var(--green)">${fmtBRL(meta.recMeta)}</td>
+      <td style="padding:8px 10px;text-align:right;color:var(--red)">${fmtBRL(meta.despMeta)}</td>
+      <td style="padding:8px 10px;text-align:right;font-weight:600">${fmtBRL(resMeta)}</td>
+      <td style="padding:8px 10px;text-align:right;font-weight:700;color:${resReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resReal)}</td>
+    </tr>`;
+  }).join('');
+
+  const totResMeta=totRecMeta-totDespMeta;
+  const totResReal=totRecReal-totDespReal;
+
+  return `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+      <div class="stat-card"><div class="stat-label">Receita planejada</div><div class="stat-value" style="font-size:17px;color:var(--green)">${fmtBRL(totRecMeta)}</div></div>
+      <div class="stat-card"><div class="stat-label">Despesa planejada</div><div class="stat-value" style="font-size:17px;color:var(--red)">${fmtBRL(totDespMeta)}</div></div>
+      <div class="stat-card"><div class="stat-label">Resultado planejado</div><div class="stat-value" style="font-size:17px;color:${totResMeta>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResMeta)}</div></div>
+      <div class="stat-card"><div class="stat-label">Resultado realizado</div><div class="stat-value" style="font-size:17px;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</div></div>
+    </div>
+    <div class="fin-table-wrap">
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Mês</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Receita orçada</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Despesa orçada</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Result. orçado</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Result. real</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+        <tfoot><tr style="background:var(--surface2);font-weight:700">
+          <td style="padding:10px">TOTAL Jul–Dez</td>
+          <td style="padding:10px;text-align:right;color:var(--green)">${fmtBRL(totRecMeta)}</td>
+          <td style="padding:10px;text-align:right;color:var(--red)">${fmtBRL(totDespMeta)}</td>
+          <td style="padding:10px;text-align:right">${fmtBRL(totResMeta)}</td>
+          <td style="padding:10px;text-align:right;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+function orcImprimir(){
+  const c=document.getElementById('orc-view-content');
+  if(!c) return;
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const w=window.open('','_blank','width=1000,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>Orçamento ${_orcAno} - CINPSI</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:30px;color:#1a1a1a;font-size:13px}
+    h1{font-size:18px;margin:0 0 4px}
+    .sub{color:#666;font-size:12px;margin-bottom:20px}
+    table{width:100%;border-collapse:collapse;margin-bottom:20px}
+    th{background:#f3f4f6;padding:8px;text-align:left;font-size:11px;color:#666}
+    td{padding:6px 8px;border-bottom:1px solid #eee;font-size:12px}
+    input{border:none;background:transparent;font-size:12px;text-align:right;width:70px}
+    .card{border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:14px}
+  </style></head><body>
+  <h1>Clínica CINPSI — Orçamento ${_orcAno}</h1>
+  <p class="sub">Gerado em ${hoje}</p>
+  ${c.innerHTML}
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
+}
+
+function finImportarExtrato(){
+  document.getElementById('modal-importar-extrato')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-importar-extrato';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  mo.innerHTML=`<div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">🏦 Importar extrato bancário</div>
+      <button class="modal-close" onclick="document.getElementById('modal-importar-extrato').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.6">
+        Selecione o arquivo de despesas (.json) ou o PDF do extrato do Santander.
+      </p>
+      <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer"
+           onclick="document.getElementById('extrato-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="event.preventDefault();finHandleExtratoDrop(event)">
+        <div style="font-size:36px;margin-bottom:8px">📂</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Clique ou arraste o arquivo aqui</div>
+        <div style="font-size:12px;color:var(--text3)">Arquivo .json (pré-processado) ou PDF do extrato</div>
+      </div>
+      <input type="file" id="extrato-input" accept=".json,.pdf" style="display:none" onchange="finHandleExtratoFile(this.files[0])">
+      <div id="extrato-status" style="display:none;margin-top:12px;font-size:13px;color:var(--text3);text-align:center"></div>
+      <div id="extrato-erro" style="display:none;color:var(--red);font-size:13px;margin-top:12px"></div>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finHandleExtratoDrop(e){
+  const file=e.dataTransfer.files[0];
+  if(file) finHandleExtratoFile(file);
+}
+
+function finHandleExtratoFile(file){
+  if(!file) return;
+  const status=document.getElementById('extrato-status');
+  const erro=document.getElementById('extrato-erro');
+  erro.style.display='none';
+
+  // JSON pré-processado
+  if(file.name.toLowerCase().endsWith('.json')){
+    status.textContent='⏳ Lendo arquivo...';
+    status.style.display='block';
+    const reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        const dados=JSON.parse(e.target.result);
+        const transacoes=(Array.isArray(dados)?dados:[]).map(d=>({
+          data:d.data, desc:d.desc||d.descricao||'', valor:d.valor, cat:d.cat||d.categoria||null
+        })).filter(t=>t.data&&t.valor>0);
+        status.style.display='none';
+        if(!transacoes.length){
+          erro.textContent='Nenhuma despesa válida no arquivo.';
+          erro.style.display='block';
+          return;
+        }
+        document.getElementById('modal-importar-extrato').remove();
+        finRevisarFatura(transacoes);
+      }catch(err){
+        status.style.display='none';
+        erro.textContent='Erro ao ler o arquivo JSON.';
+        erro.style.display='block';
+      }
+    };
+    reader.readAsText(file);
+    return;
+  }
+
+  // PDF do extrato
+  if(file.name.toLowerCase().endsWith('.pdf')){
+    status.textContent='⏳ Processando PDF do extrato...';
+    status.style.display='block';
+    const reader=new FileReader();
+    reader.onload=async function(e){
+      try{
+        if(!window.pdfjsLib){
+          await new Promise((res,rej)=>{
+            const script=document.createElement('script');
+            script.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+            script.onload=res; script.onerror=rej;
+            document.head.appendChild(script);
+          });
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
+        const pdfData=new Uint8Array(e.target.result);
+        const pdf=await pdfjsLib.getDocument({data:pdfData}).promise;
+        let textoTotal='';
+        for(let i=1;i<=pdf.numPages;i++){
+          const page=await pdf.getPage(i);
+          const content=await page.getTextContent();
+          const linhasMap={};
+          content.items.forEach(it=>{
+            if(!it.str.trim()) return;
+            const y=Math.round(it.transform[5]);
+            if(!linhasMap[y]) linhasMap[y]={partes:[]};
+            linhasMap[y].partes.push({x:it.transform[4], str:it.str});
+          });
+          Object.keys(linhasMap).map(Number).sort((a,b)=>b-a).forEach(y=>{
+            const partes=linhasMap[y].partes.sort((a,b)=>a.x-b.x);
+            textoTotal+=partes.map(p=>p.str).join(' ').replace(/\s+/g,' ').trim()+'\n';
+          });
+        }
+        const transacoes=finParseExtrato(textoTotal);
+        status.style.display='none';
+        if(!transacoes.length){
+          erro.textContent='Nenhuma saída encontrada no extrato.';
+          erro.style.display='block';
+          return;
+        }
+        document.getElementById('modal-importar-extrato').remove();
+        finRevisarFatura(transacoes);
+      }catch(err){
+        status.style.display='none';
+        erro.textContent='Erro ao processar o PDF do extrato.';
+        erro.style.display='block';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+
+  erro.textContent='Formato não suportado. Use .json ou .pdf';
+  erro.style.display='block';
+}
+
+// Extrai apenas SAÍDAS (valores negativos) do extrato Santander
+function finParseExtrato(texto){
+  const transacoes=[];
+  const linhas=texto.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const reData=/(\d{2}\/\d{2}\/\d{4})/;
+  const reNeg=/-(\d{1,3}(?:\.\d{3})*,\d{2})/;
+  // Ignora: pagamentos de cartão (já vão na fatura), transferências internas
+  const ignorar=/pagamento cartao credito|centro integrado de neuro|pix enviado tatiane|pix enviado adriana|pix enviado luciana|pix enviado mayara|pix enviado erika|pix enviado leticia|pix enviado priscila|pix enviado nayra|pix enviado juliana/i;
+
+  linhas.forEach(linha=>{
+    const mData=reData.exec(linha); if(!mData) return;
+    const mNeg=reNeg.exec(linha); if(!mNeg) return;
+    if(ignorar.test(linha)) return;
+    const valor=parseFloat(mNeg[1].replace(/\./g,'').replace(',','.'));
+    if(!valor||valor<=0) return;
+    let desc=linha.substring(mData.index+10, mNeg.index)
+      .replace(/\b\d{6,}\b/g,'').replace(/\s+/g,' ').trim();
+    if(!desc||desc.length<3) desc='Despesa';
+    // Limpa prefixos comuns
+    desc=desc.replace(/^(Pix Enviado|Pagamento De Boleto Outros Bancos|Pagamento Boleto|Compra Cartao Deb Mc \d{2}\/\d{2}|Compra Cartao Deb)\s*/i,'').trim();
+    if(!desc) desc='Despesa';
+    const [d,m,a]=mData[1].split('/');
+    transacoes.push({data:`${a}-${m}-${d}`, desc, valor, cat:null});
+  });
+
+  return transacoes;
+}
+
 function finImportarFatura(){
   document.getElementById('modal-importar-fatura')?.remove();
   const mo=document.createElement('div');
@@ -6134,14 +6561,14 @@ function finRevisarFatura(transacoes){
   }
 
   if(!transacoes.length) transacoes=[{data:new Date().toISOString().split('T')[0],desc:'',valor:0}];
-  window._faturaImport=transacoes.map((t,i)=>({...t,cat:sugerirCat(t.desc),idx:i,ativo:true}));
+  window._faturaImport=transacoes.map((t,i)=>({...t,cat:t.cat||sugerirCat(t.desc),idx:i,ativo:true}));
 
   const hoje=new Date().toISOString().split('T')[0];
   const renderLinhas=()=>window._faturaImport.map((t,i)=>
     `<tr id="fatura-row-${i}">
       <td style="padding:5px 6px"><input type="date" class="form-input" style="font-size:12px;padding:4px 6px;width:130px" value="${t.data||hoje}" onchange="window._faturaImport[${i}].data=this.value"></td>
       <td style="padding:5px 6px"><input class="form-input" style="font-size:12px;padding:4px 6px" value="${esc(t.desc)}" onchange="window._faturaImport[${i}].desc=this.value"></td>
-      <td style="padding:5px 6px"><select class="form-select" style="font-size:12px;padding:4px 6px" onchange="window._faturaImport[${i}].cat=this.value">${cats.map(c=>`<option value="${c}" ${c===sugerirCat(t.desc)?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td style="padding:5px 6px"><select class="form-select" style="font-size:12px;padding:4px 6px" onchange="window._faturaImport[${i}].cat=this.value">${cats.map(c=>`<option value="${c}" ${c===(t.cat||sugerirCat(t.desc))?'selected':''}>${c}</option>`).join('')}</select></td>
       <td style="padding:5px 6px"><input type="number" class="form-input" style="font-size:12px;padding:4px 6px;width:90px;text-align:right" value="${t.valor||''}" step="0.01" onchange="window._faturaImport[${i}].valor=parseFloat(this.value)||0;finAtualizarTotalFatura()"></td>
       <td style="padding:5px 4px;text-align:center"><button style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text3)" onclick="finRemoverLinhaFatura(${i})">×</button></td>
     </tr>`
