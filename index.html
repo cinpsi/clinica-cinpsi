@@ -4982,87 +4982,219 @@ function finOpenConfigPrevisao(){
   toast('Clique em ⚙️ ao lado de cada paciente para configurar.');
 }
 
+// ── CONFIGURAÇÃO DO DRE (grupos de categorias) ──
+function dreLoadConfig(){
+  try{ return JSON.parse(localStorage.getItem('cinpsi_dre_config')||'null'); }catch(e){ return null; }
+}
+function dreSaveConfig(cfg){
+  localStorage.setItem('cinpsi_dre_config',JSON.stringify(cfg));
+  _cache['cinpsi_dre_config']=cfg;
+  if(typeof _fbWrite==='function') _fbWrite('cinpsi_dre_config',cfg);
+}
+// Grupos do DRE cascata. Cada grupo tem uma lista de categorias.
+function dreDefaultConfig(){
+  return {
+    custoVariavel:{label:'Custo Variável', cats:[], incluiRepasses:true},
+    custoFixo:{label:'Custo Fixo', cats:[]},
+    despesas:{label:'Despesas', cats:[]},
+    juros:{label:'Juros / Financiamentos', cats:[]},
+    impostos:{label:'Impostos', cats:['Impostos e Taxas']},
+  };
+}
+function dreGetConfig(){ return dreLoadConfig()||dreDefaultConfig(); }
+
+const DRE_CATS_TODAS=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Marketing','Consumo','Outras Despesas'];
+
 function finRenderDRE(){
   const el=document.getElementById('fin-dre-full'); if(!el) return;
+  const cfg=dreGetConfig();
   const mRec  = finLoad(FK.REC).filter(r=>finInMonth(r.data));
   const mDesp = finLoad(FK.DESP).filter(d=>finInMonth(d.data));
 
-  // Receita bruta
-  const recBruta = mRec.reduce((s,r)=>s+r.valor,0);
+  // Faturamento (receita paga) + qtd atendimentos
   const recPaga  = mRec.filter(r=>r.status==='Pago').reduce((s,r)=>s+r.valor,0);
+  const qtdAtend = mRec.filter(r=>r.status==='Pago').length;
+  const ticketMedio = qtdAtend>0?recPaga/qtdAtend:0;
 
-  // Impostos (categoria Impostos e Taxas)
-  const impostos = mDesp.filter(d=>d.cat==='Impostos e Taxas').reduce((s,d)=>s+d.valor,0);
-
-  // Repasses às terapeutas — usa valor real pago se disponível, senão usa total da aba Repasses
+  // Repasses do mês
   const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
   const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
   const repasseRealMes=repassesReais[mesKey]||{};
-
-  // Verifica se há valores reais preenchidos
   const temRepasseReal=Object.keys(repasseRealMes).length>0;
-
   let repasses=0;
   if(temRepasseReal){
-    // Usa valores reais preenchidos na aba Repasses
     const fat=finBuildFat();
-    repasses=fat.reduce((s,r)=>{
-      return s+(repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:r.repasse);
-    },0);
+    repasses=fat.reduce((s,r)=>s+(repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:r.repasse),0);
   } else {
-    // Usa o total calculado da aba Repasses (finBuildFat) — mesma base de dados
     repasses=finBuildFat().reduce((s,r)=>s+r.repasse,0);
   }
 
-  // Despesas Fixas
-  const FIXAS=['Aluguel / Condomínio','Utilidades','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento'];
-  const despFixas = mDesp.filter(d=>FIXAS.includes(d.cat)).reduce((s,d)=>s+d.valor,0);
-  const despFixasDetalhe = FIXAS.map(cat=>({cat,val:mDesp.filter(d=>d.cat===cat).reduce((s,d)=>s+d.valor,0)})).filter(x=>x.val>0);
+  // Soma despesas de um grupo (por suas categorias)
+  const somaGrupo=(grupo)=>{
+    let t=grupo.cats.reduce((s,cat)=>s+mDesp.filter(d=>d.cat===cat).reduce((ss,d)=>ss+d.valor,0),0);
+    if(grupo.incluiRepasses) t+=repasses;
+    return t;
+  };
+  const detalheGrupo=(grupo)=>{
+    const det=grupo.cats.map(cat=>({label:cat,val:mDesp.filter(d=>d.cat===cat).reduce((s,d)=>s+d.valor,0)})).filter(x=>x.val>0);
+    if(grupo.incluiRepasses&&repasses>0) det.unshift({label:'Repasses aos profissionais',val:repasses});
+    return det;
+  };
 
-  // Despesas Variáveis
-  const VARIAVEIS=['Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Consumo','Outras Despesas'];
-  const despVar = mDesp.filter(d=>VARIAVEIS.includes(d.cat)).reduce((s,d)=>s+d.valor,0);
-  const despVarDetalhe = VARIAVEIS.map(cat=>({cat,val:mDesp.filter(d=>d.cat===cat).reduce((s,d)=>s+d.valor,0)})).filter(x=>x.val>0);
+  const custoVar=somaGrupo(cfg.custoVariavel);
+  const custoFixo=somaGrupo(cfg.custoFixo);
+  const despesas=somaGrupo(cfg.despesas);
+  const juros=somaGrupo(cfg.juros);
+  const impostos=somaGrupo(cfg.impostos);
 
-  // Cálculos
-  const lucroBruto   = recPaga - impostos;
-  const lucroOpera   = lucroBruto - repasses - despFixas;
-  const resultado    = lucroOpera - despVar;
+  // Cascata
+  const margemContrib = recPaga - custoVar;
+  const lajir = margemContrib - custoFixo - despesas;
+  const lajr = lajir - juros;
+  const lucroLiquido = lajr - impostos;
 
-  const row=(label,val,cls='',indent=false)=>`
-    <div class="fin-dre-full-row${cls?' '+cls:''}">
+  const pct=(v)=>recPaga>0?((v/recPaga*100).toFixed(1)+'%'):'—';
+
+  const row=(label,val,indent,showPct)=>`
+    <div class="fin-dre-full-row">
       <span class="${indent?'fin-dre-indent':''}">${label}</span>
-      <span class="${val>=0?'fin-dre-pos':'fin-dre-neg'}">${val>=0?'':'− '}${finFmt(Math.abs(val))}</span>
+      <span style="display:flex;gap:14px;align-items:center">
+        ${showPct?`<span style="font-size:11px;color:var(--text3);min-width:44px;text-align:right">${pct(Math.abs(val))}</span>`:''}
+        <span class="${val>=0?'fin-dre-pos':'fin-dre-neg'}" style="min-width:100px;text-align:right">${val>=0?'':'− '}${finFmt(Math.abs(val))}</span>
+      </span>
     </div>`;
   const section=label=>`<div class="fin-dre-full-row section">${label}</div>`;
   const subtotal=(label,val)=>`
     <div class="fin-dre-full-row subtotal">
       <span>${label}</span>
-      <span class="${val>=0?'fin-dre-pos':'fin-dre-neg'}">${val>=0?'+ ':'− '}${finFmt(Math.abs(val))}</span>
+      <span style="display:flex;gap:14px;align-items:center">
+        <span style="font-size:11px;color:var(--text3);min-width:44px;text-align:right">${pct(val)}</span>
+        <span class="${val>=0?'fin-dre-pos':'fin-dre-neg'}" style="min-width:100px;text-align:right">${finFmt(val)}</span>
+      </span>
     </div>`;
-  const total=(label,val)=>`
+  const totalRow=(label,val)=>`
     <div class="fin-dre-full-row ${val>=0?'total':'total-neg'}">
       <span>${label}</span>
-      <span>${val>=0?'+ ':'− '}${finFmt(Math.abs(val))}</span>
+      <span style="display:flex;gap:14px;align-items:center">
+        <span style="font-size:11px;min-width:44px;text-align:right;opacity:.7">${pct(val)}</span>
+        <span style="min-width:100px;text-align:right">${finFmt(val)}</span>
+      </span>
     </div>`;
 
+  const grupoBloco=(grupo,total)=>{
+    if(!grupo.cats.length && !grupo.incluiRepasses) return row(grupo.label+' (nenhuma categoria configurada)',0,false,false);
+    const det=detalheGrupo(grupo);
+    return row('(-) '+grupo.label, -total, false, true)
+      + det.map(x=>row(x.label,-x.val,true,false)).join('');
+  };
+
   el.innerHTML=`
-    ${section('1. Receitas')}
-    ${row('Receita bruta (todas as consultas)', recBruta, '', false)}
-    ${row('Receitas pagas', recPaga, '', false)}
-    ${row('Receitas pendentes', recBruta-recPaga, '', true)}
-    ${section('2. Impostos e Taxas')}
-    ${row('Impostos e Taxas', -impostos, '', false)}
-    ${subtotal('= Lucro Bruto', lucroBruto)}
-    ${section('3. Repasses às Terapeutas')}
-    ${row('Repasses calculados', -repasses, '', false)}
-    ${section('4. Despesas Fixas')}
-    ${despFixasDetalhe.length?despFixasDetalhe.map(x=>row(x.cat,-x.val,'',true)).join(''):row('Nenhuma despesa fixa lançada',0,'',true)}
-    ${subtotal('= Lucro Operacional', lucroOpera)}
-    ${section('5. Despesas Variáveis')}
-    ${despVarDetalhe.length?despVarDetalhe.map(x=>row(x.cat,-x.val,'',true)).join(''):row('Nenhuma despesa variável lançada',0,'',true)}
-    ${total('= Resultado Líquido do Mês', resultado)}
+    <div style="display:flex;justify-content:flex-end;padding:8px 12px;border-bottom:1px solid var(--border)">
+      <button class="btn-ghost" style="font-size:12px" onclick="dreOpenConfig()">⚙️ Configurar grupos</button>
+    </div>
+    <div class="fin-dre-full-row" style="background:var(--surface2)">
+      <span style="font-weight:600">Qtd. Atendimentos (pagos)</span>
+      <span style="font-weight:700">${qtdAtend}</span>
+    </div>
+    <div class="fin-dre-full-row" style="background:var(--surface2)">
+      <span style="font-weight:600">Ticket médio</span>
+      <span style="font-weight:600;color:var(--text2)">${finFmt(ticketMedio)}</span>
+    </div>
+    ${section('FATURAMENTO')}
+    ${row('Receita paga no mês', recPaga, false, false)}
+    ${section('CUSTO VARIÁVEL')}
+    ${grupoBloco(cfg.custoVariavel, custoVar)}
+    ${subtotal('= MARGEM DE CONTRIBUIÇÃO', margemContrib)}
+    ${section('CUSTOS FIXOS E DESPESAS')}
+    ${grupoBloco(cfg.custoFixo, custoFixo)}
+    ${grupoBloco(cfg.despesas, despesas)}
+    ${subtotal('= LAJIR (result. operacional)', lajir)}
+    ${section('JUROS / FINANCIAMENTOS')}
+    ${grupoBloco(cfg.juros, juros)}
+    ${subtotal('= LAJR', lajr)}
+    ${section('IMPOSTOS')}
+    ${grupoBloco(cfg.impostos, impostos)}
+    ${totalRow('= LUCRO LÍQUIDO', lucroLiquido)}
   `;
+}
+
+function dreOpenConfig(){
+  document.getElementById('modal-dre-config')?.remove();
+  const cfg=dreGetConfig();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-dre-config';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  // Descobre em qual grupo cada categoria está
+  function catNoGrupo(cat){
+    for(const gk of Object.keys(cfg)){
+      if(cfg[gk].cats.includes(cat)) return gk;
+    }
+    return '';
+  }
+
+  const grupos=[
+    {k:'custoVariavel',label:'Custo Variável'},
+    {k:'custoFixo',label:'Custo Fixo'},
+    {k:'despesas',label:'Despesas'},
+    {k:'juros',label:'Juros / Financiamentos'},
+    {k:'impostos',label:'Impostos'},
+  ];
+
+  const linhas=DRE_CATS_TODAS.map(cat=>{
+    const atual=catNoGrupo(cat);
+    return `<tr>
+      <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid var(--border2)">${esc(cat)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2)">
+        <select class="form-select" style="font-size:12px;padding:5px 8px" data-cat="${esc(cat)}">
+          <option value="">— Não incluir —</option>
+          ${grupos.map(g=>`<option value="${g.k}" ${atual===g.k?'selected':''}>${g.label}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+
+  mo.innerHTML=`<div class="modal" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Configurar grupos do DRE</div>
+      <button class="modal-close" onclick="document.getElementById('modal-dre-config').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <p style="font-size:13px;color:var(--text3);margin:0 0 16px">Escolha em qual grupo do DRE cada categoria de despesa entra. Categorias "Não incluir" ficam de fora do cálculo.</p>
+      <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#3730A3">
+        💡 Os <strong>repasses aos profissionais</strong> entram automaticamente no <strong>Custo Variável</strong>.
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Categoria</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Grupo no DRE</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-dre-config').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="dreSalvarConfig()">💾 Salvar configuração</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function dreSalvarConfig(){
+  const cfg=dreDefaultConfig();
+  // Zera todas as cats (mantém labels e incluiRepasses)
+  Object.keys(cfg).forEach(k=>cfg[k].cats=[]);
+  document.querySelectorAll('#modal-dre-config select[data-cat]').forEach(sel=>{
+    const cat=sel.getAttribute('data-cat');
+    const grupo=sel.value;
+    if(grupo && cfg[grupo]) cfg[grupo].cats.push(cat);
+  });
+  dreSaveConfig(cfg);
+  document.getElementById('modal-dre-config').remove();
+  finRenderDRE();
+  toast('✅ Configuração do DRE salva!');
 }
 
 function finUpdateProfFilter(mRec){
