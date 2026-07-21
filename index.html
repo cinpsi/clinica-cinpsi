@@ -61,23 +61,33 @@
   --red:#991B1B;--red-light:#FEF2F2;
   --purple:#6C3483;--purple-light:#F5EEF8;--purple-mid:#9B59B6;
   --teal:#0F6E56;--teal-light:#E1F5EE;
-  --radius:12px;--radius-sm:8px;
-  --shadow:0 1px 3px rgba(0,0,0,.06),0 1px 2px rgba(0,0,0,.04);
-  --shadow-md:0 4px 12px rgba(0,0,0,.08),0 2px 4px rgba(0,0,0,.04);
+  --radius:14px;--radius-sm:9px;--radius-lg:20px;
+  --shadow:0 1px 2px rgba(28,20,10,.05),0 1px 1px rgba(28,20,10,.045);
+  --shadow-md:0 10px 24px -8px rgba(28,20,10,.16),0 2px 6px rgba(28,20,10,.06);
+  --shadow-lg:0 24px 48px -14px rgba(28,20,10,.24),0 6px 16px rgba(28,20,10,.08);
+  --shadow-focus:0 0 0 3px rgba(24,95,165,.18);
+  --ease:cubic-bezier(.22,.85,.32,1);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6}
+body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a,button,input,select,textarea{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent-mid);outline-offset:2px;border-radius:4px}
+button:focus-visible{outline-offset:2px}
+.form-input:focus,.form-select:focus,.form-textarea:focus,.login-input:focus,.filter-input:focus{box-shadow:var(--shadow-focus)}
+::selection{background:var(--accent-mid);color:#fff}
 
 /* ── LOGIN ── */
-#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:40px 36px;width:100%;max-width:380px;box-shadow:var(--shadow-md)}
-.login-logo{font-family:'DM Serif Display',serif;font-size:24px;color:var(--accent);margin-bottom:4px}
-.login-sub{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:32px}
+#login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%,var(--accent-light) 0%,var(--bg) 55%)}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:44px 38px;width:100%;max-width:380px;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+.login-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:linear-gradient(90deg,var(--accent),var(--purple-mid))}
+.login-logo{font-family:'DM Serif Display',serif;font-size:25px;color:var(--accent);margin-bottom:4px}
+.login-sub{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:32px}
 .login-label{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:5px;display:block}
-.login-input{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);margin-bottom:14px;outline:none;transition:border-color .15s}
+.login-input{width:100%;border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;font-size:14px;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);margin-bottom:14px;outline:none;transition:border-color .15s var(--ease),box-shadow .15s var(--ease)}
 .login-input:focus{border-color:var(--purple-mid)}
-.login-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:11px;font-size:14px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background .15s}
-.login-btn:hover{background:#124e8a}
+.login-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:12px;font-size:14px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;transition:background .15s var(--ease),transform .1s var(--ease),box-shadow .15s var(--ease);box-shadow:var(--shadow)}
+.login-btn:hover{background:#124e8a;box-shadow:var(--shadow-md)}
+.login-btn:active{transform:translateY(1px)}
 .login-error{font-size:12px;color:var(--red);background:var(--red-light);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:14px;display:none}
 .login-hint{font-size:11px;color:var(--text3);margin-top:16px;text-align:center;padding-top:14px;border-top:1px solid var(--border)}
 
@@ -91,10 +101,14 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .sidebar-nav{padding:14px 12px;flex:1;overflow-y:auto}
 .nav-section{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text3);padding:0 8px;margin:14px 0 5px}
 .nav-section:first-child{margin-top:0}
-.nav-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);font-size:13px;transition:all .15s;border:none;background:none;width:100%;text-align:left}
+.nav-item{position:relative;display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:var(--radius-sm);cursor:pointer;color:var(--text2);font-size:13px;transition:background .15s var(--ease),color .15s var(--ease);border:none;background:none;width:100%;text-align:left}
 .nav-item:hover{background:var(--surface2);color:var(--text)}
-.nav-item.active-admin{background:var(--accent-light);color:var(--accent);font-weight:500}
-.nav-item.active-sup{background:var(--purple-light);color:var(--purple);font-weight:500}
+.nav-item.active-admin,.nav-item.active-sup{font-weight:500}
+.nav-item.active-admin{background:var(--accent-light);color:var(--accent)}
+.nav-item.active-sup{background:var(--purple-light);color:var(--purple)}
+.nav-item.active-admin::before,.nav-item.active-sup::before{content:'';position:absolute;left:-12px;top:15%;bottom:15%;width:3px;border-radius:0 3px 3px 0}
+.nav-item.active-admin::before{background:var(--accent)}
+.nav-item.active-sup::before{background:var(--purple)}
 .nav-icon{font-size:15px;width:18px;text-align:center;flex-shrink:0}
 .sidebar-footer{padding:13px 18px;border-top:1px solid var(--border)}
 .user-chip{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -107,7 +121,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .btn-logout{width:100%;background:none;border:1px solid var(--border2);border-radius:var(--radius-sm);padding:6px;font-size:12px;color:var(--text2);font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s}
 .btn-logout:hover{background:var(--red-light);color:var(--red);border-color:#fca5a5}
 .main{flex:1;display:flex;flex-direction:column;min-width:0}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:15px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:15px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10;box-shadow:0 1px 0 rgba(28,20,10,.03)}
 .topbar-title{font-family:'DM Serif Display',serif;font-size:22px;color:var(--text);line-height:1}
 .topbar-sub{font-size:12px;color:var(--text3);margin-top:2px}
 .topbar-actions{display:flex;gap:8px;align-items:center}
@@ -115,23 +129,28 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .view{display:none}.view.active{display:block}
 
 /* ── BUTTONS ── */
-.btn-primary{background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
-.btn-primary:hover{background:#124e8a}
-.btn-purple{background:var(--purple);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s}
-.btn-purple:hover{background:#5a2b6f}
-.btn-ghost{background:none;color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s}
+.btn-primary,.btn-purple,.btn-save,.btn-save-purple{transition:background .15s var(--ease),transform .1s var(--ease),box-shadow .15s var(--ease)}
+.btn-primary:active,.btn-purple:active,.btn-save:active,.btn-save-purple:active{transform:translateY(1px)}
+.btn-primary{background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-primary:hover{background:#124e8a;box-shadow:var(--shadow)}
+.btn-purple{background:var(--purple);color:#fff;border:none;border-radius:var(--radius-sm);padding:9px 18px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.btn-purple:hover{background:#5a2b6f;box-shadow:var(--shadow)}
+.btn-ghost{background:none;color:var(--text2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:8px 14px;font-size:13px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s var(--ease)}
 .btn-ghost:hover{background:var(--surface2);color:var(--text)}
 .btn-ghost.tog-active{background:var(--accent-light);color:var(--accent);border-color:var(--accent-mid)}
 .btn-save{background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 26px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer}
 .btn-save:hover{background:#124e8a}
 .btn-save-purple{background:var(--purple);color:#fff;border:none;border-radius:var(--radius-sm);padding:10px 26px;font-size:13px;font-weight:500;font-family:'DM Sans',sans-serif;cursor:pointer}
 .btn-save-purple:hover{background:#5a2b6f}
-.btn-delete{background:none;border:1px solid #f5c6c6;color:#c0392b;border-radius:var(--radius-sm);padding:5px 10px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s}
+.btn-delete{background:none;border:1px solid #f5c6c6;color:#c0392b;border-radius:var(--radius-sm);padding:5px 10px;font-size:12px;font-family:'DM Sans',sans-serif;cursor:pointer;transition:all .15s var(--ease)}
 .btn-delete:hover{background:var(--red-light)}
 
 /* ── STATS ── */
 .stats-bar{display:grid;gap:14px;margin-bottom:22px}
-.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:15px 17px;box-shadow:var(--shadow)}
+.stat-card,.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);transition:box-shadow .18s var(--ease),transform .18s var(--ease),border-color .18s var(--ease)}
+.stat-card{padding:15px 17px}
+.card{padding:18px}
+.stat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px);border-color:var(--border2)}
 .stat-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;font-weight:500}
 .stat-value{font-family:'DM Serif Display',serif;font-size:27px;color:var(--text);margin-top:3px;line-height:1}
 .stat-sub{font-size:11px;color:var(--text3);margin-top:3px}
@@ -157,8 +176,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 /* ── TABLES ── */
 .data-table{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden;width:100%}
 .data-table table{width:100%;border-collapse:collapse}
-.data-table th{background:var(--surface2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:11px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
-.data-table td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.data-table th{background:var(--surface2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text3);padding:12px 14px;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table td{padding:11px 14px;font-size:13px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;transition:background .1s var(--ease)}
 .data-table tr:last-child td{border-bottom:none}
 .data-table tr:hover td{background:var(--surface2)}
 
@@ -175,8 +194,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .kanban-col-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .kanban-col-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
 .kanban-count{font-size:11px;background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:1px 7px;color:var(--text3);font-weight:500}
-.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px;margin-bottom:7px;cursor:pointer;transition:all .15s;box-shadow:var(--shadow)}
-.kanban-card:hover{box-shadow:var(--shadow-md);border-color:var(--accent-mid)}
+.kanban-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px;margin-bottom:7px;cursor:pointer;transition:box-shadow .18s var(--ease),transform .18s var(--ease),border-color .18s var(--ease);box-shadow:var(--shadow)}
+.kanban-card:hover{box-shadow:var(--shadow-md);border-color:var(--accent-mid);transform:translateY(-2px)}
 .kc-name{font-weight:500;font-size:13px;margin-bottom:3px}
 .kc-service{font-size:11px;color:var(--text3);margin-bottom:5px}
 .kc-footer{display:flex;justify-content:space-between;align-items:center}
@@ -184,9 +203,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .kc-date{font-size:10px;color:var(--text3)}
 
 /* ── MODAL ── */
-.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
+.modal-overlay{position:fixed;inset:0;background:rgba(20,16,12,.45);backdrop-filter:blur(1px);z-index:100;display:none;align-items:center;justify-content:center;padding:20px}
 .modal-overlay.open{display:flex}
-.modal{background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-md);width:100%;max-width:620px;max-height:90vh;overflow-y:auto}
+.modal{background:var(--surface);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);width:100%;max-width:620px;max-height:90vh;overflow-y:auto;animation:modalIn .18s var(--ease)}
+@keyframes modalIn{from{opacity:0;transform:translateY(8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
 .modal-title{font-family:'DM Serif Display',serif;font-size:18px;color:var(--text);font-weight:400}
 .modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
 .modal-title{font-family:'DM Serif Display',serif;font-size:19px}
@@ -224,9 +244,9 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 /* ── RECORD CARDS ── */
 .records-list{display:flex;flex-direction:column;gap:9px}
-.record-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;transition:all .15s;box-shadow:var(--shadow);position:relative;overflow:hidden}
-.record-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--purple);opacity:0;transition:opacity .15s}
-.record-card:hover{border-color:var(--purple-mid);box-shadow:var(--shadow-md)}
+.record-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;cursor:pointer;transition:box-shadow .18s var(--ease),transform .18s var(--ease),border-color .18s var(--ease);box-shadow:var(--shadow);position:relative;overflow:hidden}
+.record-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--purple);opacity:0;transition:opacity .15s var(--ease)}
+.record-card:hover{border-color:var(--purple-mid);box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .record-card:hover::before{opacity:1}
 .rec-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:9px}
 .rec-patient{font-family:'DM Serif Display',serif;font-size:16px;color:var(--text)}
@@ -293,10 +313,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
 /* ── EMPTY ── */
 .empty-state{text-align:center;padding:56px 20px;color:var(--text3)}
-.empty-icon{font-size:38px;margin-bottom:11px;opacity:.5}
+.empty-icon{font-size:38px;margin-bottom:11px;opacity:.45}
+.empty-state strong{color:var(--text2);font-weight:500}
 
 /* ── TOAST ── */
-.toast{position:fixed;bottom:22px;right:22px;background:var(--text);color:#fff;padding:11px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;box-shadow:var(--shadow-md);transform:translateY(80px);opacity:0;transition:all .25s ease;z-index:999}
+.toast{position:fixed;bottom:22px;right:22px;background:var(--text);color:#fff;padding:11px 18px;border-radius:var(--radius-sm);font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);transform:translateY(80px);opacity:0;transition:all .3s var(--ease);z-index:999}
 .toast.show{transform:translateY(0);opacity:1}
 
 /* ── SYNC BADGE ── */
@@ -313,7 +334,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fin-month-label{font-family:'DM Serif Display',serif;font-size:15px;color:var(--text);min-width:140px;text-align:center;font-weight:400}
 
 .fin-summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px}
-.fin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden;box-shadow:var(--shadow)}
+.fin-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;position:relative;overflow:hidden;box-shadow:var(--shadow);transition:box-shadow .18s var(--ease),transform .18s var(--ease)}
+.fin-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .fin-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;border-radius:var(--radius) var(--radius) 0 0}
 .fin-card-receita::before{background:var(--green)}
 .fin-card-despesa::before{background:var(--red)}
@@ -364,7 +386,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fin-forma-tag{background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:4px;font-size:11.5px}
 
 .fin-pro-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
-.fin-pro-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.fin-pro-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);transition:box-shadow .18s var(--ease),transform .18s var(--ease)}
+.fin-pro-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .fin-pro-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px}
 .fin-pro-value{font-family:'DM Serif Display',serif;font-size:19px;color:var(--green);margin:8px 0 4px}
 .fin-pro-meta{font-size:11.5px;color:var(--text3)}
@@ -399,7 +422,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fin-alerta-title{font-size:13px;font-weight:600;color:var(--amber)}
 .fin-alerta-dismiss{background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;transition:all .15s}
 .fin-alerta-dismiss:hover{background:var(--surface2);color:var(--text)}
-.fin-alerta-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface);border-radius:var(--radius-sm);margin-bottom:8px;border-left:3px solid var(--amber);box-shadow:var(--shadow)}
+.fin-alerta-item{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--surface);border-radius:var(--radius-sm);margin-bottom:8px;border-left:3px solid var(--amber);box-shadow:var(--shadow);transition:box-shadow .15s var(--ease)}
+.fin-alerta-item:hover{box-shadow:var(--shadow-md)}
 .fin-alerta-item.vencido{border-left-color:var(--red)}
 .fin-alerta-item:last-child{margin-bottom:0}
 .fin-alerta-desc{font-size:13px;font-weight:500;color:var(--text)}
@@ -407,7 +431,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fin-alerta-valor{font-family:'DM Serif Display',serif;font-size:16px;color:var(--amber);margin:0 14px}
 .fin-alerta-item.vencido .fin-alerta-valor{color:var(--red)}
 
-.fin-import-zone{border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all .2s;margin-bottom:18px}
+.fin-import-zone{border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer;transition:all .2s var(--ease);margin-bottom:18px}
 .fin-import-zone:hover{border-color:var(--accent-mid);background:var(--accent-light)}
 .fin-import-icon{font-size:32px;margin-bottom:10px}
 .fin-import-title{font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px}
@@ -594,7 +618,7 @@ const FIREBASE_CONFIG = {
 // STORAGE LAYER — Firebase Firestore + localStorage como cache
 // ════════════════════════════════════════════════════════════
 const K={USR:'cl_users',SES:'cl_session',LEADS:'cl_leads',PAC:'cl_pac',REC:'cl_rec',FAT:'cl_fat',CONV:'cl_conv_antigos',HIST:'cl_fat_historico',PTI:'cl_pti',PTIPRO:'cl_pti_pro',REGPRO:'cl_reg_pro'};
-const FK = { REC: 'cinpsi_receitas', DESP: 'cinpsi_despesas', FORN: 'cinpsi_fornecedores', PREV: 'cinpsi_previsao_config' };
+const FK = { REC: 'cinpsi_receitas', DESP: 'cinpsi_despesas', FORN: 'cinpsi_fornecedores', PREV: 'cinpsi_previsao_config', SALDO: 'cinpsi_fluxo_saldo_base', FLUXO_REC: 'cinpsi_fluxo_entradas_extrato' };
 
 let _db=null;
 let _fbReady=false;
@@ -608,7 +632,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, FK.SALDO, FK.FLUXO_REC, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -4453,6 +4477,7 @@ function renderFinanceiro(c){
     <button class="fin-tab" onclick="finSwitchTab('comparativo')">📈 Comparativo</button>
     <button class="fin-tab" onclick="finSwitchTab('previsao-caixa')">💰 Previsão de Caixa</button>
     <button class="fin-tab" onclick="finSwitchTab('orcamento')">🎯 Orçamento Anual</button>
+    <button class="fin-tab" onclick="finSwitchTab('fluxo-caixa')">💵 Fluxo de Caixa</button>
   </div>
 
   <!-- VISÃO GERAL -->
@@ -4600,6 +4625,24 @@ function renderFinanceiro(c){
     </div>
     <div id="fin-orcamento-content"></div>
   </div>
+
+  <!-- FLUXO DE CAIXA -->
+  <div class="fin-panel" id="fin-panel-fluxo-caixa">
+    <div class="fin-section-header">
+      <div class="fin-section-title">💵 Fluxo de Caixa</div>
+      <button class="btn-ghost" onclick="finImportarEntradasExtrato()">📂 Importar entradas do extrato</button>
+    </div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px" id="fin-fluxo-saldo-info"></div>
+    <div style="display:flex;gap:3px;background:var(--surface2);border-radius:var(--radius-sm);padding:3px;margin-bottom:10px;width:fit-content;border:1px solid var(--border)">
+      <button class="fin-tab active" id="fin-fluxo-tab-diario" onclick="finFluxoTab('diario')" style="padding:7px 18px">📆 Diário</button>
+      <button class="fin-tab" id="fin-fluxo-tab-mensal" onclick="finFluxoTab('mensal')" style="padding:7px 18px">🗓️ Mensal</button>
+      <button class="fin-tab" id="fin-fluxo-tab-lancamentos" onclick="finFluxoTab('lancamentos')" style="padding:7px 18px">📋 Lançamentos</button>
+    </div>
+    <p style="font-size:12px;color:var(--text3);font-style:italic;margin:0 0 16px">💡 Entradas = valores recebidos importados do extrato bancário (independente do Doctoralia). Saídas = despesas lançadas no sistema (extrato, fatura ou manuais). Este fluxo é só sobre movimento real de caixa — não substitui o controle de Receitas/Repasses por terapeuta, que continua vindo do Doctoralia.</p>
+    <div id="fin-fluxo-diario-content"></div>
+    <div id="fin-fluxo-mensal-content" style="display:none"></div>
+    <div id="fin-fluxo-lancamentos-content" style="display:none"></div>
+  </div>
   `;
 
   // Modais financeiros
@@ -4716,7 +4759,7 @@ function finChangeMonth(d){
   fin_refresh();
 }
 function finSwitchTab(name){
-  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','comparativo','previsao-caixa','orcamento'];
+  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','comparativo','previsao-caixa','orcamento','fluxo-caixa'];
   document.querySelectorAll('.fin-tab').forEach((t,i)=>{
     t.classList.toggle('active',tabs[i]===name);
   });
@@ -4729,6 +4772,7 @@ function finSwitchTab(name){
   if(name==='comparativo') finRenderComparativo();
   if(name==='previsao-caixa') finRenderPrevisaoCaixa();
   if(name==='orcamento') finRenderOrcamento();
+  if(name==='fluxo-caixa') finRenderFluxoCaixa();
 }
 
 let _finRepTab='prev';
@@ -4802,6 +4846,10 @@ function fin_refresh(){
   // Atualiza previsão se a aba estiver ativa
   if(document.getElementById('fin-panel-previsao-rec')?.classList.contains('active')){
     finRenderPrevisaoRec();
+  }
+  // Atualiza fluxo de caixa se a aba estiver ativa (depende do mês selecionado no topo)
+  if(document.getElementById('fin-panel-fluxo-caixa')?.classList.contains('active')){
+    finRenderFluxoCaixa();
   }
 }
 
@@ -5894,6 +5942,466 @@ function finRenderPrevisaoCaixa(){
       ⚠️ Projeção estimada com base nos pacientes ativos e na média de despesas dos últimos 3 meses.
     </div>
     ${cards}`;
+}
+
+// ════════════════════════════════════════════════════════════
+// FLUXO DE CAIXA (DIÁRIO E MENSAL)
+// ════════════════════════════════════════════════════════════
+function finLoadSaldoBase(){
+  try{
+    const cached=_cache[FK.SALDO];
+    if(cached!==undefined) return cached||{data:'',valor:0};
+    return JSON.parse(localStorage.getItem(FK.SALDO)||'null')||{data:'',valor:0};
+  }catch(e){return{data:'',valor:0};}
+}
+function finSaveSaldoBase(v){
+  localStorage.setItem(FK.SALDO,JSON.stringify(v));
+  _cache[FK.SALDO]=v;
+  if(typeof _fbWrite==='function') _fbWrite(FK.SALDO,v);
+}
+
+// Soma de entradas (receitas pagas) e saídas (despesas lançadas) entre duas datas YYYY-MM-DD, inclusive
+function finMovimentoEntre(dataIni,dataFim){
+  if(dataIni>dataFim) return {entradas:0,saidas:0};
+  const recs=finLoad(FK.FLUXO_REC).filter(r=>r.data&&r.data>=dataIni&&r.data<=dataFim);
+  const desps=finLoad(FK.DESP).filter(d=>d.data&&d.data>=dataIni&&d.data<=dataFim);
+  return {
+    entradas: recs.reduce((s,r)=>s+r.valor,0),
+    saidas: desps.reduce((s,d)=>s+d.valor,0)
+  };
+}
+function finProxDia(dataStr){
+  const d=new Date(dataStr+'T12:00:00'); d.setDate(d.getDate()+1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+// Saldo acumulado em caixa até uma data (inclusive), a partir do saldo de referência configurado.
+// Retorna null se não houver saldo de referência configurado, ou se a data pedida for anterior a ele.
+function finSaldoAcumuladoAte(dataStr){
+  const base=finLoadSaldoBase();
+  if(!base.data) return null;
+  if(dataStr<base.data) return null;
+  const mov=finMovimentoEntre(finProxDia(base.data),dataStr);
+  return base.valor + mov.entradas - mov.saidas;
+}
+
+function finOpenSaldoBase(){
+  const base=finLoadSaldoBase();
+  document.getElementById('modal-saldo-base')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-saldo-base';
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+  mo.innerHTML=`<div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">💰 Saldo de referência do caixa</div>
+      <button class="modal-close" onclick="document.getElementById('modal-saldo-base').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.6">Informe quanto havia em caixa/banco em uma data conhecida. A partir dela, o Fluxo de Caixa soma as receitas pagas e despesas lançadas para calcular o saldo acumulado dia a dia e mês a mês.</p>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Data de referência</label><input class="form-input" type="date" id="sb-data" value="${esc(base.data||'')}"></div>
+        <div class="form-group"><label class="form-label">Saldo nessa data (R$)</label><input class="form-input" type="number" step="0.01" id="sb-valor" value="${base.valor||0}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-saldo-base').remove()">Cancelar</button>
+      <button class="btn-save" onclick="finSalvarSaldoBase()">Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+function finSalvarSaldoBase(){
+  const data=document.getElementById('sb-data').value;
+  const valor=parseFloat(document.getElementById('sb-valor').value)||0;
+  if(!data){ toast('Informe a data de referência.'); return; }
+  finSaveSaldoBase({data,valor});
+  document.getElementById('modal-saldo-base').remove();
+  toast('✅ Saldo de referência salvo!');
+  finRenderFluxoCaixa();
+}
+
+let _finFluxoTab='diario';
+let _finFluxoAno=new Date().getFullYear();
+
+function finFluxoTab(tab){
+  _finFluxoTab=tab;
+  document.getElementById('fin-fluxo-tab-diario')?.classList.toggle('active',tab==='diario');
+  document.getElementById('fin-fluxo-tab-mensal')?.classList.toggle('active',tab==='mensal');
+  document.getElementById('fin-fluxo-tab-lancamentos')?.classList.toggle('active',tab==='lancamentos');
+  const d=document.getElementById('fin-fluxo-diario-content');
+  const m=document.getElementById('fin-fluxo-mensal-content');
+  const l=document.getElementById('fin-fluxo-lancamentos-content');
+  if(d) d.style.display=tab==='diario'?'block':'none';
+  if(m) m.style.display=tab==='mensal'?'block':'none';
+  if(l) l.style.display=tab==='lancamentos'?'block':'none';
+  if(tab==='diario') finRenderFluxoDiario();
+  else if(tab==='mensal') finRenderFluxoMensal();
+  else finRenderFluxoLancamentos();
+}
+
+function finRenderFluxoCaixa(){
+  const base=finLoadSaldoBase();
+  const info=document.getElementById('fin-fluxo-saldo-info');
+  if(info){
+    info.innerHTML = base.data
+      ? `Saldo de referência: <strong>${finFmt(base.valor)}</strong> em ${finFmtDate(base.data)} <button class="btn-ghost" style="font-size:11px;padding:3px 9px;margin-left:8px" onclick="finOpenSaldoBase()">Editar</button>`
+      : `<span style="color:var(--amber)">⚠️ Saldo de referência não configurado — os valores de "saldo acumulado" abaixo não serão exibidos até você configurar.</span> <button class="btn-ghost" style="font-size:11px;padding:3px 9px;margin-left:8px" onclick="finOpenSaldoBase()">Configurar saldo</button>`;
+  }
+  if(_finFluxoTab==='diario') finRenderFluxoDiario();
+  else if(_finFluxoTab==='mensal') finRenderFluxoMensal();
+  else finRenderFluxoLancamentos();
+}
+
+function finRenderFluxoDiario(){
+  const el=document.getElementById('fin-fluxo-diario-content'); if(!el) return;
+  const ano=_finYear, mes=_finMonth;
+  const pad=n=>String(n).padStart(2,'0');
+  const diasNoMes=new Date(ano,mes+1,0).getDate();
+  const recs=finLoad(FK.FLUXO_REC);
+  const desps=finLoad(FK.DESP);
+
+  const diaAnterior=new Date(ano,mes,0);
+  const diaAnteriorStr=`${diaAnterior.getFullYear()}-${pad(diaAnterior.getMonth()+1)}-${pad(diaAnterior.getDate())}`;
+  let acumulado=finSaldoAcumuladoAte(diaAnteriorStr);
+
+  let totalEnt=0, totalSai=0;
+  const linhas=[];
+  for(let d=1; d<=diasNoMes; d++){
+    const dstr=`${ano}-${pad(mes+1)}-${pad(d)}`;
+    const ent=recs.filter(r=>r.data===dstr).reduce((s,r)=>s+r.valor,0);
+    const sai=desps.filter(x=>x.data===dstr).reduce((s,x)=>s+x.valor,0);
+    const saldoDia=ent-sai;
+    totalEnt+=ent; totalSai+=sai;
+    if(acumulado!==null) acumulado+=saldoDia;
+    const dow=new Date(ano,mes,d).getDay();
+    linhas.push({d, nomeDia:DIAS_SEMANA[dow].slice(0,3), ent, sai, saldoDia, acumulado});
+  }
+  const saldoFinalMes=acumulado;
+  const fmtSaldo=v=>v===null?'—':finFmt(v);
+  const corSaldo=v=>v===null?'var(--text3)':(v>=0?'var(--green)':'var(--red)');
+
+  const linhasHtml=linhas.map(l=>`
+    <tr${l.ent===0&&l.sai===0?' style="opacity:.55"':''}>
+      <td style="white-space:nowrap">${pad(l.d)}/${pad(mes+1)} <span style="color:var(--text3);font-size:11px;text-transform:uppercase">${l.nomeDia}</span></td>
+      <td style="text-align:right;color:var(--green)">${l.ent>0?finFmt(l.ent):'—'}</td>
+      <td style="text-align:right;color:var(--red)">${l.sai>0?'− '+finFmt(l.sai):'—'}</td>
+      <td style="text-align:right;font-weight:600;color:${l.saldoDia>0?'var(--green)':l.saldoDia<0?'var(--red)':'var(--text3)'}">${finFmt(l.saldoDia)}</td>
+      <td style="text-align:right;font-weight:600;color:${corSaldo(l.acumulado)}">${fmtSaldo(l.acumulado)}</td>
+    </tr>`).join('');
+
+  el.innerHTML=`
+  <div class="fin-summary-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px">
+    <div class="fin-card fin-card-receita"><div class="fin-card-label">Total de entradas</div><div class="fin-card-value">${finFmt(totalEnt)}</div><div class="fin-card-meta">${FIN_MONTHS[mes]} ${ano}</div></div>
+    <div class="fin-card fin-card-despesa"><div class="fin-card-label">Total de saídas</div><div class="fin-card-value">${finFmt(totalSai)}</div><div class="fin-card-meta">${FIN_MONTHS[mes]} ${ano}</div></div>
+    <div class="fin-card fin-card-resultado"><div class="fin-card-label">Saldo do mês</div><div class="fin-card-value" style="color:${totalEnt-totalSai>=0?'var(--green)':'var(--red)'}">${finFmt(totalEnt-totalSai)}</div><div class="fin-card-meta">${saldoFinalMes!==null?'Saldo acumulado em '+finFmtDate(`${ano}-${pad(mes+1)}-${pad(diasNoMes)}`)+': '+finFmt(saldoFinalMes):'Configure o saldo de referência para ver o acumulado'}</div></div>
+  </div>
+  <div class="fin-table-wrap">
+    <table><thead><tr><th>Dia</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Saldo do dia</th><th style="text-align:right">Saldo acumulado</th></tr></thead>
+    <tbody>${linhasHtml}</tbody>
+    <tfoot><tr style="background:var(--surface2);font-weight:700;border-top:2px solid var(--border2)">
+      <td>TOTAL</td>
+      <td style="text-align:right;color:var(--green)">${finFmt(totalEnt)}</td>
+      <td style="text-align:right;color:var(--red)">− ${finFmt(totalSai)}</td>
+      <td style="text-align:right;color:${totalEnt-totalSai>=0?'var(--green)':'var(--red)'}">${finFmt(totalEnt-totalSai)}</td>
+      <td style="text-align:right">${saldoFinalMes!==null?finFmt(saldoFinalMes):'—'}</td>
+    </tr></tfoot>
+    </table>
+  </div>`;
+}
+
+function finFluxoChangeAno(delta){
+  _finFluxoAno+=delta;
+  finRenderFluxoMensal();
+}
+
+function finRenderFluxoMensal(){
+  const el=document.getElementById('fin-fluxo-mensal-content'); if(!el) return;
+  const ano=_finFluxoAno;
+  const pad=n=>String(n).padStart(2,'0');
+  const recs=finLoad(FK.FLUXO_REC);
+  const desps=finLoad(FK.DESP);
+
+  const diaAnterior=new Date(ano,0,0); // 31/dez do ano anterior
+  const diaAnteriorStr=`${diaAnterior.getFullYear()}-${pad(diaAnterior.getMonth()+1)}-${pad(diaAnterior.getDate())}`;
+  let acumulado=finSaldoAcumuladoAte(diaAnteriorStr);
+
+  let totalEnt=0, totalSai=0;
+  const linhas=[];
+  for(let m=0;m<12;m++){
+    const key=`${ano}-${pad(m+1)}`;
+    const ent=recs.filter(r=>r.data&&r.data.startsWith(key)).reduce((s,r)=>s+r.valor,0);
+    const sai=desps.filter(x=>x.data&&x.data.startsWith(key)).reduce((s,x)=>s+x.valor,0);
+    const saldoMes=ent-sai;
+    totalEnt+=ent; totalSai+=sai;
+    if(acumulado!==null) acumulado+=saldoMes;
+    linhas.push({m, ent, sai, saldoMes, acumulado});
+  }
+  const saldoFinalAno=acumulado;
+  const fmtSaldo=v=>v===null?'—':finFmt(v);
+  const corSaldo=v=>v===null?'var(--text3)':(v>=0?'var(--green)':'var(--red)');
+
+  const linhasHtml=linhas.map(l=>`
+    <tr${l.ent===0&&l.sai===0?' style="opacity:.55"':''}>
+      <td>${FIN_MONTHS[l.m]}</td>
+      <td style="text-align:right;color:var(--green)">${l.ent>0?finFmt(l.ent):'—'}</td>
+      <td style="text-align:right;color:var(--red)">${l.sai>0?'− '+finFmt(l.sai):'—'}</td>
+      <td style="text-align:right;font-weight:600;color:${l.saldoMes>0?'var(--green)':l.saldoMes<0?'var(--red)':'var(--text3)'}">${finFmt(l.saldoMes)}</td>
+      <td style="text-align:right;font-weight:600;color:${corSaldo(l.acumulado)}">${fmtSaldo(l.acumulado)}</td>
+    </tr>`).join('');
+
+  el.innerHTML=`
+  <div style="display:flex;align-items:center;justify-content:center;gap:14px;margin-bottom:16px">
+    <button class="fin-month-btn" onclick="finFluxoChangeAno(-1)">‹</button>
+    <div class="fin-month-label">${ano}</div>
+    <button class="fin-month-btn" onclick="finFluxoChangeAno(1)">›</button>
+  </div>
+  <div class="fin-summary-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:18px">
+    <div class="fin-card fin-card-receita"><div class="fin-card-label">Total de entradas</div><div class="fin-card-value">${finFmt(totalEnt)}</div><div class="fin-card-meta">${ano}</div></div>
+    <div class="fin-card fin-card-despesa"><div class="fin-card-label">Total de saídas</div><div class="fin-card-value">${finFmt(totalSai)}</div><div class="fin-card-meta">${ano}</div></div>
+    <div class="fin-card fin-card-resultado"><div class="fin-card-label">Saldo do ano</div><div class="fin-card-value" style="color:${totalEnt-totalSai>=0?'var(--green)':'var(--red)'}">${finFmt(totalEnt-totalSai)}</div><div class="fin-card-meta">${saldoFinalAno!==null?'Saldo acumulado em 31/12: '+finFmt(saldoFinalAno):'Configure o saldo de referência para ver o acumulado'}</div></div>
+  </div>
+  <div class="fin-table-wrap">
+    <table><thead><tr><th>Mês</th><th style="text-align:right">Entradas</th><th style="text-align:right">Saídas</th><th style="text-align:right">Saldo do mês</th><th style="text-align:right">Saldo acumulado</th></tr></thead>
+    <tbody>${linhasHtml}</tbody>
+    <tfoot><tr style="background:var(--surface2);font-weight:700;border-top:2px solid var(--border2)">
+      <td>TOTAL ${ano}</td>
+      <td style="text-align:right;color:var(--green)">${finFmt(totalEnt)}</td>
+      <td style="text-align:right;color:var(--red)">− ${finFmt(totalSai)}</td>
+      <td style="text-align:right;color:${totalEnt-totalSai>=0?'var(--green)':'var(--red)'}">${finFmt(totalEnt-totalSai)}</td>
+      <td style="text-align:right">${saldoFinalAno!==null?finFmt(saldoFinalAno):'—'}</td>
+    </tr></tfoot>
+    </table>
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════
+// FLUXO DE CAIXA — IMPORTAÇÃO DE ENTRADAS DO EXTRATO BANCÁRIO
+// (fonte independente do Doctoralia — alimenta só o Fluxo de Caixa)
+// ════════════════════════════════════════════════════════════
+function finImportarEntradasExtrato(){
+  document.getElementById('modal-importar-entradas')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-importar-entradas';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  mo.innerHTML=`<div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">📂 Importar entradas do extrato</div>
+      <button class="modal-close" onclick="document.getElementById('modal-importar-entradas').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 20px;line-height:1.6">
+        Selecione o PDF do extrato do Santander referente ao período. O sistema identifica os valores recebidos (positivos) e mostra uma revisão antes de salvar — nada é importado sem você confirmar.
+      </p>
+      <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer"
+           onclick="document.getElementById('entradas-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="event.preventDefault();finHandleEntradasExtratoDrop(event)">
+        <div style="font-size:36px;margin-bottom:8px">📂</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Clique ou arraste o PDF aqui</div>
+        <div style="font-size:12px;color:var(--text3)">Extrato do Santander (mesmo arquivo usado para despesas)</div>
+      </div>
+      <input type="file" id="entradas-input" accept=".pdf" style="display:none" onchange="finHandleEntradasExtratoFile(this.files[0])">
+      <div id="entradas-status" style="display:none;margin-top:12px;font-size:13px;color:var(--text3);text-align:center"></div>
+      <div id="entradas-erro" style="display:none;color:var(--red);font-size:13px;margin-top:12px"></div>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function finHandleEntradasExtratoDrop(e){
+  const file=e.dataTransfer.files[0];
+  if(file&&file.type==='application/pdf') finHandleEntradasExtratoFile(file);
+}
+
+function finHandleEntradasExtratoFile(file){
+  if(!file) return;
+  const status=document.getElementById('entradas-status');
+  const erro=document.getElementById('entradas-erro');
+  status.textContent='⏳ Processando PDF do extrato...';
+  status.style.display='block';
+  erro.style.display='none';
+
+  const reader=new FileReader();
+  reader.onload=async function(e){
+    try{
+      if(!window.pdfjsLib){
+        await new Promise((res,rej)=>{
+          const script=document.createElement('script');
+          script.src='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+          script.onload=res; script.onerror=rej;
+          document.head.appendChild(script);
+        });
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const pdfData=new Uint8Array(e.target.result);
+      const pdf=await pdfjsLib.getDocument({data:pdfData}).promise;
+      let textoTotal='';
+      for(let i=1;i<=pdf.numPages;i++){
+        const page=await pdf.getPage(i);
+        const content=await page.getTextContent();
+        const linhasMap={};
+        content.items.forEach(it=>{
+          if(!it.str.trim()) return;
+          const y=Math.round(it.transform[5]);
+          if(!linhasMap[y]) linhasMap[y]={partes:[]};
+          linhasMap[y].partes.push({x:it.transform[4], str:it.str});
+        });
+        Object.keys(linhasMap).map(Number).sort((a,b)=>b-a).forEach(y=>{
+          const partes=linhasMap[y].partes.sort((a,b)=>a.x-b.x);
+          textoTotal+=partes.map(p=>p.str).join(' ').replace(/\s+/g,' ').trim()+'\n';
+        });
+      }
+      const transacoes=finParseExtratoEntradas(textoTotal);
+      status.style.display='none';
+      if(!transacoes.length){
+        erro.textContent='Nenhuma entrada encontrada no extrato.';
+        erro.style.display='block';
+        return;
+      }
+      document.getElementById('modal-importar-entradas').remove();
+      finRevisarEntradas(transacoes);
+    }catch(err){
+      status.style.display='none';
+      erro.textContent='Erro ao processar o PDF do extrato.';
+      erro.style.display='block';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// Extrai apenas ENTRADAS (valores positivos) do extrato Santander.
+// Ignora linhas que também tenham um valor negativo (essas já são despesas, o número
+// positivo ali é o SALDO da conta, não um recebimento) e padrões que não são receita de paciente.
+function finParseExtratoEntradas(texto){
+  const transacoes=[];
+  const linhas=texto.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
+  const reData=/(\d{2}\/\d{2}\/\d{4})/;
+  const reNeg=/-(\d{1,3}(?:\.\d{3})*,\d{2})/;
+  const reNum=/(\d{1,3}(?:\.\d{3})*,\d{2})/g;
+  // Ignora: estornos, rendimentos/aplicações, transferências entre contas próprias, saldo
+  const ignorar=/estorno|resgate|aplicacao|rendimento|saldo anterior|saldo do dia|saldo disponivel|transferencia entre contas|centro integrado de neuro/i;
+
+  linhas.forEach(linha=>{
+    const mData=reData.exec(linha); if(!mData) return;
+    if(reNeg.test(linha)) return; // linha de saída — o positivo aqui é só o saldo da conta
+    if(ignorar.test(linha)) return;
+    const nums=[...linha.matchAll(reNum)];
+    if(!nums.length) return;
+    // primeiro número após a data = valor do lançamento; um segundo número na mesma linha
+    // costuma ser o saldo da conta e é ignorado
+    const primeiro=nums[0];
+    const valor=parseFloat(primeiro[1].replace(/\./g,'').replace(',','.'));
+    if(!valor||valor<=0) return;
+    let desc=linha.substring(mData.index+10, primeiro.index)
+      .replace(/\b\d{6,}\b/g,'').replace(/\s+/g,' ').trim();
+    if(!desc||desc.length<3) desc='Recebimento';
+    const [d,m,a]=mData[1].split('/');
+    transacoes.push({data:`${a}-${m}-${d}`, desc, valor});
+  });
+
+  return transacoes;
+}
+
+let _finEntradasRevisao=[];
+function finRevisarEntradas(transacoes){
+  _finEntradasRevisao=transacoes.map((t,i)=>({...t, id:i, incluir:true}));
+  document.getElementById('modal-revisar-entradas')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay';
+  mo.id='modal-revisar-entradas';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  const total=_finEntradasRevisao.reduce((s,t)=>s+t.valor,0);
+
+  mo.innerHTML=`<div class="modal" style="max-width:680px">
+    <div class="modal-header">
+      <div class="modal-title">Revisar entradas encontradas</div>
+      <button class="modal-close" onclick="document.getElementById('modal-revisar-entradas').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:12.5px;color:var(--text3);margin:0 0 14px">Desmarque o que não for receita de paciente (ex: rendimento, transferência própria) e ajuste valores/datas se necessário. <strong id="entradas-rev-total">${_finEntradasRevisao.length} entrada(s) · ${finFmt(total)}</strong></p>
+      <div id="entradas-rev-lista" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-revisar-entradas').remove()">Cancelar</button>
+      <button class="btn-save" onclick="finConfirmarEntradasExtrato()">Confirmar importação</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+  finRenderEntradasRevisaoLista();
+}
+
+function finRenderEntradasRevisaoLista(){
+  const el=document.getElementById('entradas-rev-lista'); if(!el) return;
+  el.innerHTML=_finEntradasRevisao.map(t=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface2);border-radius:var(--radius-sm);${t.incluir?'':'opacity:.45'}">
+      <input type="checkbox" ${t.incluir?'checked':''} onchange="finToggleEntrada(${t.id})">
+      <input class="form-input" type="date" value="${t.data}" style="width:130px;font-size:12px;padding:6px 8px" onchange="finEditEntrada(${t.id},'data',this.value)">
+      <input class="form-input" value="${esc(t.desc)}" style="flex:1;font-size:12px;padding:6px 8px" onchange="finEditEntrada(${t.id},'desc',this.value)">
+      <input class="form-input" type="number" step="0.01" value="${t.valor}" style="width:100px;font-size:12px;padding:6px 8px;text-align:right" onchange="finEditEntrada(${t.id},'valor',parseFloat(this.value)||0)">
+    </div>`).join('');
+  const total=_finEntradasRevisao.filter(t=>t.incluir).reduce((s,t)=>s+t.valor,0);
+  const count=_finEntradasRevisao.filter(t=>t.incluir).length;
+  const totalEl=document.getElementById('entradas-rev-total');
+  if(totalEl) totalEl.textContent=`${count} entrada(s) selecionada(s) · ${finFmt(total)}`;
+}
+function finToggleEntrada(id){
+  const t=_finEntradasRevisao.find(x=>x.id===id); if(t) t.incluir=!t.incluir;
+  finRenderEntradasRevisaoLista();
+}
+function finEditEntrada(id,campo,valor){
+  const t=_finEntradasRevisao.find(x=>x.id===id); if(t) t[campo]=valor;
+}
+
+function finConfirmarEntradasExtrato(){
+  const selecionadas=_finEntradasRevisao.filter(t=>t.incluir);
+  if(!selecionadas.length){ toast('Nenhuma entrada selecionada.'); return; }
+  const existentes=finLoad(FK.FLUXO_REC);
+  let novas=0, duplicadas=0;
+  selecionadas.forEach((t,i)=>{
+    const jaExiste=existentes.some(e=>e.data===t.data&&Math.abs(e.valor-t.valor)<0.005&&e.desc===t.desc);
+    if(jaExiste){ duplicadas++; return; }
+    existentes.push({id:Date.now()+i, data:t.data, desc:t.desc, valor:t.valor});
+    novas++;
+  });
+  finSave(FK.FLUXO_REC, existentes);
+  document.getElementById('modal-revisar-entradas').remove();
+  toast(`✅ ${novas} entrada(s) importada(s)${duplicadas?` · ${duplicadas} duplicada(s) ignorada(s)`:''}`);
+  finRenderFluxoCaixa();
+}
+
+function finDelFluxoEntrada(id){
+  finSave(FK.FLUXO_REC, finLoad(FK.FLUXO_REC).filter(e=>e.id!==id));
+  toast('Entrada removida.');
+  finRenderFluxoCaixa();
+}
+
+function finRenderFluxoLancamentos(){
+  const el=document.getElementById('fin-fluxo-lancamentos-content'); if(!el) return;
+  const entradas=finLoad(FK.FLUXO_REC).sort((a,b)=>b.data.localeCompare(a.data));
+  if(!entradas.length){
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text3)"><div style="font-size:32px;margin-bottom:10px;opacity:.4">📂</div>Nenhuma entrada importada ainda. Use "Importar entradas do extrato" acima.</div>';
+    return;
+  }
+  const total=entradas.reduce((s,e)=>s+e.valor,0);
+  el.innerHTML=`
+  <p style="font-size:12.5px;color:var(--text3);margin:0 0 12px">${entradas.length} lançamento(s) importado(s) · total ${finFmt(total)}</p>
+  <div class="fin-table-wrap">
+    <table><thead><tr><th>Data</th><th>Descrição</th><th style="text-align:right">Valor</th><th></th></tr></thead>
+    <tbody>${entradas.map(e=>`<tr>
+      <td>${finFmtDate(e.data)}</td>
+      <td style="font-size:13px">${esc(e.desc||'—')}</td>
+      <td style="text-align:right;color:var(--green);font-weight:500">${finFmt(e.valor)}</td>
+      <td><button class="btn-delete" onclick="finDelFluxoEntrada(${e.id})" title="Excluir">✕</button></td>
+    </tr>`).join('')}</tbody>
+    </table>
+  </div>`;
 }
 
 // ════════════════════════════════════════════════════════════
