@@ -608,7 +608,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -1165,6 +1165,8 @@ function exportBackup(){
       repasses: JSON.parse(localStorage.getItem('cinpsi_repasses')||'{}'),
       orcamento: JSON.parse(localStorage.getItem('cinpsi_orcamento')||'{}'),
       fluxo_caixa: JSON.parse(localStorage.getItem('cinpsi_fluxo_caixa')||'[]'),
+      fat_planilha: JSON.parse(localStorage.getItem('cinpsi_fat_planilha')||'{}'),
+      fluxo_saldo: JSON.parse(localStorage.getItem('cinpsi_fluxo_saldo')||'null'),
     }
   };
   const json=JSON.stringify(backup, null, 2);
@@ -1259,6 +1261,8 @@ function confirmarRestore(backup){
       if(f.repasses)        localStorage.setItem('cinpsi_repasses', JSON.stringify(f.repasses));
       if(f.orcamento)       localStorage.setItem('cinpsi_orcamento', JSON.stringify(f.orcamento));
       if(f.fluxo_caixa)     localStorage.setItem('cinpsi_fluxo_caixa', JSON.stringify(f.fluxo_caixa));
+      if(f.fat_planilha)    localStorage.setItem('cinpsi_fat_planilha', JSON.stringify(f.fat_planilha));
+      if(f.fluxo_saldo)     localStorage.setItem('cinpsi_fluxo_saldo', JSON.stringify(f.fluxo_saldo));
     }
 
     localStorage.setItem('cl_ultimo_backup', Date.now());
@@ -1297,6 +1301,7 @@ function launchApp(){
     setTimeout(finCheckAlertas, 800);
     setTimeout(nfCheckLembrete, 1000);
     setTimeout(checkAniversariosLogin, 1200);
+    setTimeout(prevFatCheckLembrete, 1600);
   } else {
     showView('registros');
   }
@@ -4454,7 +4459,6 @@ function renderFinanceiro(c){
     <button class="fin-tab" onclick="finSwitchTab('repasses')">Repasses</button>
     <button class="fin-tab" onclick="finSwitchTab('previsao-rec')">📅 Previsão de Receita</button>
     <button class="fin-tab" onclick="finSwitchTab('dre')">📊 DRE</button>
-    <button class="fin-tab" onclick="finSwitchTab('comparativo')">📈 Comparativo</button>
     <button class="fin-tab" onclick="finSwitchTab('previsao-caixa')">💰 Previsão de Caixa</button>
     <button class="fin-tab" onclick="finSwitchTab('orcamento')">🎯 Orçamento Anual</button>
     <button class="fin-tab" onclick="finSwitchTab('fluxo-caixa')">🏦 Fluxo de Caixa</button>
@@ -4582,18 +4586,10 @@ function renderFinanceiro(c){
     <div id="fin-dre-full" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);max-width:680px"></div>
   </div>
 
-  <div class="fin-panel" id="fin-panel-comparativo">
-    <div class="fin-section-header">
-      <div class="fin-section-title">Comparativo Mensal</div>
-      <div style="font-size:12px;color:var(--text3)">Evolução dos últimos 6 meses</div>
-    </div>
-    <div id="fin-comparativo-content"></div>
-  </div>
-
   <div class="fin-panel" id="fin-panel-previsao-caixa">
     <div class="fin-section-header">
       <div class="fin-section-title">Previsão de Caixa</div>
-      <div style="font-size:12px;color:var(--text3)">Projeção para os próximos 3 meses</div>
+      <div style="font-size:12px;color:var(--text3)">Previsto x realizado por profissional, a partir das planilhas do mês</div>
     </div>
     <div id="fin-previsao-caixa-content"></div>
   </div>
@@ -4729,7 +4725,7 @@ function finChangeMonth(d){
   fin_refresh();
 }
 function finSwitchTab(name){
-  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','comparativo','previsao-caixa','orcamento','fluxo-caixa'];
+  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','previsao-caixa','orcamento','fluxo-caixa'];
   document.querySelectorAll('.fin-tab').forEach((t,i)=>{
     t.classList.toggle('active',tabs[i]===name);
   });
@@ -4739,7 +4735,6 @@ function finSwitchTab(name){
   if(name==='repasses') finRenderRepasses();
   if(name==='dre') finRenderDRE();
   if(name==='previsao-rec') finRenderPrevisaoRec();
-  if(name==='comparativo') finRenderComparativo();
   if(name==='previsao-caixa') finRenderPrevisaoCaixa();
   if(name==='orcamento') finRenderOrcamento();
   if(name==='fluxo-caixa') finRenderFluxoCaixa();
@@ -5763,73 +5758,6 @@ function finDelHistorico(idx){
   finRenderHistorico();
   toast('Registro excluído do histórico.');
 }
-
-// ════════════════════════════════════════════════════════════
-// COMPARATIVO MENSAL
-// ════════════════════════════════════════════════════════════
-function finRenderComparativo(){
-  const el=document.getElementById('fin-comparativo-content'); if(!el) return;
-  const recs=finLoad(FK.REC);
-  const desps=finLoad(FK.DESP);
-  const hoje=new Date();
-
-  const meses=[];
-  for(let i=5;i>=0;i--){
-    const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
-    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const label=d.toLocaleDateString('pt-BR',{month:'short',year:'2-digit'});
-    const rec=recs.filter(r=>r.status==='Pago'&&(r.data||'').startsWith(key)).reduce((s,r)=>s+r.valor,0);
-    const desp=desps.filter(x=>(x.data||'').startsWith(key)).reduce((s,x)=>s+x.valor,0);
-    const rep=finBuildFatMes(key).reduce((s,r)=>s+r.repasse,0);
-    const liq=rec-desp-rep;
-    meses.push({key,label,rec,desp,rep,liq});
-  }
-
-  const maxVal=Math.max(...meses.map(m=>Math.max(m.rec,m.desp)),1);
-
-  const barras=meses.map(m=>{
-    const hRec=Math.max(m.rec/maxVal*160,2);
-    const hDesp=Math.max(m.desp/maxVal*160,2);
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:6px;flex:1">
-      <div style="display:flex;align-items:flex-end;gap:4px;height:160px">
-        <div title="Receita: R$ ${m.rec.toLocaleString('pt-BR',{minimumFractionDigits:2})}" style="width:22px;height:${hRec}px;background:var(--green);border-radius:4px 4px 0 0"></div>
-        <div title="Despesa: R$ ${m.desp.toLocaleString('pt-BR',{minimumFractionDigits:2})}" style="width:22px;height:${hDesp}px;background:var(--red);border-radius:4px 4px 0 0;opacity:.8"></div>
-      </div>
-      <div style="font-size:11px;color:var(--text3);text-align:center">${m.label}</div>
-    </div>`;
-  }).join('');
-
-  const linhas=meses.map(m=>`
-    <tr>
-      <td style="padding:10px 16px;font-weight:600;font-size:13px">${m.label}</td>
-      <td style="padding:10px 16px;text-align:right;color:var(--green);font-weight:500">R$ ${m.rec.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-      <td style="padding:10px 16px;text-align:right;color:var(--red)">R$ ${m.desp.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-      <td style="padding:10px 16px;text-align:right;color:var(--purple)">R$ ${m.rep.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-      <td style="padding:10px 16px;text-align:right;font-weight:700;color:${m.liq>=0?'var(--green)':'var(--red)'}">R$ ${m.liq.toLocaleString('pt-BR',{minimumFractionDigits:2})}</td>
-    </tr>`).join('');
-
-  el.innerHTML=`
-    <div class="card" style="margin-bottom:20px;padding:24px">
-      <div style="display:flex;justify-content:center;gap:20px;margin-bottom:16px">
-        <span style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:12px;height:12px;background:var(--green);border-radius:2px"></span>Receita</span>
-        <span style="font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px"><span style="display:inline-block;width:12px;height:12px;background:var(--red);border-radius:2px;opacity:.8"></span>Despesa</span>
-      </div>
-      <div style="display:flex;align-items:flex-end;gap:12px;padding:0 8px;border-bottom:2px solid var(--border2)">${barras}</div>
-    </div>
-    <div class="fin-table-wrap">
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="background:var(--surface2)">
-          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Mês</th>
-          <th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Receita paga</th>
-          <th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Despesas</th>
-          <th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Repasses</th>
-          <th style="padding:10px 16px;text-align:right;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase">Resultado</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-      </table>
-    </div>`;
-}
-
 function finBuildFatMes(mesKey){
   const recs=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey));
   const porTer={};
@@ -5849,65 +5777,140 @@ function finBuildFatMes(mesKey){
 // ════════════════════════════════════════════════════════════
 function finRenderPrevisaoCaixa(){
   const el=document.getElementById('fin-previsao-caixa-content'); if(!el) return;
-  const hoje=new Date();
+  el.innerHTML=prevFatSecao();
+}
 
-  const fatAtual=finBuildFat();
-  const recPrevista=fatAtual.reduce((s,r)=>s+r.fat_previsto,0);
-  const repPrevisto=fatAtual.reduce((s,r)=>s+r.repasse,0);
+// ── Previsto x Realizado por profissional ──────────────────────
+function prevFatSecao(){
+  const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
+  const label=FIN_MONTHS[_finMonth]+' '+_finYear;
+  const plan=fatPlanLoad()[mesKey]||{};
+  const prev=plan.previsto, real=plan.realizado;
 
-  // Média de despesas dos últimos 3 meses
-  const desps=finLoad(FK.DESP);
-  let totalDesp3=0;
-  for(let i=1;i<=3;i++){
-    const d=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
-    const key=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    totalDesp3+=desps.filter(x=>(x.data||'').startsWith(key)).reduce((s,x)=>s+x.valor,0);
+  const info=(d,txt)=>d
+    ? `<span style="font-size:11px;color:var(--text3)">${txt}: <strong>${d.n}</strong> consultas · importado em ${finFmtDate(d.importadoEm)}</span>`
+    : `<span style="font-size:11px;color:var(--text3)">${txt}: não importado</span>`;
+
+  let tabela='';
+  if(prev||real){
+    const profs=[...new Set([
+      ...Object.keys(prev?.porProf||{}),
+      ...Object.keys(real?.porProf||{})
+    ])].sort();
+
+    let tPrev=0,tReal=0,tRepPrev=0,tRepReal=0;
+    const linhas=profs.map(p=>{
+      const dp=prev?.porProf?.[p]||{valor:0,n:0};
+      const dr=real?.porProf?.[p]||{valor:0,n:0};
+      const repP=finCalcRepasse(fatProfKey(p),dp.valor,dp.n);
+      const repR=finCalcRepasse(fatProfKey(p),dr.valor,dr.n);
+      tPrev+=dp.valor; tReal+=dr.valor; tRepPrev+=repP; tRepReal+=repR;
+      const dif=dr.valor-dp.valor;
+      const pct=dp.valor>0?(dif/dp.valor*100):null;
+      const temAmbos=prev&&real;
+      return `<tr>
+        <td style="padding:7px 10px;font-size:12.5px;font-weight:500">${esc(p)}</td>
+        <td style="padding:7px 10px;text-align:center;font-size:12px;color:var(--text3)">${dp.n||'—'} / ${dr.n||'—'}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12.5px">${dp.valor?finFmt(dp.valor):'—'}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12.5px;font-weight:600">${dr.valor?finFmt(dr.valor):'—'}</td>
+        <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:${!temAmbos?'var(--text3)':dif>=0?'var(--green)':'var(--red)'}">
+          ${temAmbos?(dif>=0?'+':'')+finFmt(dif)+(pct!=null?' <span style="font-size:10px;opacity:.7">('+(pct>=0?'+':'')+pct.toFixed(0)+'%)</span>':''):'—'}
+        </td>
+        <td style="padding:7px 10px;text-align:right;font-size:12px;color:var(--purple)">${dr.valor?finFmt(repR):(dp.valor?finFmt(repP):'—')}</td>
+      </tr>`;
+    }).join('');
+
+    const difT=tReal-tPrev;
+    const pctT=tPrev>0?(difT/tPrev*100):null;
+    tabela=`
+      <div class="fin-table-wrap" style="margin-top:14px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Profissional</th>
+            <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text3)">Consultas prev/real</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Previsto</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Realizado</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Diferença</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Repasse</th>
+          </tr></thead>
+          <tbody>${linhas}</tbody>
+          <tfoot><tr style="background:var(--surface2);font-weight:700">
+            <td style="padding:9px 10px">TOTAL</td>
+            <td></td>
+            <td style="padding:9px 10px;text-align:right">${finFmt(tPrev)}</td>
+            <td style="padding:9px 10px;text-align:right">${finFmt(tReal)}</td>
+            <td style="padding:9px 10px;text-align:right;color:${!(prev&&real)?'var(--text3)':difT>=0?'var(--green)':'var(--red)'}">
+              ${(prev&&real)?(difT>=0?'+':'')+finFmt(difT)+(pctT!=null?' ('+(pctT>=0?'+':'')+pctT.toFixed(0)+'%)':''):'—'}
+            </td>
+            <td style="padding:9px 10px;text-align:right;color:var(--purple)">${finFmt(tRepReal||tRepPrev)}</td>
+          </tr></tfoot>
+        </table>
+      </div>`;
+  } else {
+    tabela=`<div style="text-align:center;padding:30px;color:var(--text3);font-size:13px;border:1px dashed var(--border2);border-radius:var(--radius);margin-top:14px">
+      Nenhuma planilha importada para ${label}. Importe a previsão no início do mês e o realizado no fechamento.
+    </div>`;
   }
-  const despMedia=totalDesp3/3;
 
-  const projecoes=[];
-  for(let i=1;i<=3;i++){
-    const d=new Date(hoje.getFullYear(),hoje.getMonth()+i,1);
-    const label=d.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
-    const saldo=recPrevista-despMedia-repPrevisto;
-    projecoes.push({label,rec:recPrevista,desp:despMedia,rep:repPrevisto,saldo});
-  }
-
-  const cards=projecoes.map(p=>`
-    <div class="card" style="margin-bottom:16px;padding:20px 24px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-        <h3 style="font-size:15px;font-weight:700;color:var(--text);margin:0;text-transform:capitalize">${p.label}</h3>
-        <div style="text-align:right">
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;font-weight:600;margin-bottom:2px">Resultado estimado</div>
-          <div style="font-size:18px;font-weight:700;color:${p.saldo>=0?'var(--green)':'var(--red)'}">
-            ${p.saldo>=0?'+':''}R$ ${p.saldo.toLocaleString('pt-BR',{minimumFractionDigits:2})}
-          </div>
+  return `
+    <div class="card" style="padding:18px 22px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:6px">
+        <h3 style="font-size:15px;font-weight:700;margin:0">📊 Previsto x Realizado — ${label}</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn-ghost" style="font-size:12.5px" onclick="fatPlanImportar('previsto')">📅 Importar previsão</button>
+          <button class="btn-ghost" style="font-size:12.5px" onclick="fatPlanImportar('realizado')">✅ Importar realizado</button>
+          ${(prev||real)?`<button class="btn-ghost" style="font-size:12.5px" onclick="prevFatImprimir()">🖨️ Imprimir</button>`:''}
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px 16px;border-left:3px solid var(--green)">
-          <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Receita prevista</div>
-          <div style="font-size:17px;font-weight:700;color:var(--green)">R$ ${p.rec.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Baseado em pacientes ativos</div>
-        </div>
-        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px 16px;border-left:3px solid var(--red)">
-          <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Despesas estimadas</div>
-          <div style="font-size:17px;font-weight:700;color:var(--red)">R$ ${p.desp.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Média dos últimos 3 meses</div>
-        </div>
-        <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:14px 16px;border-left:3px solid var(--purple)">
-          <div style="font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Repasses estimados</div>
-          <div style="font-size:17px;font-weight:700;color:var(--purple)">R$ ${p.rep.toLocaleString('pt-BR',{minimumFractionDigits:2})}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:4px">Baseado nas regras atuais</div>
-        </div>
+      <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:4px">
+        ${info(prev,'📅 Previsão')} ${info(real,'✅ Realizado')}
       </div>
-    </div>`).join('');
+      ${tabela}
+    </div>`;
+}
 
-  el.innerHTML=`
-    <div style="background:#FEF9EC;border:1px solid #F0D080;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:20px;font-size:13px;color:#92600A">
-      ⚠️ Projeção estimada com base nos pacientes ativos e na média de despesas dos últimos 3 meses.
-    </div>
-    ${cards}`;
+function prevFatImprimir(){
+  const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
+  const label=FIN_MONTHS[_finMonth]+' '+_finYear;
+  const plan=fatPlanLoad()[mesKey]||{};
+  const prev=plan.previsto, real=plan.realizado;
+  if(!prev&&!real){ toast('Nenhuma planilha importada para este mês.'); return; }
+  const profs=[...new Set([...Object.keys(prev?.porProf||{}),...Object.keys(real?.porProf||{})])].sort();
+  let tPrev=0,tReal=0;
+  const linhas=profs.map(p=>{
+    const dp=prev?.porProf?.[p]||{valor:0,n:0};
+    const dr=real?.porProf?.[p]||{valor:0,n:0};
+    tPrev+=dp.valor; tReal+=dr.valor;
+    const dif=dr.valor-dp.valor;
+    const pct=dp.valor>0?(dif/dp.valor*100):null;
+    return `<tr><td>${esc(p)}</td><td class="c">${dp.n||'—'} / ${dr.n||'—'}</td>
+      <td class="r">${dp.valor?finFmt(dp.valor):'—'}</td>
+      <td class="r"><strong>${dr.valor?finFmt(dr.valor):'—'}</strong></td>
+      <td class="r ${dif>=0?'g':'r2'}">${(prev&&real)?(dif>=0?'+':'')+finFmt(dif)+(pct!=null?' ('+(pct>=0?'+':'')+pct.toFixed(0)+'%)':''):'—'}</td></tr>`;
+  }).join('');
+  const difT=tReal-tPrev;
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>Previsto x Realizado — ${label}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:28px;color:#1a1a1a;font-size:12px}
+    h1{font-size:18px;margin:0 0 4px}.sub{color:#666;font-size:12px;margin-bottom:18px}
+    table{width:100%;border-collapse:collapse}
+    th{background:#f3f4f6;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280}
+    td{padding:6px 8px;border-bottom:1px solid #eee;font-size:11.5px}
+    .r{text-align:right}.c{text-align:center}.g{color:#059669}.r2{color:#dc2626}
+    tfoot td{background:#f3f4f6;font-weight:700}
+  </style></head><body>
+  <h1>Clínica CINPSI — Previsto x Realizado por Profissional</h1>
+  <p class="sub">${label} · Gerado em ${new Date().toLocaleDateString('pt-BR')}</p>
+  <table>
+    <thead><tr><th>Profissional</th><th class="c">Consultas prev/real</th><th class="r">Previsto</th><th class="r">Realizado</th><th class="r">Diferença</th></tr></thead>
+    <tbody>${linhas}</tbody>
+    <tfoot><tr><td>TOTAL</td><td></td><td class="r">${finFmt(tPrev)}</td><td class="r">${finFmt(tReal)}</td>
+      <td class="r ${difT>=0?'g':'r2'}">${(prev&&real)?(difT>=0?'+':'')+finFmt(difT):'—'}</td></tr></tfoot>
+  </table>
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
 }
 
 // ════════════════════════════════════════════════════════════
@@ -6112,12 +6115,304 @@ function gerarRelatorioMensal(){
 // IMPORTAR FATURA CARTÃO
 // ════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════
+// PLANILHAS DE FATURAMENTO (Doctoralia) — previsto x realizado
+// ════════════════════════════════════════════════════════════
+function fatPlanLoad(){
+  try{
+    const cached=_cache['cinpsi_fat_planilha'];
+    if(cached!==undefined) return cached||{};
+    return JSON.parse(localStorage.getItem('cinpsi_fat_planilha')||'{}');
+  }catch(e){ return {}; }
+}
+function fatPlanSave(d){
+  localStorage.setItem('cinpsi_fat_planilha',JSON.stringify(d));
+  _cache['cinpsi_fat_planilha']=d;
+  if(typeof _fbWrite==='function') _fbWrite('cinpsi_fat_planilha',d);
+}
+
+// Normaliza o nome do profissional da planilha para a chave usada nas regras de repasse
+function fatProfKey(nome){
+  const n=String(nome||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const keys=['Tatiane','Adriana','Erika','Leticia','Mayara','Luciana','Priscila','Juliana','Nayra'];
+  for(const k of keys){ if(n.includes(k.toLowerCase())) return k; }
+  return String(nome||'').trim();
+}
+
+async function xlsxEnsureLib(){
+  if(window.XLSX) return;
+  await new Promise((res,rej)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=res; s.onerror=rej;
+    document.head.appendChild(s);
+  });
+}
+
+async function xlsxLerArquivo(file){
+  await xlsxEnsureLib();
+  const buf=await file.arrayBuffer();
+  // cellDates converte datas em objeto Date; codepage cobre CSV em Latin-1
+  const wb=XLSX.read(buf,{type:'array', cellDates:true, codepage:1252});
+  const ws=wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
+}
+
+function planNorm(s){ return String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim(); }
+
+function planNum(v){
+  if(typeof v==='number') return v;
+  const s=String(v||'').replace(/[^\d,.-]/g,'').trim();
+  if(!s) return 0;
+  if(/,\d{1,2}$/.test(s)) return parseFloat(s.replace(/\./g,'').replace(',','.'))||0;
+  return parseFloat(s)||0;
+}
+
+function planData(v){
+  if(v instanceof Date && !isNaN(v)){
+    const y=v.getFullYear(), m=String(v.getMonth()+1).padStart(2,'0'), d=String(v.getDate()).padStart(2,'0');
+    return y+'-'+m+'-'+d;
+  }
+  // Número de série do Excel (epoch 30/12/1899)
+  if(typeof v==='number' && v>20000 && v<80000){
+    const dt=new Date(Date.UTC(1899,11,30)+Math.round(v)*86400000);
+    return dt.toISOString().slice(0,10);
+  }
+  const s=String(v||'').trim();
+  let m=/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(s);
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m=/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})(?!\d)/.exec(s);
+  if(m) return '20'+m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if(m) return s.slice(0,10);
+  return '';
+}
+
+// Detecta as colunas pelo cabeçalho — funciona com o export do Doctoralia
+// e com planilhas simples (Profissional / Valor)
+function planColunas(header){
+  const ix={};
+  (header||[]).forEach((h,i)=>{
+    const n=planNorm(h);
+    if(ix.prof==null && /especialista|profissional|terapeuta/.test(n)) ix.prof=i;
+    if(ix.valor==null && /preco|valor/.test(n)) ix.valor=i;
+    if(ix.pgto==null && /situacao/.test(n) && /pagament/.test(n)) ix.pgto=i;
+    if(ix.estado==null && /^estado$/.test(n)) ix.estado=i;
+    if(ix.data==null && /^data/.test(n)) ix.data=i;
+    if(ix.pac==null && /paciente/.test(n)) ix.pac=i;
+  });
+  return ix;
+}
+
+// filtro: 'todas' | 'pago' | 'realizada'
+function planParseConsultas(rows, filtro){
+  if(!rows||rows.length<2) return null;
+  const ix=planColunas(rows[0]);
+  if(ix.prof==null||ix.valor==null) return null;
+  const porProf={}; let total=0, n=0; const meses={};
+  rows.slice(1).forEach(r=>{
+    if(!r||!r.length) return;
+    const profRaw=String(r[ix.prof]||'').trim();
+    if(!profRaw) return;
+    const valor=planNum(r[ix.valor]);
+    if(!valor) return;
+    const pgto=ix.pgto!=null?planNorm(r[ix.pgto]):'';
+    const estado=ix.estado!=null?planNorm(r[ix.estado]):'';
+    if(filtro==='pago' && !/pago/.test(pgto)) return;
+    if(filtro==='realizada' && !/realizada/.test(estado)) return;
+    if(!porProf[profRaw]) porProf[profRaw]={valor:0,n:0};
+    porProf[profRaw].valor+=valor;
+    porProf[profRaw].n++;
+    total+=valor; n++;
+    const dt=ix.data!=null?planData(r[ix.data]):'';
+    if(dt) meses[dt.slice(0,7)]=(meses[dt.slice(0,7)]||0)+valor;
+  });
+  if(!n) return null;
+  // mês predominante da planilha
+  let mesTop=''; let maior=0;
+  Object.entries(meses).forEach(([mk,v])=>{ if(v>maior){ maior=v; mesTop=mk; } });
+  return {porProf, total, n, mesSugerido:mesTop};
+}
+
+// ── Modal de importação ────────────────────────────────────────
+function fatPlanImportar(tipo){
+  document.getElementById('modal-fatplan')?.remove();
+  const hoje=new Date();
+  const mesPadrao=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  const titulo=tipo==='previsto'?'📅 Importar previsão de faturamento':'✅ Importar faturamento realizado';
+  const filtroPadrao=tipo==='previsto'?'todas':'realizada';
+
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-fatplan';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">${titulo}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-fatplan').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid" style="margin-bottom:14px">
+        <div class="form-group">
+          <label class="form-label">📅 Competência</label>
+          <input type="month" class="form-input" id="fatplan-mes" value="${mesPadrao}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Considerar consultas</label>
+          <select class="form-select" id="fatplan-filtro">
+            <option value="todas" ${filtroPadrao==='todas'?'selected':''}>Todas as consultas</option>
+            <option value="realizada" ${filtroPadrao==='realizada'?'selected':''}>Só as realizadas</option>
+            <option value="pago">Só as pagas</option>
+          </select>
+        </div>
+      </div>
+      <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:28px;text-align:center;cursor:pointer"
+           onclick="document.getElementById('fatplan-input').click()"
+           ondragover="event.preventDefault()"
+           ondrop="event.preventDefault();fatPlanHandleFile(event.dataTransfer.files[0],'${tipo}')">
+        <div style="font-size:34px;margin-bottom:8px">📊</div>
+        <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Clique ou arraste a planilha aqui</div>
+        <div style="font-size:12px;color:var(--text3)">Export do Doctoralia (.xlsx) ou .csv</div>
+      </div>
+      <input type="file" id="fatplan-input" accept=".xlsx,.xls,.csv" style="display:none" onchange="fatPlanHandleFile(this.files[0],'${tipo}')">
+      <div id="fatplan-status" style="display:none;margin-top:12px;font-size:13px;color:var(--text3);text-align:center"></div>
+      <div id="fatplan-erro" style="display:none;color:var(--red);font-size:13px;margin-top:12px"></div>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+async function fatPlanHandleFile(file,tipo){
+  if(!file) return;
+  const status=document.getElementById('fatplan-status');
+  const erro=document.getElementById('fatplan-erro');
+  if(erro) erro.style.display='none';
+  if(status){ status.textContent='⏳ Lendo planilha...'; status.style.display='block'; }
+  try{
+    const rows=await xlsxLerArquivo(file);
+    const filtro=document.getElementById('fatplan-filtro')?.value||'todas';
+    const dados=planParseConsultas(rows,filtro);
+    if(status) status.style.display='none';
+    if(!dados){
+      if(erro){ erro.textContent='Não encontrei as colunas de Especialista e Preço na planilha.'; erro.style.display='block'; }
+      return;
+    }
+    const mes=document.getElementById('fatplan-mes')?.value||dados.mesSugerido;
+    document.getElementById('modal-fatplan')?.remove();
+    fatPlanRevisar(dados,mes,tipo,filtro);
+  }catch(err){
+    if(status) status.style.display='none';
+    if(erro){ erro.textContent='Erro ao ler a planilha. Verifique o formato do arquivo.'; erro.style.display='block'; }
+  }
+}
+
+function fatPlanRevisar(dados,mes,tipo,filtro){
+  window._fatPlanTmp={dados,mes,tipo,filtro};
+  document.getElementById('modal-fatplan-rev')?.remove();
+  const linhas=Object.entries(dados.porProf).sort((a,b)=>b[1].valor-a[1].valor).map(([prof,d])=>{
+    const rep=finCalcRepasse(fatProfKey(prof), d.valor, d.n);
+    return `<tr>
+      <td style="padding:6px 10px;font-size:12.5px">${esc(prof)}</td>
+      <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--text3)">${d.n}</td>
+      <td style="padding:6px 10px;text-align:right;font-size:12.5px;font-weight:600">${finFmt(d.valor)}</td>
+      <td style="padding:6px 10px;text-align:right;font-size:12px;color:var(--purple)">${finFmt(rep)}</td>
+    </tr>`;
+  }).join('');
+  const totalRep=Object.entries(dados.porProf).reduce((s,[p,d])=>s+finCalcRepasse(fatProfKey(p),d.valor,d.n),0);
+  const [ano,mm]=mes.split('-');
+  const label=(FIN_MONTHS[parseInt(mm)-1]||mm)+' '+ano;
+
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-fatplan-rev';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:640px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">${tipo==='previsto'?'📅 Previsão':'✅ Realizado'} — ${label}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-fatplan-rev').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
+      <div style="padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:20px;flex-wrap:wrap">
+        <span>Consultas: <strong>${dados.n}</strong></span>
+        <span>Faturamento: <strong style="color:var(--green)">${finFmt(dados.total)}</strong></span>
+        <span>Repasses: <strong style="color:var(--purple)">${finFmt(totalRep)}</strong></span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Profissional</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text3)">Consultas</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Faturamento</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Repasse</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-fatplan-rev').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="fatPlanConfirmar()">💾 Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function fatPlanConfirmar(){
+  const t=window._fatPlanTmp; if(!t) return;
+  const plan=fatPlanLoad();
+  if(!plan[t.mes]) plan[t.mes]={};
+  plan[t.mes][t.tipo]={
+    total:t.dados.total, porProf:t.dados.porProf, n:t.dados.n,
+    filtro:t.filtro, importadoEm:new Date().toISOString().slice(0,10)
+  };
+  fatPlanSave(plan);
+  // marca o lembrete do mês como resolvido
+  if(t.tipo==='previsto') localStorage.setItem('cinpsi_prevfat_visto_'+t.mes,'1');
+  document.getElementById('modal-fatplan-rev')?.remove();
+  if(typeof finRenderPrevisaoCaixa==='function' && document.getElementById('fin-previsao-caixa-content')) finRenderPrevisaoCaixa();
+  if(typeof finRenderOrcamento==='function' && document.getElementById('fin-orcamento-content')) finRenderOrcamento();
+  toast('✅ Planilha salva!');
+}
+
+// ── Lembrete do dia 01 ─────────────────────────────────────────
+function prevFatCheckLembrete(){
+  if(!CU||(CU.role!=='admin'&&CU.role!=='supervisora')) return;
+  const hoje=new Date();
+  if(hoje.getDate()>5) return; // janela do dia 1 ao 5
+  const mk=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  if(localStorage.getItem('cinpsi_prevfat_visto_'+mk)) return;
+  const plan=fatPlanLoad();
+  if(plan[mk]&&plan[mk].previsto) return;
+  const label=hoje.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  document.getElementById('modal-prevfat-lembrete')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-prevfat-lembrete';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">📅 Previsão de faturamento</div>
+      <button class="modal-close" onclick="document.getElementById('modal-prevfat-lembrete').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#FEF3C7;border-radius:var(--radius-sm);padding:14px 16px;font-size:13px;color:#78350F;line-height:1.6">
+        Começou <strong>${label}</strong> — hora de importar a planilha da previsão de faturamento do mês.
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin:12px 0 0">Você pode fazer isso depois em <strong>Financeiro → Previsão de Caixa</strong>.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="localStorage.setItem('cinpsi_prevfat_visto_${mk}','1');document.getElementById('modal-prevfat-lembrete').remove()">Depois</button>
+      <button class="btn-save-purple" onclick="document.getElementById('modal-prevfat-lembrete').remove();fatPlanImportar('previsto')">📊 Importar agora</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+// ════════════════════════════════════════════════════════════
 // ORÇAMENTO ANUAL
 // ════════════════════════════════════════════════════════════
 function orcLoad(){ try{ return JSON.parse(localStorage.getItem('cinpsi_orcamento')||'{}'); }catch(e){ return {}; } }
 function orcSave(d){ localStorage.setItem('cinpsi_orcamento',JSON.stringify(d)); _cache['cinpsi_orcamento']=d; if(typeof _fbWrite==='function')_fbWrite('cinpsi_orcamento',d); }
 
-const ORC_CATS_DESP=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Marketing','Consumo','Outras Despesas'];
+const ORC_CATS_DESP=['Repasses aos Profissionais','Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Marketing','Consumo','Outras Despesas'];
 let _orcAno=2026;
 let _orcView='metas'; // metas | comparativo | resumo
 
@@ -6174,8 +6469,11 @@ function orcViewMetas(){
   };
 
   return `
-    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:13px;color:#3730A3">
-      💡 Defina as metas de receita e despesa por categoria para cada mês. Os valores são usados na comparação com o realizado.
+    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3">
+      💡 As <strong>receitas</strong> você lança manualmente. As <strong>despesas</strong> podem ser puxadas dos lançamentos que já existem no sistema — a maioria é recorrente.
+    </div>
+    <div style="margin-bottom:16px">
+      <button class="btn-primary" style="font-size:13px" onclick="orcPuxarDespesas()">📥 Puxar despesas do sistema</button>
     </div>
 
     <h3 style="font-size:13px;font-weight:700;color:var(--green);margin:0 0 8px">📈 RECEITA (meta mensal)</h3>
@@ -6211,15 +6509,141 @@ function orcSetMeta(mesKey,tipo,cat,valor){
   orcSave(orc);
 }
 
-// Realizado: soma receitas pagas e despesas por mês/categoria
+// ── Puxar despesas exatamente como estão lançadas em cada mês ──
+function orcPuxarDespesas(){
+  document.getElementById('modal-orc-puxar')?.remove();
+  const desps=finLoad(FK.DESP);
+
+  // Prévia: o que existe lançado em cada mês do orçamento
+  const previa=ORC_MESES_IDX.map((mIdx,i)=>{
+    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
+    const doMes=desps.filter(d=>(d.data||'').startsWith(key));
+    const rep=orcRepassesMes(key);
+    const total=doMes.reduce((s,d)=>s+(d.valor||0),0)+rep;
+    const cats=new Set(doMes.map(d=>d.cat||'Outras Despesas'));
+    if(rep>0) cats.add('Repasses aos Profissionais');
+    return {key, label:ORC_MESES[i], n:doMes.length, cats:cats.size, total};
+  });
+  const temAlgo=previa.some(p=>p.total>0);
+
+  const linhas=previa.map(p=>`<tr>
+    <td style="padding:6px 10px;font-size:12.5px;font-weight:500">${p.label}/${_orcAno}</td>
+    <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--text3)">${p.n}</td>
+    <td style="padding:6px 10px;text-align:center;font-size:12px;color:var(--text3)">${p.cats}</td>
+    <td style="padding:6px 10px;text-align:right;font-size:12.5px;font-weight:600;color:${p.total>0?'var(--text)':'var(--text3)'}">${p.total>0?finFmt(p.total):'—'}</td>
+  </tr>`).join('');
+
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-orc-puxar';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title">📥 Puxar despesas do sistema</div>
+      <button class="modal-close" onclick="document.getElementById('modal-orc-puxar').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 14px;line-height:1.6">
+        Cada mês do orçamento recebe <strong>exatamente as despesas lançadas naquele mês</strong> na aba Despesas, agrupadas por categoria.
+      </p>
+      <div class="fin-table-wrap" style="margin-bottom:14px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:var(--text3)">Mês</th>
+            <th style="padding:7px 10px;text-align:center;font-size:11px;color:var(--text3)">Lançamentos</th>
+            <th style="padding:7px 10px;text-align:center;font-size:11px;color:var(--text3)">Categorias</th>
+            <th style="padding:7px 10px;text-align:right;font-size:11px;color:var(--text3)">Total</th>
+          </tr></thead>
+          <tbody>${linhas}</tbody>
+        </table>
+      </div>
+      ${temAlgo?'':'<div style="background:#FEE2E2;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#991B1B">Não há despesas lançadas nesses meses ainda. Lance-as na aba Despesas antes de puxar.</div>'}
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text2);cursor:pointer">
+        <input type="checkbox" id="orc-puxar-sobrescrever"> Sobrescrever metas já preenchidas
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-orc-puxar').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="orcAplicarPuxar()">📥 Aplicar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function orcAplicarPuxar(){
+  const sobrescrever=document.getElementById('orc-puxar-sobrescrever')?.checked;
+  const desps=finLoad(FK.DESP);
+  const orc=orcLoad();
+  let preenchidos=0, meses=0;
+
+  ORC_MESES_IDX.forEach(mIdx=>{
+    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
+    const doMes=desps.filter(d=>(d.data||'').startsWith(key));
+    const rep=orcRepassesMes(key);
+    if(!doMes.length && rep<=0) return;
+
+    const porCat={};
+    doMes.forEach(d=>{ const c=d.cat||'Outras Despesas'; porCat[c]=(porCat[c]||0)+(d.valor||0); });
+    if(rep>0) porCat['Repasses aos Profissionais']=rep;
+
+    if(!orc[key]) orc[key]={};
+    if(!orc[key].despesa) orc[key].despesa={};
+    Object.entries(porCat).forEach(([cat,val])=>{
+      const v=Math.round(val*100)/100;
+      if(!v||v<=0) return;
+      if(!sobrescrever && orc[key].despesa[cat]) return;
+      orc[key].despesa[cat]=v;
+      preenchidos++;
+    });
+    meses++;
+  });
+
+  if(!preenchidos){ toast('Nada a preencher — verifique se há despesas lançadas nesses meses.'); return; }
+  orcSave(orc);
+  document.getElementById('modal-orc-puxar')?.remove();
+  finRenderOrcamento();
+  toast('✅ '+preenchidos+' metas preenchidas em '+meses+' mes(es)!');
+}
+
+// Repasses do mês: usa a planilha importada se houver, senão calcula pelo sistema
+function orcRepassesMes(mesKey){
+  try{
+    const plan=fatPlanLoad()[mesKey];
+    if(plan&&plan.realizado&&plan.realizado.porProf){
+      return Object.entries(plan.realizado.porProf)
+        .reduce((s,[prof,d])=>s+finCalcRepasse(fatProfKey(prof), d.valor, d.n),0);
+    }
+    const reais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
+    const doMes=reais[mesKey]||{};
+    const fat=finBuildFatMes(mesKey);
+    return fat.reduce((s,r)=>s+(doMes[r.terapeuta]!=null?doMes[r.terapeuta]:r.repasse),0);
+  }catch(e){ return 0; }
+}
+
+// Realizado: receita vem da planilha do Doctoralia (se importada), despesas do sistema
 function orcRealizado(mesKey){
-  const recs=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey));
   const desps=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
-  const receita=recs.reduce((s,r)=>s+(r.valor||0),0);
+
+  // Receita: prioriza a planilha importada
+  const plan=fatPlanLoad()[mesKey];
+  let receita, receitaOrigem;
+  if(plan&&plan.realizado&&plan.realizado.total!=null){
+    receita=plan.realizado.total;
+    receitaOrigem='planilha';
+  } else {
+    receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey))
+      .reduce((s,r)=>s+(r.valor||0),0);
+    receitaOrigem='sistema';
+  }
+
+  // Despesas por categoria + linha de repasses
   const despPorCat={};
   desps.forEach(d=>{ const c=d.cat||'Outras Despesas'; despPorCat[c]=(despPorCat[c]||0)+(d.valor||0); });
-  const despesaTotal=desps.reduce((s,d)=>s+(d.valor||0),0);
-  return {receita, despesaTotal, despPorCat};
+  const repasses=orcRepassesMes(mesKey);
+  if(repasses>0) despPorCat['Repasses aos Profissionais']=repasses;
+
+  const despesaTotal=desps.reduce((s,d)=>s+(d.valor||0),0)+repasses;
+  return {receita, receitaOrigem, despesaTotal, despPorCat, repasses};
 }
 
 function orcMetaMes(mesKey){
@@ -6231,7 +6655,14 @@ function orcMetaMes(mesKey){
 }
 
 function orcViewComparativo(){
-  let linhas='';
+  let linhas=`
+    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3">
+      💡 A <strong>receita realizada</strong> vem da planilha do Doctoralia importada. As <strong>despesas</strong> vêm dos lançamentos do sistema, mais a linha de repasses aos profissionais.
+    </div>
+    <div style="margin-bottom:16px">
+      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('realizado')">📊 Importar receita do Doctoralia</button>
+    </div>`;
+
   ORC_MESES_IDX.forEach((mIdx,i)=>{
     const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
     const meta=orcMetaMes(key);
@@ -6241,8 +6672,13 @@ function orcViewComparativo(){
     const despDesvio=meta.despMeta>0?((real.despesaTotal-meta.despMeta)/meta.despMeta*100):0;
     const resultMeta=meta.recMeta-meta.despMeta;
     const resultReal=real.receita-real.despesaTotal;
+    const repMeta=meta.despCats['Repasses aos Profissionais']||0;
+    const repDesvio=repMeta>0?((real.repasses-repMeta)/repMeta*100):0;
 
     const corDesvio=(d,inv)=>{ if(!d) return 'var(--text3)'; return (inv?d<0:d>0)?'var(--green)':'var(--red)'; };
+    const origem=real.receitaOrigem==='planilha'
+      ? '<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:20px;margin-left:6px">Doctoralia</span>'
+      : '<span style="font-size:10px;background:var(--surface2);color:var(--text3);padding:1px 7px;border-radius:20px;margin-left:6px">sistema</span>';
 
     linhas+=`
       <div class="card" style="margin-bottom:14px;padding:16px 20px">
@@ -6256,7 +6692,7 @@ function orcViewComparativo(){
           </tr></thead>
           <tbody>
             <tr>
-              <td style="padding:6px 8px;color:var(--green);font-weight:600">Receita</td>
+              <td style="padding:6px 8px;color:var(--green);font-weight:600">Receita${origem}</td>
               <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.recMeta)}</td>
               <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.receita)}</td>
               <td style="padding:6px 8px;text-align:right;color:${corDesvio(recDesvio,false)}">${meta.recMeta>0?(recDesvio>=0?'+':'')+recDesvio.toFixed(0)+'%':'—'}</td>
@@ -6266,6 +6702,18 @@ function orcViewComparativo(){
               <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.despMeta)}</td>
               <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.despesaTotal)}</td>
               <td style="padding:6px 8px;text-align:right;color:${corDesvio(despDesvio,true)}">${meta.despMeta>0?(despDesvio>=0?'+':'')+despDesvio.toFixed(0)+'%':'—'}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 8px 4px 22px;font-size:12px;color:var(--text2)">↳ Repasses aos profissionais</td>
+              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(repMeta)}</td>
+              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--purple);font-weight:600">${fmtBRL(real.repasses)}</td>
+              <td style="padding:4px 8px;text-align:right;font-size:12px;color:${corDesvio(repDesvio,true)}">${repMeta>0?(repDesvio>=0?'+':'')+repDesvio.toFixed(0)+'%':'—'}</td>
+            </tr>
+            <tr>
+              <td style="padding:4px 8px 4px 22px;font-size:12px;color:var(--text2)">↳ Demais despesas</td>
+              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(Math.max(0,meta.despMeta-repMeta))}</td>
+              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(Math.max(0,real.despesaTotal-real.repasses))}</td>
+              <td style="padding:4px 8px"></td>
             </tr>
             <tr style="border-top:2px solid var(--border)">
               <td style="padding:6px 8px;font-weight:700">Resultado</td>
@@ -6387,17 +6835,91 @@ function fluxoSave(d){
 let _fluxoTipo='';
 let _fluxoTodos=false;
 
+// Saldo inicial em conta — ponto de partida do fluxo
+const FLUXO_SALDO_PADRAO={data:'2026-06-30', valor:24860.13};
+function fluxoSaldoLoad(){
+  try{
+    const s=JSON.parse(localStorage.getItem('cinpsi_fluxo_saldo')||'null');
+    if(s&&s.data) return s;
+  }catch(e){}
+  return {...FLUXO_SALDO_PADRAO};
+}
+function fluxoSaldoSave(s){
+  localStorage.setItem('cinpsi_fluxo_saldo',JSON.stringify(s));
+  _cache['cinpsi_fluxo_saldo']=s;
+  if(typeof _fbWrite==='function') _fbWrite('cinpsi_fluxo_saldo',s);
+}
+
+// Saldo em conta acumulado até o fim de uma data-limite (inclusive)
+function fluxoSaldoAte(dataLimite){
+  const ini=fluxoSaldoLoad();
+  return fluxoLoad()
+    .filter(m=>m.data>ini.data && (!dataLimite||m.data<=dataLimite))
+    .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
+}
+
+function fluxoConfigSaldo(){
+  const s=fluxoSaldoLoad();
+  document.getElementById('modal-fluxo-saldo')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-fluxo-saldo';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Saldo inicial em conta</div>
+      <button class="modal-close" onclick="document.getElementById('modal-fluxo-saldo').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.6">
+        Ponto de partida do fluxo. Os lançamentos <strong>posteriores a esta data</strong> são somados a partir dele.
+      </p>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Data do saldo</label>
+          <input type="date" class="form-input" id="fx-saldo-data" value="${s.data}"></div>
+        <div class="form-group"><label class="form-label">Saldo (R$)</label>
+          <input type="number" step="0.01" class="form-input" id="fx-saldo-valor" value="${s.valor}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-fluxo-saldo').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="fluxoSalvarSaldo()">💾 Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function fluxoSalvarSaldo(){
+  const data=document.getElementById('fx-saldo-data')?.value;
+  const valor=parseFloat(document.getElementById('fx-saldo-valor')?.value);
+  if(!data||isNaN(valor)){ toast('Informe a data e o valor do saldo.'); return; }
+  fluxoSaldoSave({data, valor});
+  document.getElementById('modal-fluxo-saldo')?.remove();
+  finRenderFluxoCaixa();
+  toast('✅ Saldo inicial atualizado!');
+}
+
 function finRenderFluxoCaixa(){
   const el=document.getElementById('fin-fluxo-content'); if(!el) return;
   const todos=fluxoLoad();
-  const lista=(_fluxoTodos?todos:todos.filter(m=>finInMonth(m.data)))
-    .filter(m=>!_fluxoTipo||m.tipo===_fluxoTipo)
+  const ini=fluxoSaldoLoad();
+
+  const base=(_fluxoTodos?todos:todos.filter(m=>finInMonth(m.data)));
+  const lista=base.filter(m=>!_fluxoTipo||m.tipo===_fluxoTipo)
     .sort((a,b)=>b.data.localeCompare(a.data));
 
-  const base=_fluxoTodos?todos:todos.filter(m=>finInMonth(m.data));
   const entradas=base.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.valor,0);
   const saidas=base.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.valor,0);
-  const saldo=entradas-saidas;
+
+  // Saldo em conta: parte do saldo inicial e acumula até o fim do período exibido
+  const fimPeriodo=_fluxoTodos?null:`${_finYear}-${String(_finMonth+1).padStart(2,'0')}-31`;
+  const saldoConta=fluxoSaldoAte(fimPeriodo);
+
+  // Saldo acumulado por lançamento (ordem cronológica)
+  const acum={};
+  let run=ini.valor;
+  todos.filter(m=>m.data>ini.data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)))
+    .forEach(m=>{ run+=(m.tipo==='entrada'?m.valor:-m.valor); acum[m.id]=run; });
 
   el.innerHTML=`
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
@@ -6411,15 +6933,25 @@ function finRenderFluxoCaixa(){
         <input type="checkbox" ${_fluxoTodos?'checked':''} onchange="_fluxoTodos=this.checked;finRenderFluxoCaixa()"> Ver todos os meses
       </label>
       <div style="flex:1"></div>
+      <button class="btn-ghost" style="font-size:13px" onclick="fluxoConfigSaldo()">⚙️ Saldo inicial</button>
+      <button class="btn-ghost" style="font-size:13px" onclick="fluxoRemoverDuplicados()">🧹 Remover duplicados</button>
       <button class="btn-ghost" style="font-size:13px" onclick="fluxoImprimir()">🖨️ Imprimir</button>
       <button class="btn-ghost" style="font-size:13px;color:var(--red)" onclick="fluxoLimparPeriodo()">🗑️ Limpar período</button>
     </div>
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
+      <div class="stat-card">
+        <div class="stat-label">Saldo inicial</div>
+        <div class="stat-value" style="font-size:17px;color:var(--text2)">${finFmt(ini.valor)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">em ${finFmtDate(ini.data)}</div>
+      </div>
       <div class="stat-card"><div class="stat-label">🟢 Entradas</div><div class="stat-value" style="font-size:17px;color:var(--green)">${finFmt(entradas)}</div></div>
       <div class="stat-card"><div class="stat-label">🔴 Saídas</div><div class="stat-value" style="font-size:17px;color:var(--red)">${finFmt(saidas)}</div></div>
-      <div class="stat-card"><div class="stat-label">Saldo do período</div><div class="stat-value" style="font-size:17px;color:${saldo>=0?'var(--green)':'var(--red)'}">${finFmt(saldo)}</div></div>
-      <div class="stat-card"><div class="stat-label">Lançamentos</div><div class="stat-value" style="font-size:17px">${base.length}</div></div>
+      <div class="stat-card">
+        <div class="stat-label">💰 Saldo em conta</div>
+        <div class="stat-value" style="font-size:17px;color:${saldoConta>=0?'var(--green)':'var(--red)'}">${finFmt(saldoConta)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${base.length} lançamentos no período</div>
+      </div>
     </div>
 
     <div class="fin-table-wrap">
@@ -6429,6 +6961,7 @@ function finRenderFluxoCaixa(){
           <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Descrição</th>
           <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Entrada</th>
           <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Saída</th>
+          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Saldo</th>
           <th style="padding:8px 10px"></th>
         </tr></thead>
         <tbody>${lista.length?lista.map(m=>`<tr>
@@ -6436,10 +6969,48 @@ function finRenderFluxoCaixa(){
           <td style="padding:7px 10px;font-size:12.5px">${esc(m.desc)}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:var(--green);font-weight:${m.tipo==='entrada'?'600':'400'}">${m.tipo==='entrada'?finFmt(m.valor):'—'}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:var(--red);font-weight:${m.tipo==='saida'?'600':'400'}">${m.tipo==='saida'?finFmt(m.valor):'—'}</td>
+          <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:${acum[m.id]!=null&&acum[m.id]<0?'var(--red)':'var(--text2)'}">${acum[m.id]!=null?finFmt(acum[m.id]):'—'}</td>
           <td style="padding:7px 10px;text-align:right"><button class="btn-delete" onclick="fluxoExcluir('${m.id}')" title="Excluir">✕</button></td>
-        </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text3)">Nenhum lançamento. Clique em <strong>🏦 Importar extrato</strong> para começar.</td></tr>`}</tbody>
+        </tr>`).join(''):`<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text3)">Nenhum lançamento. Clique em <strong>🏦 Importar extrato</strong> para começar.</td></tr>`}</tbody>
       </table>
     </div>`;
+}
+
+// Remove lançamentos repetidos, preservando repetições legítimas do extrato
+// (que têm saldos diferentes) e mantendo uma cópia de cada grupo idêntico.
+function fluxoRemoverDuplicados(){
+  const todos=fluxoLoad();
+  if(!todos.length){ toast('Nenhum lançamento no fluxo.'); return; }
+
+  const grupos={};
+  todos.forEach(m=>{
+    const k=[m.data,m.desc,m.valor,m.tipo,(m.saldo!=null?m.saldo:'')].join('|');
+    (grupos[k]=grupos[k]||[]).push(m);
+  });
+
+  const manter=[]; let removidos=0;
+  Object.values(grupos).forEach(g=>{
+    // prefere manter a versão que tem o saldo gravado
+    g.sort((a,b)=>(b.saldo!=null?1:0)-(a.saldo!=null?1:0));
+    manter.push(g[0]);
+    removidos+=g.length-1;
+  });
+
+  if(!removidos){ toast('✅ Nenhum lançamento duplicado encontrado.'); return; }
+
+  const ent=manter.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.valor,0);
+  const sai=manter.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.valor,0);
+  const msg='Encontrei '+removidos+' lançamento(s) duplicado(s).\n\n'
+    +'Depois da limpeza ficam '+manter.length+' lançamentos:\n'
+    +'  Entradas: '+finFmt(ent)+'\n'
+    +'  Saídas: '+finFmt(sai)+'\n\n'
+    +'Confirma a remoção?';
+  if(!confirm(msg)) return;
+
+  manter.sort((a,b)=>a.data.localeCompare(b.data));
+  fluxoSave(manter);
+  finRenderFluxoCaixa();
+  toast('🧹 '+removidos+' duplicados removidos!');
 }
 
 function fluxoExcluir(id){
@@ -6488,12 +7059,94 @@ function fluxoParseExtrato(texto){
     const mValor=ms[ms.length-2]; // penúltimo = valor; último = saldo
     const bruto=parseFloat(mValor[0].replace(/\./g,'').replace(',','.'));
     if(!bruto) return;
+    const saldo=parseFloat(ms[ms.length-1][0].replace(/\./g,'').replace(',','.'));
     let desc=reg.substring(mData[0].length, mValor.index);
     desc=desc.replace(/\b\d{6,}\b/g,'').replace(/\s+/g,' ').trim();
     if(!desc) desc='Lançamento';
     const [d,m,a]=mData[1].split('/');
-    out.push({data:`${a}-${m}-${d}`, desc, valor:Math.abs(bruto), tipo:bruto<0?'saida':'entrada'});
+    out.push({data:a+'-'+m+'-'+d, desc, valor:Math.abs(bruto), tipo:bruto<0?'saida':'entrada', saldo:isNaN(saldo)?null:saldo});
   });
+  return out;
+}
+
+// Lê o extrato em planilha (Excel/CSV) — detecta as colunas pelo cabeçalho
+function fluxoParsePlanilha(rows){
+  window._fluxoDiag=null;
+  if(!rows||!rows.length) return [];
+
+  let hi=-1, ix={};
+  // 1) tenta achar o cabeçalho pelos nomes das colunas
+  for(let i=0;i<Math.min(rows.length,40);i++){
+    const cand={};
+    (rows[i]||[]).forEach((h,j)=>{
+      const n=planNorm(h);
+      if(!n) return;
+      if(cand.data==null && /^data/.test(n)) cand.data=j;
+      if(cand.desc==null && /histor|descri|lancamento|movimenta/.test(n)) cand.desc=j;
+      if(cand.valor==null && /^valor/.test(n)) cand.valor=j;
+      if(cand.saldo==null && /^saldo/.test(n)) cand.saldo=j;
+      if(cand.deb==null && /debito/.test(n)) cand.deb=j;
+      if(cand.cred==null && /credito/.test(n)) cand.cred=j;
+      if(cand.dc==null && /^(d\/c|dc|tipo|natureza)$/.test(n)) cand.dc=j;
+    });
+    if(cand.data!=null && (cand.valor!=null||cand.deb!=null||cand.cred!=null)){ hi=i; ix=cand; break; }
+  }
+
+  // 2) sem cabeçalho reconhecível: descobre pelas próprias linhas de dados
+  if(hi<0){
+    for(let i=0;i<Math.min(rows.length,40);i++){
+      const r=rows[i]||[];
+      const colData=r.findIndex(c=>planData(c));
+      if(colData<0) continue;
+      // colunas numéricas depois da data
+      const nums=[];
+      r.forEach((c,j)=>{ if(j!==colData && planNum(c)) nums.push(j); });
+      if(!nums.length) continue;
+      // a última numérica costuma ser o saldo; a anterior, o valor
+      ix={data:colData, valor:nums.length>1?nums[nums.length-2]:nums[0]};
+      if(nums.length>1) ix.saldo=nums[nums.length-1];
+      const txt=r.findIndex((c,j)=>j!==colData && !nums.includes(j) && String(c||'').trim().length>3);
+      if(txt>=0) ix.desc=txt;
+      hi=i-1; // os dados começam nesta linha
+      break;
+    }
+  }
+
+  if(hi<0){
+    window._fluxoDiag={cabecalhos:(rows[0]||[]).map(h=>String(h||'').trim()).filter(Boolean).slice(0,10)};
+    return [];
+  }
+
+  const out=[];
+  rows.slice(hi+1).forEach(r=>{
+    if(!r||!r.length) return;
+    const data=planData(r[ix.data]);
+    if(!data) return;
+
+    let valor=0;
+    if(ix.valor!=null) valor=planNum(r[ix.valor]);
+    else {
+      const c=ix.cred!=null?planNum(r[ix.cred]):0;
+      const d=ix.deb!=null?planNum(r[ix.deb]):0;
+      valor=Math.abs(c)-Math.abs(d);
+    }
+    if(!valor) return;
+
+    // Coluna D/C sobrepõe o sinal, quando existir
+    if(ix.dc!=null){
+      const dc=planNorm(r[ix.dc]);
+      if(/^d/.test(dc)) valor=-Math.abs(valor);
+      else if(/^c/.test(dc)) valor=Math.abs(valor);
+    }
+
+    let desc=ix.desc!=null?String(r[ix.desc]||'').replace(/\s+/g,' ').trim():'';
+    if(!desc) desc='Lançamento';
+    const saldo=ix.saldo!=null?planNum(r[ix.saldo]):null;
+    out.push({data, desc, valor:Math.abs(valor), tipo:valor<0?'saida':'entrada', saldo:saldo||null});
+  });
+
+  window._fluxoDiag={linhaCabecalho:hi, colunas:ix, lidos:out.length,
+    cabecalhos:(rows[hi]||[]).map(h=>String(h||'').trim()).slice(0,10)};
   return out;
 }
 
@@ -6517,9 +7170,9 @@ function fluxoImportar(){
            ondrop="event.preventDefault();fluxoHandleFile(event.dataTransfer.files[0])">
         <div style="font-size:36px;margin-bottom:8px">📂</div>
         <div style="font-size:14px;font-weight:500;color:var(--text);margin-bottom:4px">Clique ou arraste o extrato aqui</div>
-        <div style="font-size:12px;color:var(--text3)">PDF do extrato Santander ou arquivo .json</div>
+        <div style="font-size:12px;color:var(--text3)">Excel/CSV do extrato (mais confiável) · PDF · .json</div>
       </div>
-      <input type="file" id="fluxo-input" accept=".pdf,.json" style="display:none" onchange="fluxoHandleFile(this.files[0])">
+      <input type="file" id="fluxo-input" accept=".xlsx,.xls,.csv,.pdf,.json" style="display:none" onchange="fluxoHandleFile(this.files[0])">
       <div id="fluxo-status" style="display:none;margin-top:12px;font-size:13px;color:var(--text3);text-align:center"></div>
       <div id="fluxo-erro" style="display:none;color:var(--red);font-size:13px;margin-top:12px"></div>
     </div>
@@ -6544,7 +7197,8 @@ function fluxoHandleFile(file){
         const lanc=(Array.isArray(dados)?dados:[]).map(d=>({
           data:d.data, desc:d.desc||d.descricao||'Lançamento',
           valor:Math.abs(Number(d.valor)||0),
-          tipo:d.tipo||((Number(d.valor)||0)<0?'saida':'entrada')
+          tipo:d.tipo||((Number(d.valor)||0)<0?'saida':'entrada'),
+          saldo:(d.saldo!=null?Number(d.saldo):null)
         })).filter(t=>t.data&&t.valor>0);
         if(status) status.style.display='none';
         if(!lanc.length){ if(erro){ erro.textContent='Nenhum lançamento válido no arquivo.'; erro.style.display='block'; } return; }
@@ -6556,6 +7210,29 @@ function fluxoHandleFile(file){
       }
     };
     reader.readAsText(file);
+    return;
+  }
+
+  if(nome.endsWith('.xlsx')||nome.endsWith('.xls')||nome.endsWith('.csv')){
+    if(status){ status.textContent='⏳ Lendo planilha...'; status.style.display='block'; }
+    (async()=>{
+      try{
+        const rows=await xlsxLerArquivo(file);
+        const lanc=fluxoParsePlanilha(rows);
+        if(status) status.style.display='none';
+        if(!lanc.length){
+          const d=window._fluxoDiag;
+          const cab=(d&&d.cabecalhos&&d.cabecalhos.length)?'<br><span style="font-size:11px;color:var(--text3)">Colunas encontradas: '+esc(d.cabecalhos.join(' · '))+'</span>':'';
+          if(erro){ erro.innerHTML='Não consegui identificar as colunas de Data e Valor nesta planilha.'+cab; erro.style.display='block'; }
+          return;
+        }
+        document.getElementById('modal-fluxo-import')?.remove();
+        fluxoRevisar(lanc);
+      }catch(err){
+        if(status) status.style.display='none';
+        if(erro){ erro.textContent='Erro ao ler a planilha do extrato.'; erro.style.display='block'; }
+      }
+    })();
     return;
   }
 
@@ -6604,7 +7281,7 @@ function fluxoHandleFile(file){
     return;
   }
 
-  if(erro){ erro.textContent='Formato não suportado. Use .pdf ou .json'; erro.style.display='block'; }
+  if(erro){ erro.textContent='Formato não suportado. Use .xlsx, .csv, .pdf ou .json'; erro.style.display='block'; }
 }
 
 function fluxoRevisar(lancamentos){
@@ -6624,6 +7301,7 @@ function fluxoRevisar(lancamentos){
       ?'<span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:20px">Entrada</span>'
       :'<span style="font-size:11px;background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:20px">Saída</span>'}</td>
     <td style="padding:5px 8px;text-align:right;font-size:12px;font-weight:600;color:${t.tipo==='entrada'?'var(--green)':'var(--red)'}">${finFmt(t.valor)}</td>
+    <td style="padding:5px 8px;text-align:right;font-size:11.5px;color:var(--text3)">${t.saldo!=null?finFmt(t.saldo):'—'}</td>
     <td style="padding:5px 8px;text-align:right"><button class="btn-delete" onclick="fluxoRemoverLinha(${i})">✕</button></td>
   </tr>`).join('');
 
@@ -6644,6 +7322,7 @@ function fluxoRevisar(lancamentos){
           <th style="padding:8px;text-align:left;font-size:11px;color:var(--text3)">Descrição</th>
           <th style="padding:8px;text-align:center;font-size:11px;color:var(--text3)">Tipo</th>
           <th style="padding:8px;text-align:right;font-size:11px;color:var(--text3)">Valor</th>
+          <th style="padding:8px;text-align:right;font-size:11px;color:var(--text3)">Saldo no extrato</th>
           <th style="padding:8px"></th>
         </tr></thead>
         <tbody>${linhas}</tbody>
@@ -6668,19 +7347,33 @@ function fluxoConfirmarImport(){
   const ativos=(window._fluxoImport||[]).filter(t=>t.ativo!==false&&t.valor>0);
   if(!ativos.length){ toast('Nenhum lançamento para importar.'); return; }
   const atual=fluxoLoad();
-  const chaves=new Set(atual.map(m=>m.data+'|'+m.desc+'|'+m.valor+'|'+m.tipo));
-  let novos=0, dup=0;
-  ativos.forEach((t,i)=>{
-    const chave=t.data+'|'+t.desc+'|'+t.valor+'|'+t.tipo;
-    if(chaves.has(chave)){ dup++; return; }
-    chaves.add(chave);
-    atual.push({id:'fx_'+Date.now()+'_'+i, data:t.data, desc:t.desc, valor:t.valor, tipo:t.tipo});
+
+  // Comparação por CONTAGEM da chave base (sem o saldo, para reconhecer também
+  // lançamentos importados antes de o saldo passar a ser gravado).
+  // Se o extrato traz 2 lançamentos iguais e o sistema tem 1, o segundo entra.
+  // Reimportar o mesmo extrato não duplica nada.
+  const chave=m=>[m.data,m.desc,m.valor,m.tipo].join('|');
+  const existentes={};
+  atual.forEach(m=>{ const k=chave(m); existentes[k]=(existentes[k]||0)+1; });
+
+  const vistos={};
+  let novos=0, dup=0, i=0;
+  ativos.forEach(t=>{
+    const k=chave(t);
+    vistos[k]=(vistos[k]||0)+1;
+    if(vistos[k]<=(existentes[k]||0)){ dup++; return; }
+    atual.push({
+      id:'fx_'+Date.now()+'_'+(i++),
+      data:t.data, desc:t.desc, valor:t.valor, tipo:t.tipo,
+      saldo:(t.saldo!=null?t.saldo:null)
+    });
     novos++;
   });
+
   fluxoSave(atual);
   document.getElementById('modal-fluxo-revisar')?.remove();
   finRenderFluxoCaixa();
-  toast('✅ '+novos+' lançamentos importados'+(dup?' ('+dup+' duplicados ignorados)':'')+'!');
+  toast('✅ '+novos+' lançamentos importados'+(dup?' ('+dup+' já existiam)':'')+'!');
 }
 
 function fluxoImprimir(){
@@ -6691,7 +7384,11 @@ function fluxoImprimir(){
   const sai=base.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.valor,0);
   const periodo=_fluxoTodos?'Todos os períodos':(FIN_MONTHS[_finMonth]+' '+_finYear);
   const hoje=new Date().toLocaleDateString('pt-BR');
-  let saldoAcum=0;
+  const ini=fluxoSaldoLoad();
+  // Parte do saldo inicial e acumula os lançamentos anteriores ao período exibido
+  let saldoAcum=fluxoLoad().filter(m=>m.data>ini.data && m.data<base[0].data)
+    .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
+  const saldoAbertura=saldoAcum;
   const linhas=base.map(m=>{
     saldoAcum+=(m.tipo==='entrada'?m.valor:-m.valor);
     return `<tr>
@@ -6722,14 +7419,17 @@ function fluxoImprimir(){
   <h1>Clínica CINPSI — Fluxo de Caixa</h1>
   <p class="sub">${periodo} · Gerado em ${hoje}</p>
   <div class="cards">
+    <div class="card"><div class="lbl">Saldo de abertura</div><div class="val">${finFmt(saldoAbertura)}</div></div>
     <div class="card"><div class="lbl">Entradas</div><div class="val green">${finFmt(ent)}</div></div>
     <div class="card"><div class="lbl">Saídas</div><div class="val red">${finFmt(sai)}</div></div>
-    <div class="card"><div class="lbl">Saldo</div><div class="val" style="color:${ent-sai>=0?'#059669':'#dc2626'}">${finFmt(ent-sai)}</div></div>
-    <div class="card"><div class="lbl">Lançamentos</div><div class="val">${base.length}</div></div>
+    <div class="card"><div class="lbl">Saldo final</div><div class="val" style="color:${saldoAcum>=0?'#059669':'#dc2626'}">${finFmt(saldoAcum)}</div></div>
   </div>
   <table>
     <thead><tr><th>Data</th><th>Descrição</th><th class="r">Entrada</th><th class="r">Saída</th><th class="r">Saldo acum.</th></tr></thead>
-    <tbody>${linhas}</tbody>
+    <tbody>
+      <tr style="background:#f9fafb"><td colspan="4"><em>Saldo de abertura</em></td><td class="r"><strong>${finFmt(saldoAbertura)}</strong></td></tr>
+      ${linhas}
+    </tbody>
   </table>
   </body></html>`);
   w.document.close();
