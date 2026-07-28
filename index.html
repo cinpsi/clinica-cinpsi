@@ -1171,6 +1171,10 @@ function exportBackup(){
       fluxo_caixa: JSON.parse(localStorage.getItem('cinpsi_fluxo_caixa')||'[]'),
       fat_planilha: JSON.parse(localStorage.getItem('cinpsi_fat_planilha')||'{}'),
       fluxo_saldo: JSON.parse(localStorage.getItem('cinpsi_fluxo_saldo')||'null'),
+      dre_config: JSON.parse(localStorage.getItem('cinpsi_dre_config')||'null'),
+      dfc_config: JSON.parse(localStorage.getItem('cinpsi_dfc_config')||'null'),
+      dfc_entradas: JSON.parse(localStorage.getItem('cinpsi_dfc_entradas')||'[]'),
+      dfc_inicio: JSON.parse(localStorage.getItem('cinpsi_dfc_inicio')||'null'),
     }
   };
   const json=JSON.stringify(backup, null, 2);
@@ -1267,6 +1271,10 @@ function confirmarRestore(backup){
       if(f.fluxo_caixa)     localStorage.setItem('cinpsi_fluxo_caixa', JSON.stringify(f.fluxo_caixa));
       if(f.fat_planilha)    localStorage.setItem('cinpsi_fat_planilha', JSON.stringify(f.fat_planilha));
       if(f.fluxo_saldo)     localStorage.setItem('cinpsi_fluxo_saldo', JSON.stringify(f.fluxo_saldo));
+      if(f.dre_config)      localStorage.setItem('cinpsi_dre_config', JSON.stringify(f.dre_config));
+      if(f.dfc_config)      localStorage.setItem('cinpsi_dfc_config', JSON.stringify(f.dfc_config));
+      if(f.dfc_entradas)    localStorage.setItem('cinpsi_dfc_entradas', JSON.stringify(f.dfc_entradas));
+      if(f.dfc_inicio)      localStorage.setItem('cinpsi_dfc_inicio', JSON.stringify(f.dfc_inicio));
     }
 
     localStorage.setItem('cl_ultimo_backup', Date.now());
@@ -4463,6 +4471,7 @@ function renderFinanceiro(c){
     <button class="fin-tab" onclick="finSwitchTab('repasses')">Repasses</button>
     <button class="fin-tab" onclick="finSwitchTab('previsao-rec')">📅 Previsão de Receita</button>
     <button class="fin-tab" onclick="finSwitchTab('dre')">📊 DRE</button>
+    <button class="fin-tab" onclick="finSwitchTab('dfc')">📆 DFC Anual</button>
     <button class="fin-tab" onclick="finSwitchTab('previsao-caixa')">💰 Previsão de Caixa</button>
     <button class="fin-tab" onclick="finSwitchTab('orcamento')">🎯 Orçamento Anual</button>
     <button class="fin-tab" onclick="finSwitchTab('fluxo-caixa')">🏦 Fluxo de Caixa</button>
@@ -4589,6 +4598,11 @@ function renderFinanceiro(c){
       <div class="fin-section-title">Demonstrativo de Resultado (DRE)</div>
     </div>
     <div id="fin-dre-full" style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);max-width:680px"></div>
+  </div>
+
+  <!-- DFC ANUAL -->
+  <div class="fin-panel" id="fin-panel-dfc">
+    <div id="fin-dfc-content"></div>
   </div>
 
   <div class="fin-panel" id="fin-panel-previsao-caixa">
@@ -4734,7 +4748,7 @@ function finChangeMonth(d){
   fin_refresh();
 }
 function finSwitchTab(name){
-  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','previsao-caixa','orcamento','fluxo-caixa','indicadores'];
+  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','dfc','previsao-caixa','orcamento','fluxo-caixa','indicadores'];
   document.querySelectorAll('.fin-tab').forEach((t,i)=>{
     t.classList.toggle('active',tabs[i]===name);
   });
@@ -4743,6 +4757,7 @@ function finSwitchTab(name){
   if(panel) panel.classList.add('active');
   if(name==='repasses') finRenderRepasses();
   if(name==='dre') finRenderDRE();
+  if(name==='dfc') finRenderDFC();
   if(name==='previsao-rec') finRenderPrevisaoRec();
   if(name==='previsao-caixa') finRenderPrevisaoCaixa();
   if(name==='orcamento') finRenderOrcamento();
@@ -5214,6 +5229,434 @@ function dreSalvarConfig(){
   document.getElementById('modal-dre-config').remove();
   finRenderDRE();
   toast('✅ Configuração do DRE salva!');
+}
+
+
+// ════════════════════════════════════════════════════════════
+// DFC ANUAL — Demonstrativo de Fluxo de Caixa
+// ════════════════════════════════════════════════════════════
+
+// ── Configuração: quais categorias de despesa entram em cada linha do DFC ──
+function dfcLoadConfig(){
+  try{ return JSON.parse(localStorage.getItem('cinpsi_dfc_config')||'null'); }catch(e){ return null; }
+}
+function dfcSaveConfig(cfg){
+  localStorage.setItem('cinpsi_dfc_config',JSON.stringify(cfg));
+  _cache['cinpsi_dfc_config']=cfg;
+  if(typeof _fbWrite==='function') _fbWrite('cinpsi_dfc_config',cfg);
+}
+function dfcDefaultConfig(){
+  return {
+    salarios:{label:'Salários', cats:[]},
+    custoFixo:{label:'Custo Fixo', cats:[]},
+    despFinanceiras:{label:'Despesas Financeiras (Juros)', cats:[]},
+    moveis:{label:'Móveis e Utensílios', cats:[]},
+    fornecedores:{label:'Fornecedores', cats:[]},
+    veiculos:{label:'Veículos', cats:[]},
+    emprestimos:{label:'Empréstimos (pagamento)', cats:[]},
+    aplicacoes:{label:'Aplicações Financeiras', cats:[]},
+  };
+}
+function dfcGetConfig(){ return dfcLoadConfig()||dfcDefaultConfig(); }
+
+function dfcOpenConfig(){
+  document.getElementById('modal-dfc-config')?.remove();
+  const cfg=dfcGetConfig();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-dfc-config';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+
+  function catNoGrupo(cat){
+    for(const gk of Object.keys(cfg)){
+      if(cfg[gk].cats.includes(cat)) return gk;
+    }
+    return '';
+  }
+
+  const grupos=Object.entries(dfcDefaultConfig()).map(([k,g])=>({k,label:g.label}));
+
+  const linhas=DRE_CATS_TODAS.map(cat=>{
+    const atual=catNoGrupo(cat);
+    return `<tr>
+      <td style="padding:7px 10px;font-size:13px;border-bottom:1px solid var(--border2)">${esc(cat)}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid var(--border2)">
+        <select class="form-select" style="font-size:12px;padding:5px 8px" data-cat="${esc(cat)}">
+          <option value="">Outras Saídas</option>
+          ${grupos.map(g=>`<option value="${g.k}" ${atual===g.k?'selected':''}>${g.label}</option>`).join('')}
+        </select>
+      </td>
+    </tr>`;
+  }).join('');
+
+  mo.innerHTML=`<div class="modal" style="max-width:560px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Configurar categorias do DFC</div>
+      <button class="modal-close" onclick="document.getElementById('modal-dfc-config').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <p style="font-size:13px;color:var(--text3);margin:0 0 16px">Escolha em qual linha do DFC cada categoria de despesa entra. Quem ficar sem escolha vai para "Outras Saídas" — nada some do total.</p>
+      <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:16px;font-size:12px;color:#3730A3">
+        💡 <strong>Comissões</strong> vêm automaticamente dos repasses já calculados na aba Repasses — não precisa configurar categoria pra isso.
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Categoria de despesa</th>
+          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Linha no DFC</th>
+        </tr></thead>
+        <tbody>${linhas}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-dfc-config').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="dfcSalvarConfig()">💾 Salvar configuração</button>
+    </div>
+  </div>`;
+
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function dfcSalvarConfig(){
+  const cfg=dfcDefaultConfig();
+  Object.keys(cfg).forEach(k=>cfg[k].cats=[]);
+  document.querySelectorAll('#modal-dfc-config select[data-cat]').forEach(sel=>{
+    const cat=sel.getAttribute('data-cat');
+    const grupo=sel.value;
+    if(grupo && cfg[grupo]) cfg[grupo].cats.push(cat);
+  });
+  dfcSaveConfig(cfg);
+  document.getElementById('modal-dfc-config').remove();
+  finRenderDFC();
+  toast('✅ Configuração do DFC salva!');
+}
+
+// ── Ledger manual: empréstimos, duplicatas a receber e outras entradas ──
+function dfcLoadEntradas(){
+  try{
+    const cached=_cache['cinpsi_dfc_entradas'];
+    if(cached!==undefined) return Array.isArray(cached)?cached:[];
+    return JSON.parse(localStorage.getItem('cinpsi_dfc_entradas')||'[]');
+  }catch(e){ return []; }
+}
+function dfcSaveEntradas(d){
+  localStorage.setItem('cinpsi_dfc_entradas',JSON.stringify(d));
+  _cache['cinpsi_dfc_entradas']=d;
+  if(typeof _fbWrite==='function') _fbWrite('cinpsi_dfc_entradas',d);
+}
+
+const DFC_CATS_ENTRADA=['Empréstimo/Entrada de Recursos','Duplicatas a Receber','Outras Entradas'];
+
+function dfcAbrirModalEntrada(id){
+  document.getElementById('modal-dfc-entrada')?.remove();
+  const editando=id!=null?dfcLoadEntradas().find(e=>e.id===id):null;
+  const hoje=new Date().toISOString().split('T')[0];
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-dfc-entrada';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">${editando?'Editar':'+ Nova'} entrada — DFC</div>
+      <button class="modal-close" onclick="document.getElementById('modal-dfc-entrada').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Data</label>
+          <input class="form-input" type="date" id="dfce-data" value="${editando?editando.data:hoje}"></div>
+        <div class="form-group"><label class="form-label">Categoria</label>
+          <select class="form-select" id="dfce-cat">
+            ${DFC_CATS_ENTRADA.map(c=>`<option${editando&&editando.cat===c?' selected':''}>${c}</option>`).join('')}
+          </select></div>
+        <div class="form-group full"><label class="form-label">Descrição</label>
+          <input class="form-input" id="dfce-desc" placeholder="Ex: Empréstimo capital de giro" value="${editando?esc(editando.desc||''):''}"></div>
+        <div class="form-group"><label class="form-label">Valor (R$)</label>
+          <input class="form-input" type="number" step="0.01" id="dfce-valor" value="${editando?editando.valor:''}" placeholder="0,00"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-dfc-entrada').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="dfcSalvarEntrada(${editando?`'${editando.id}'`:'null'})">💾 Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function dfcSalvarEntrada(id){
+  const data=document.getElementById('dfce-data').value;
+  const cat=document.getElementById('dfce-cat').value;
+  const desc=document.getElementById('dfce-desc').value.trim();
+  const valor=parseFloat(document.getElementById('dfce-valor').value);
+  if(!data||!valor||valor<=0){ toast('Preencha data e valor.'); return; }
+  const lista=dfcLoadEntradas();
+  if(id){
+    const i=lista.findIndex(e=>e.id===id);
+    if(i!==-1) lista[i]={...lista[i], data, cat, desc, valor};
+  } else {
+    lista.push({id:'dfce_'+Date.now(), data, cat, desc, valor});
+  }
+  dfcSaveEntradas(lista);
+  document.getElementById('modal-dfc-entrada')?.remove();
+  if(document.getElementById('modal-dfc-lista')) dfcGerenciarEntradas();
+  finRenderDFC();
+  toast('✅ Lançamento salvo!');
+}
+
+function dfcExcluirEntrada(id){
+  if(!confirm('Excluir este lançamento?')) return;
+  dfcSaveEntradas(dfcLoadEntradas().filter(e=>e.id!==id));
+  dfcGerenciarEntradas();
+  finRenderDFC();
+}
+
+function dfcGerenciarEntradas(){
+  document.getElementById('modal-dfc-lista')?.remove();
+  const lista=dfcLoadEntradas().filter(e=>(e.data||'').startsWith(String(_dfcAno))).sort((a,b)=>a.data.localeCompare(b.data));
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-dfc-lista';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:640px;max-height:85vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">🗂️ Empréstimos, duplicatas e outras entradas — ${_dfcAno}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-dfc-lista').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
+      <div style="padding:12px 16px"><button class="btn-primary" style="font-size:13px" onclick="dfcAbrirModalEntrada()">+ Nova entrada</button></div>
+      <div class="fin-table-wrap" style="margin:0 16px 16px">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:8px;text-align:left;font-size:11px;color:var(--text3)">Data</th>
+            <th style="padding:8px;text-align:left;font-size:11px;color:var(--text3)">Categoria</th>
+            <th style="padding:8px;text-align:left;font-size:11px;color:var(--text3)">Descrição</th>
+            <th style="padding:8px;text-align:right;font-size:11px;color:var(--text3)">Valor</th>
+            <th style="padding:8px"></th>
+          </tr></thead>
+          <tbody>${lista.length?lista.map(e=>`<tr>
+            <td style="padding:7px 8px;font-size:12px;white-space:nowrap">${finFmtDate(e.data)}</td>
+            <td style="padding:7px 8px;font-size:12px">${esc(e.cat)}</td>
+            <td style="padding:7px 8px;font-size:12px">${esc(e.desc||'—')}</td>
+            <td style="padding:7px 8px;text-align:right;font-size:12px;font-weight:600;color:var(--green)">${finFmt(e.valor)}</td>
+            <td style="padding:7px 8px;text-align:right;white-space:nowrap">
+              <button class="btn-ghost" style="font-size:11px;padding:4px 8px" onclick="dfcAbrirModalEntrada('${e.id}')">✏️</button>
+              <button class="btn-delete" onclick="dfcExcluirEntrada('${e.id}')">✕</button>
+            </td>
+          </tr>`).join(''):`<tr><td colspan="5" style="text-align:center;padding:30px;color:var(--text3)">Nenhum lançamento em ${_dfcAno}.</td></tr>`}</tbody>
+        </table>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+// ── Cálculo mensal do DFC ──
+function dfcDadosMes(mes, ano){
+  const mesKey=`${ano}-${String(mes+1).padStart(2,'0')}`;
+  const cfg=dfcGetConfig();
+
+  // Entradas
+  const receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey)).reduce((s,r)=>s+r.valor,0);
+  const entradasManuais=dfcLoadEntradas().filter(e=>(e.data||'').startsWith(mesKey));
+  const somaCat=(cat)=>entradasManuais.filter(e=>e.cat===cat).reduce((s,e)=>s+e.valor,0);
+  const emprestimoEntrada=somaCat('Empréstimo/Entrada de Recursos');
+  const duplicatas=somaCat('Duplicatas a Receber');
+  const outrasEntradas=somaCat('Outras Entradas');
+  const totalEntradas=receita+emprestimoEntrada+duplicatas+outrasEntradas;
+
+  // Comissões — reaproveita o cálculo de repasses já usado no DRE/Indicadores
+  // (usa valor real pago quando lançado, senão o calculado pelas regras vigentes)
+  const comissoes=finIndDadosMes(mes,ano).repasses;
+
+  // Despesas por grupo configurado (categorias do cadastro de Despesas)
+  const mDesp=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
+  const somaGrupo=(catsArr)=>mDesp.filter(d=>catsArr.includes(d.cat)).reduce((s,d)=>s+d.valor,0);
+  const salarios=somaGrupo(cfg.salarios.cats);
+  const custoFixo=somaGrupo(cfg.custoFixo.cats);
+  const despFinanceiras=somaGrupo(cfg.despFinanceiras.cats);
+  const moveis=somaGrupo(cfg.moveis.cats);
+  const fornecedores=somaGrupo(cfg.fornecedores.cats);
+  const veiculos=somaGrupo(cfg.veiculos.cats);
+  const emprestimos=somaGrupo(cfg.emprestimos.cats);
+  const aplicacoes=somaGrupo(cfg.aplicacoes.cats);
+  const catsConfiguradas=Object.values(cfg).reduce((arr,g)=>arr.concat(g.cats),[]);
+  const totalDesp=mDesp.reduce((s,d)=>s+d.valor,0);
+  const outrasSaidas=totalDesp-mDesp.filter(d=>catsConfiguradas.includes(d.cat)).reduce((s,d)=>s+d.valor,0);
+  const totalSaidas=salarios+custoFixo+comissoes+despFinanceiras+moveis+fornecedores+veiculos+emprestimos+aplicacoes+outrasSaidas;
+
+  // Saldo — ancorado no extrato bancário real (Fluxo de Caixa: Santander + InfinitePay)
+  const fimMesAnterior=new Date(ano, mes, 0); // dia 0 = último dia do mês anterior
+  const fimMesAnteriorStr=`${fimMesAnterior.getFullYear()}-${String(fimMesAnterior.getMonth()+1).padStart(2,'0')}-${String(fimMesAnterior.getDate()).padStart(2,'0')}`;
+  const fimMes=new Date(ano, mes+1, 0);
+  const fimMesStr=`${fimMes.getFullYear()}-${String(fimMes.getMonth()+1).padStart(2,'0')}-${String(fimMes.getDate()).padStart(2,'0')}`;
+  const saldoInicial=fluxoSaldoAte(fimMesAnteriorStr);
+  const saldoFinalReal=fluxoSaldoAte(fimMesStr);
+  const saldoFinalCalc=saldoInicial+totalEntradas-totalSaidas;
+  const diferenca=saldoFinalReal-saldoFinalCalc;
+
+  return { mes,ano,mesKey, receita,emprestimoEntrada,duplicatas,outrasEntradas,totalEntradas,
+    salarios,custoFixo,comissoes,despFinanceiras,moveis,fornecedores,veiculos,emprestimos,aplicacoes,outrasSaidas,totalSaidas,
+    saldoInicial,saldoFinalReal,saldoFinalCalc,diferenca };
+}
+
+// ── Início do acompanhamento: meses anteriores ficam fora do DFC ──
+function dfcLoadInicio(){
+  try{
+    const s=JSON.parse(localStorage.getItem('cinpsi_dfc_inicio')||'null');
+    if(s&&s.ano!=null&&s.mes!=null) return s;
+  }catch(e){}
+  return {ano:2026, mes:5}; // padrão: Junho/2026
+}
+function dfcSaveInicio(s){
+  localStorage.setItem('cinpsi_dfc_inicio',JSON.stringify(s));
+  _cache['cinpsi_dfc_inicio']=s;
+  if(typeof _fbWrite==='function') _fbWrite('cinpsi_dfc_inicio',s);
+}
+function dfcConfigInicio(){
+  const s=dfcLoadInicio();
+  document.getElementById('modal-dfc-inicio')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-dfc-inicio';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Início do acompanhamento do DFC</div>
+      <button class="modal-close" onclick="document.getElementById('modal-dfc-inicio').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.6">
+        Meses anteriores a este ficam fora do DFC (marcados com "·"), sem entrar nos totais.
+      </p>
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Mês</label>
+          <select class="form-select" id="dfci-mes">
+            ${FIN_MONTHS.map((m,i)=>`<option value="${i}" ${i===s.mes?'selected':''}>${m}</option>`).join('')}
+          </select></div>
+        <div class="form-group"><label class="form-label">Ano</label>
+          <input class="form-input" type="number" id="dfci-ano" value="${s.ano}"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-dfc-inicio').remove()">Cancelar</button>
+      <button class="btn-save-purple" onclick="dfcSalvarInicio()">💾 Salvar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+function dfcSalvarInicio(){
+  const mes=parseInt(document.getElementById('dfci-mes').value);
+  const ano=parseInt(document.getElementById('dfci-ano').value);
+  if(isNaN(mes)||isNaN(ano)){ toast('Informe mês e ano válidos.'); return; }
+  dfcSaveInicio({mes,ano});
+  document.getElementById('modal-dfc-inicio')?.remove();
+  finRenderDFC();
+  toast('✅ Início do DFC atualizado!');
+}
+
+let _dfcAno=new Date().getFullYear();
+function dfcChangeAno(d){ _dfcAno+=d; finRenderDFC(); }
+
+function finRenderDFC(){
+  const el=document.getElementById('fin-dfc-content'); if(!el) return;
+
+  const meses=[];
+  for(let m=0;m<12;m++) meses.push(dfcDadosMes(m,_dfcAno));
+
+  // Meses antes do início configurado ficam fora do DFC (não entram nos totais)
+  const inicio=dfcLoadInicio();
+  const mesInicioEfetivo = _dfcAno<inicio.ano ? 12 : (_dfcAno===inicio.ano ? inicio.mes : 0);
+  const valido = m => m>=mesInicioEfetivo;
+  const primeiroValido = meses.findIndex((d,i)=>valido(i));
+  let ultimoValido=-1; meses.forEach((d,i)=>{ if(valido(i)) ultimoValido=i; });
+  const temValido = primeiroValido>=0;
+  const inicioLabel = FIN_MONTHS[inicio.mes]+'/'+inicio.ano;
+
+  const somaAno=(campo)=>meses.reduce((s,d,i)=>valido(i)?s+d[campo]:s,0);
+
+  const cel=(v,neg,valida=true)=>{
+    if(!valida) return `<td style="padding:6px 10px;text-align:right;font-size:12px;white-space:nowrap;color:var(--text3)" title="Fora do período de acompanhamento (antes de ${inicioLabel})">·</td>`;
+    return `<td style="padding:6px 10px;text-align:right;font-size:12px;white-space:nowrap" class="${neg&&v<0?'fin-dre-neg':''}">${v!=0?finFmt(v):'<span style="color:var(--text3)">—</span>'}</td>`;
+  };
+
+  const linha=(label,campo,destaque)=>{
+    const bg=destaque?'background:var(--surface2)':'';
+    const fw=destaque?'font-weight:700':'';
+    const cels=meses.map((d,i)=>{
+      if(!valido(i)) return `<td style="padding:6px 10px;text-align:right;font-size:12px;white-space:nowrap;${fw}color:var(--text3)" title="Fora do período de acompanhamento (antes de ${inicioLabel})">·</td>`;
+      const v=d[campo];
+      return `<td style="padding:6px 10px;text-align:right;font-size:12px;white-space:nowrap;${fw}">${v!=0?finFmt(v):'<span style="color:var(--text3)">—</span>'}</td>`;
+    }).join('');
+    return `<tr style="${bg}"><td style="padding:6px 10px;font-size:12.5px;white-space:nowrap;${fw}">${label}</td>${cels}<td style="padding:6px 10px;text-align:right;font-size:12px;white-space:nowrap;${fw}">${finFmt(somaAno(campo))}</td></tr>`;
+  };
+
+  const linhaSecao=(label)=>`<tr><td colspan="14" style="padding:6px 10px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);background:var(--surface2)">${label}</td></tr>`;
+
+  const header=`<tr style="background:var(--surface2)">
+    <th style="padding:8px 10px;text-align:left;font-size:10.5px;color:var(--text3);white-space:nowrap">Linha</th>
+    ${FIN_MONTHS.map((m,i)=>`<th style="padding:8px 6px;text-align:right;font-size:10.5px;color:${valido(i)?'var(--text3)':'var(--border2)'};white-space:nowrap">${m.slice(0,3)}</th>`).join('')}
+    <th style="padding:8px 10px;text-align:right;font-size:10.5px;color:var(--text3);white-space:nowrap">Total${_dfcAno===inicio.ano?' (a partir de '+FIN_MONTHS[inicio.mes].slice(0,3)+')':' '+_dfcAno}</th>
+  </tr>`;
+
+  const totalSaldoInicial=temValido?meses[primeiroValido].saldoInicial:0;
+  const totalSaldoFinalCalc=temValido?meses[ultimoValido].saldoFinalCalc:0;
+  const totalSaldoFinalReal=temValido?meses[ultimoValido].saldoFinalReal:0;
+  const totalDiferenca=temValido?(meses[ultimoValido].saldoFinalReal-meses[ultimoValido].saldoFinalCalc):0;
+
+  const linhaSaldoInicial=`<tr><td style="padding:6px 10px;font-size:12.5px;font-weight:600;white-space:nowrap">Saldo Inicial</td>${meses.map((d,i)=>cel(d.saldoInicial,true,valido(i))).join('')}${cel(totalSaldoInicial,true,temValido)}</tr>`;
+
+  const linhaSaldoFinalCalc=`<tr style="border-top:2px solid var(--border)"><td style="padding:8px 10px;font-size:13px;font-weight:700;white-space:nowrap">Saldo Final de Caixa (calculado)</td>${meses.map((d,i)=>cel(d.saldoFinalCalc,true,valido(i))).join('')}${cel(totalSaldoFinalCalc,true,temValido)}</tr>`;
+  const linhaSaldoFinalReal=`<tr><td style="padding:6px 10px;font-size:12px;color:var(--text2);white-space:nowrap">Saldo Final de Caixa (real, extrato)</td>${meses.map((d,i)=>cel(d.saldoFinalReal,true,valido(i))).join('')}${cel(totalSaldoFinalReal,true,temValido)}</tr>`;
+  const linhaDiferenca=`<tr><td style="padding:6px 10px;font-size:11.5px;color:var(--text3);white-space:nowrap">Diferença de conciliação</td>${meses.map((d,i)=>cel(d.diferenca,true,valido(i))).join('')}${cel(totalDiferenca,true,temValido)}</tr>`;
+
+  el.innerHTML=`
+    <div class="fin-section-header">
+      <div>
+        <div class="fin-section-title">📆 DFC Anual</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Saldo inicial/final vêm do extrato real (Santander + InfinitePay); entradas e saídas, das categorias já cadastradas no sistema.</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn-ghost" style="font-size:13px" onclick="dfcGerenciarEntradas()">🗂️ Empréstimos/Duplicatas</button>
+        <button class="btn-ghost" style="font-size:13px" onclick="dfcOpenConfig()">⚙️ Configurar categorias</button>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;flex-wrap:wrap">
+      <div class="fin-month-selector" style="width:fit-content">
+        <button class="fin-month-btn" onclick="dfcChangeAno(-1)">‹</button>
+        <div class="fin-month-label">${_dfcAno}</div>
+        <button class="fin-month-btn" onclick="dfcChangeAno(1)">›</button>
+      </div>
+      <button class="btn-ghost" style="font-size:12px" onclick="dfcConfigInicio()">📍 Base a partir de ${esc(inicioLabel)} ✏️</button>
+    </div>
+    <div class="fin-table-wrap" style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;min-width:1100px">
+        <thead>${header}</thead>
+        <tbody>
+          ${linhaSaldoInicial}
+          ${linhaSecao('(+) Entradas')}
+          ${linha('Receita (consultas)','receita')}
+          ${linha('Empréstimo/Entrada de Recursos','emprestimoEntrada')}
+          ${linha('Duplicatas a Receber','duplicatas')}
+          ${linha('Outras Entradas','outrasEntradas')}
+          ${linha('= Total de Entradas','totalEntradas',true)}
+          ${linhaSecao('(-) Saídas')}
+          ${linha('Salários','salarios')}
+          ${linha('Custo Fixo','custoFixo')}
+          ${linha('Comissões','comissoes')}
+          ${linha('Despesas Financeiras (Juros)','despFinanceiras')}
+          ${linha('Móveis e Utensílios','moveis')}
+          ${linha('Fornecedores','fornecedores')}
+          ${linha('Veículos','veiculos')}
+          ${linha('Empréstimos (pagamento)','emprestimos')}
+          ${linha('Aplicações Financeiras','aplicacoes')}
+          ${linha('Outras Saídas','outrasSaidas')}
+          ${linha('= Total de Saídas','totalSaidas',true)}
+          ${linhaSaldoFinalCalc}
+          ${linhaSaldoFinalReal}
+          ${linhaDiferenca}
+        </tbody>
+      </table>
+    </div>
+    <p style="font-size:11.5px;color:var(--text3);font-style:italic;margin-top:10px">💡 Meses marcados com "·" ficam fora do período de acompanhamento (antes de ${esc(inicioLabel)}) e não entram nos totais. "Diferença de conciliação" fora de R$ 0 costuma indicar despesa ou entrada do extrato que ainda não foi categorizada no sistema.</p>
+  `;
 }
 
 function finUpdateProfFilter(mRec){
@@ -7109,6 +7552,8 @@ function fluxoSave(d){
 
 let _fluxoTipo='';
 let _fluxoTodos=false;
+let _fluxoImportOrigem='Santander';
+let _fluxoFiltroOrigem='';
 
 // Saldo inicial em conta — ponto de partida do fluxo
 const FLUXO_SALDO_PADRAO={data:'2026-06-30', valor:24860.13};
@@ -7180,7 +7625,7 @@ function finRenderFluxoCaixa(){
   const ini=fluxoSaldoLoad();
 
   const base=(_fluxoTodos?todos:todos.filter(m=>finInMonth(m.data)));
-  const lista=base.filter(m=>!_fluxoTipo||m.tipo===_fluxoTipo)
+  const lista=base.filter(m=>(!_fluxoTipo||m.tipo===_fluxoTipo)&&(!_fluxoFiltroOrigem||m.origem===_fluxoFiltroOrigem))
     .sort((a,b)=>b.data.localeCompare(a.data));
 
   const entradas=base.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.valor,0);
@@ -7203,6 +7648,11 @@ function finRenderFluxoCaixa(){
         <option value="" ${_fluxoTipo===''?'selected':''}>Todos os lançamentos</option>
         <option value="entrada" ${_fluxoTipo==='entrada'?'selected':''}>🟢 Só entradas</option>
         <option value="saida" ${_fluxoTipo==='saida'?'selected':''}>🔴 Só saídas</option>
+      </select>
+      <select class="form-select" style="font-size:12px;padding:6px 10px;width:auto" onchange="_fluxoFiltroOrigem=this.value;finRenderFluxoCaixa()">
+        <option value="" ${_fluxoFiltroOrigem===''?'selected':''}>Todas as origens</option>
+        <option value="Santander" ${_fluxoFiltroOrigem==='Santander'?'selected':''}>🏦 Santander</option>
+        <option value="InfinitePay" ${_fluxoFiltroOrigem==='InfinitePay'?'selected':''}>💳 InfinitePay</option>
       </select>
       <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);cursor:pointer">
         <input type="checkbox" ${_fluxoTodos?'checked':''} onchange="_fluxoTodos=this.checked;finRenderFluxoCaixa()"> Ver todos os meses
@@ -7233,6 +7683,7 @@ function finRenderFluxoCaixa(){
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:var(--surface2)">
           <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Data</th>
+          <th style="padding:8px 10px;text-align:center;font-size:11px;color:var(--text3)">Origem</th>
           <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Descrição</th>
           <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Entrada</th>
           <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Saída</th>
@@ -7241,12 +7692,13 @@ function finRenderFluxoCaixa(){
         </tr></thead>
         <tbody>${lista.length?lista.map(m=>`<tr>
           <td style="padding:7px 10px;font-size:12px;white-space:nowrap">${finFmtDate(m.data)}</td>
+          <td style="padding:7px 10px;text-align:center">${fluxoOrigemBadge(m.origem)}</td>
           <td style="padding:7px 10px;font-size:12.5px">${esc(m.desc)}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:var(--green);font-weight:${m.tipo==='entrada'?'600':'400'}">${m.tipo==='entrada'?finFmt(m.valor):'—'}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:var(--red);font-weight:${m.tipo==='saida'?'600':'400'}">${m.tipo==='saida'?finFmt(m.valor):'—'}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:${acum[m.id]!=null&&acum[m.id]<0?'var(--red)':'var(--text2)'}">${acum[m.id]!=null?finFmt(acum[m.id]):'—'}</td>
           <td style="padding:7px 10px;text-align:right"><button class="btn-delete" onclick="fluxoExcluir('${m.id}')" title="Excluir">✕</button></td>
-        </tr>`).join(''):`<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text3)">Nenhum lançamento. Clique em <strong>🏦 Importar extrato</strong> para começar.</td></tr>`}</tbody>
+        </tr>`).join(''):`<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Nenhum lançamento. Clique em <strong>🏦 Importar extrato</strong> para começar.</td></tr>`}</tbody>
       </table>
     </div>`;
 }
@@ -7259,7 +7711,7 @@ function fluxoRemoverDuplicados(){
 
   const grupos={};
   todos.forEach(m=>{
-    const k=[m.data,m.desc,m.valor,m.tipo,(m.saldo!=null?m.saldo:'')].join('|');
+    const k=[m.data,m.desc,m.valor,m.tipo,m.origem||'',(m.saldo!=null?m.saldo:'')].join('|');
     (grupos[k]=grupos[k]||[]).push(m);
   });
 
@@ -7340,6 +7792,51 @@ function fluxoParseExtrato(texto){
     if(!desc) desc='Lançamento';
     const [d,m,a]=mData[1].split('/');
     out.push({data:a+'-'+m+'-'+d, desc, valor:Math.abs(bruto), tipo:bruto<0?'saida':'entrada', saldo:isNaN(saldo)?null:saldo});
+  });
+  return out;
+}
+
+// Badge visual de origem do lançamento (Santander/InfinitePay)
+function fluxoOrigemBadge(origem){
+  if(origem==='InfinitePay') return '<span style="font-size:11px;background:var(--purple-light);color:var(--purple);padding:2px 8px;border-radius:20px;white-space:nowrap">💳 InfinitePay</span>';
+  if(origem==='Santander') return '<span style="font-size:11px;background:var(--accent-light);color:var(--accent);padding:2px 8px;border-radius:20px;white-space:nowrap">🏦 Santander</span>';
+  return '<span style="font-size:11px;color:var(--text3)">—</span>';
+}
+
+// Extrai lançamentos do relatório em PDF do InfinitePay ("Relatório de
+// movimentações"). Formato bem diferente do extrato bancário: a data aparece
+// uma única vez por dia (cabeçalho do bloco), e cada linha de transação traz
+// só a hora + tipo + nome + detalhe + valor já com sinal (+/-).
+const INFP_MESES={Jan:'01',Fev:'02',Mar:'03',Abr:'04',Mai:'05',Jun:'06',Jul:'07',Ago:'08',Set:'09',Out:'10',Nov:'11',Dez:'12'};
+function fluxoParseInfinitePay(texto){
+  const linhas=texto.replace(/\r/g,'').split('\n').map(l=>l.trim()).filter(Boolean);
+  // A data (ex: "05 Jan, 2026") só aparece colada na PRIMEIRA transação do dia
+  // (mesma linha, pois cai na mesma altura/linha do PDF); as demais transações
+  // do dia começam direto pela hora. Por isso a data é um grupo opcional aqui.
+  const reLinha=/^(?:(\d{1,2})\s+(Jan|Fev|Mar|Abr|Mai|Jun|Jul|Ago|Set|Out|Nov|Dez),\s*(\d{4})\s+)?(\d{2}):(\d{2})\s+(.+)$/;
+  const reValorFim=/([+-]\d{1,3}(?:\.\d{3})*,\d{2})$/;
+
+  let dataAtual=null;
+  const out=[];
+  linhas.forEach(l=>{
+    const m=reLinha.exec(l);
+    if(!m) return;
+    if(m[1]){
+      const mes=INFP_MESES[m[2]]||'01';
+      dataAtual=m[3]+'-'+mes+'-'+m[1].padStart(2,'0');
+    }
+    if(!dataAtual) return;
+    const resto=m[6];
+    const mValor=reValorFim.exec(resto);
+    if(!mValor) return;
+    const bruto=parseFloat(mValor[1].replace(/\./g,'').replace(',','.'));
+    if(!bruto) return;
+    let desc=resto.slice(0,mValor.index).trim();
+    desc=desc.replace(/^Pix\s+Pix\s+/,'Pix ');
+    desc=desc.replace(/\s+(Recebido|Enviado|Pagamento efetuado)$/,'');
+    if(/^Dep[óo]sito de vendas/i.test(desc)) desc='Depósito de vendas — InfinitePay';
+    if(!desc) desc='Lançamento';
+    out.push({data:dataAtual, desc, valor:Math.abs(bruto), tipo:bruto<0?'saida':'entrada', saldo:null, origem:'InfinitePay'});
   });
   return out;
 }
@@ -7425,7 +7922,14 @@ function fluxoParsePlanilha(rows){
   return out;
 }
 
+function fluxoSetOrigemImport(o){
+  _fluxoImportOrigem=o;
+  document.getElementById('fluxo-origem-santander')?.classList.toggle('active',o==='Santander');
+  document.getElementById('fluxo-origem-infinitepay')?.classList.toggle('active',o==='InfinitePay');
+}
+
 function fluxoImportar(){
+  _fluxoImportOrigem='Santander';
   document.getElementById('modal-fluxo-import')?.remove();
   const mo=document.createElement('div');
   mo.className='modal-overlay'; mo.id='modal-fluxo-import';
@@ -7436,9 +7940,17 @@ function fluxoImportar(){
       <button class="modal-close" onclick="document.getElementById('modal-fluxo-import').remove()">×</button>
     </div>
     <div class="modal-body">
-      <p style="font-size:13px;color:var(--text2);margin:0 0 16px;line-height:1.6">
+      <p style="font-size:13px;color:var(--text2);margin:0 0 14px;line-height:1.6">
         Todos os lançamentos do extrato serão importados — <strong>entradas e saídas</strong>, sem nenhum filtro.
       </p>
+      <div style="margin-bottom:14px">
+        <label class="form-label" style="display:block;margin-bottom:6px">Origem do arquivo</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="fin-tipo-btn active" id="fluxo-origem-santander" onclick="fluxoSetOrigemImport('Santander')">🏦 Santander</button>
+          <button type="button" class="fin-tipo-btn" id="fluxo-origem-infinitepay" onclick="fluxoSetOrigemImport('InfinitePay')">💳 InfinitePay</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">Em PDF eu identifico a origem automaticamente. Para Excel/CSV/JSON, use os botões acima.</div>
+      </div>
       <div style="border:2px dashed var(--border2);border-radius:var(--radius);padding:32px;text-align:center;cursor:pointer"
            onclick="document.getElementById('fluxo-input').click()"
            ondragover="event.preventDefault()"
@@ -7473,7 +7985,8 @@ function fluxoHandleFile(file){
           data:d.data, desc:d.desc||d.descricao||'Lançamento',
           valor:Math.abs(Number(d.valor)||0),
           tipo:d.tipo||((Number(d.valor)||0)<0?'saida':'entrada'),
-          saldo:(d.saldo!=null?Number(d.saldo):null)
+          saldo:(d.saldo!=null?Number(d.saldo):null),
+          origem:d.origem||_fluxoImportOrigem
         })).filter(t=>t.data&&t.valor>0);
         if(status) status.style.display='none';
         if(!lanc.length){ if(erro){ erro.textContent='Nenhum lançamento válido no arquivo.'; erro.style.display='block'; } return; }
@@ -7493,7 +8006,7 @@ function fluxoHandleFile(file){
     (async()=>{
       try{
         const rows=await xlsxLerArquivo(file);
-        const lanc=fluxoParsePlanilha(rows);
+        const lanc=fluxoParsePlanilha(rows).map(t=>({...t, origem:_fluxoImportOrigem}));
         if(status) status.style.display='none';
         if(!lanc.length){
           const d=window._fluxoDiag;
@@ -7542,7 +8055,10 @@ function fluxoHandleFile(file){
             textoTotal+=partes.map(p=>p.str).join(' ').replace(/\s+/g,' ').trim()+'\n';
           });
         }
-        const lanc=fluxoParseExtrato(textoTotal);
+        const isInfinitePay=/infinitepay|cloudwalk/i.test(textoTotal);
+        const origemDetectada=isInfinitePay?'InfinitePay':'Santander';
+        const lanc=(isInfinitePay?fluxoParseInfinitePay(textoTotal):fluxoParseExtrato(textoTotal))
+          .map(t=>({...t, origem:t.origem||origemDetectada}));
         if(status) status.style.display='none';
         if(!lanc.length){ if(erro){ erro.textContent='Nenhum lançamento encontrado no extrato.'; erro.style.display='block'; } return; }
         document.getElementById('modal-fluxo-import')?.remove();
@@ -7571,6 +8087,7 @@ function fluxoRevisar(lancamentos){
 
   const linhas=window._fluxoImport.map((t,i)=>`<tr id="fluxo-row-${i}">
     <td style="padding:5px 8px;font-size:12px;white-space:nowrap">${finFmtDate(t.data)}</td>
+    <td style="padding:5px 8px;text-align:center">${fluxoOrigemBadge(t.origem)}</td>
     <td style="padding:5px 8px;font-size:12px">${esc(t.desc)}</td>
     <td style="padding:5px 8px;text-align:center">${t.tipo==='entrada'
       ?'<span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:20px">Entrada</span>'
@@ -7594,6 +8111,7 @@ function fluxoRevisar(lancamentos){
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:var(--surface2)">
           <th style="padding:8px;text-align:left;font-size:11px;color:var(--text3)">Data</th>
+          <th style="padding:8px;text-align:center;font-size:11px;color:var(--text3)">Origem</th>
           <th style="padding:8px;text-align:left;font-size:11px;color:var(--text3)">Descrição</th>
           <th style="padding:8px;text-align:center;font-size:11px;color:var(--text3)">Tipo</th>
           <th style="padding:8px;text-align:right;font-size:11px;color:var(--text3)">Valor</th>
@@ -7627,7 +8145,7 @@ function fluxoConfirmarImport(){
   // lançamentos importados antes de o saldo passar a ser gravado).
   // Se o extrato traz 2 lançamentos iguais e o sistema tem 1, o segundo entra.
   // Reimportar o mesmo extrato não duplica nada.
-  const chave=m=>[m.data,m.desc,m.valor,m.tipo].join('|');
+  const chave=m=>[m.data,m.desc,m.valor,m.tipo,m.origem||''].join('|');
   const existentes={};
   atual.forEach(m=>{ const k=chave(m); existentes[k]=(existentes[k]||0)+1; });
 
@@ -7640,7 +8158,8 @@ function fluxoConfirmarImport(){
     atual.push({
       id:'fx_'+Date.now()+'_'+(i++),
       data:t.data, desc:t.desc, valor:t.valor, tipo:t.tipo,
-      saldo:(t.saldo!=null?t.saldo:null)
+      saldo:(t.saldo!=null?t.saldo:null),
+      origem:t.origem||null
     });
     novos++;
   });
@@ -7668,6 +8187,7 @@ function fluxoImprimir(){
     saldoAcum+=(m.tipo==='entrada'?m.valor:-m.valor);
     return `<tr>
       <td>${finFmtDate(m.data)}</td>
+      <td>${esc(m.origem||'—')}</td>
       <td>${esc(m.desc)}</td>
       <td class="r green">${m.tipo==='entrada'?finFmt(m.valor):''}</td>
       <td class="r red">${m.tipo==='saida'?finFmt(m.valor):''}</td>
@@ -7700,9 +8220,9 @@ function fluxoImprimir(){
     <div class="card"><div class="lbl">Saldo final</div><div class="val" style="color:${saldoAcum>=0?'#059669':'#dc2626'}">${finFmt(saldoAcum)}</div></div>
   </div>
   <table>
-    <thead><tr><th>Data</th><th>Descrição</th><th class="r">Entrada</th><th class="r">Saída</th><th class="r">Saldo acum.</th></tr></thead>
+    <thead><tr><th>Data</th><th>Origem</th><th>Descrição</th><th class="r">Entrada</th><th class="r">Saída</th><th class="r">Saldo acum.</th></tr></thead>
     <tbody>
-      <tr style="background:#f9fafb"><td colspan="4"><em>Saldo de abertura</em></td><td class="r"><strong>${finFmt(saldoAbertura)}</strong></td></tr>
+      <tr style="background:#f9fafb"><td colspan="5"><em>Saldo de abertura</em></td><td class="r"><strong>${finFmt(saldoAbertura)}</strong></td></tr>
       ${linhas}
     </tbody>
   </table>
