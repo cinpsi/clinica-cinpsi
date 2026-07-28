@@ -325,9 +325,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .fin-card-despesa .fin-card-value{color:var(--red)}
 .fin-card-resultado .fin-card-value{color:var(--accent)}
 .fin-card-pendente .fin-card-value{color:var(--amber)}
+.fin-card-purple::before{background:var(--purple)}
+.fin-card-purple .fin-card-value{color:var(--purple)}
+.fin-card-teal::before{background:var(--teal)}
+.fin-card-teal .fin-card-value{color:var(--teal)}
 .fin-card-meta{font-size:11.5px;color:var(--text3);margin-top:5px}
 
-.fin-tabs{display:flex;gap:3px;background:var(--surface2);border-radius:var(--radius-sm);padding:3px;margin-bottom:20px;width:fit-content;border:1px solid var(--border)}
+.fin-tabs{display:flex;flex-wrap:wrap;gap:3px;background:var(--surface2);border-radius:var(--radius-sm);padding:3px;margin-bottom:20px;width:fit-content;border:1px solid var(--border)}
 .fin-tab{padding:8px 20px;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;color:var(--text2);border:none;background:none;font-family:'DM Sans',sans-serif}
 .fin-tab.active{background:var(--surface);color:var(--accent);box-shadow:var(--shadow)}
 .fin-tab:hover:not(.active){color:var(--text)}
@@ -4462,6 +4466,7 @@ function renderFinanceiro(c){
     <button class="fin-tab" onclick="finSwitchTab('previsao-caixa')">💰 Previsão de Caixa</button>
     <button class="fin-tab" onclick="finSwitchTab('orcamento')">🎯 Orçamento Anual</button>
     <button class="fin-tab" onclick="finSwitchTab('fluxo-caixa')">🏦 Fluxo de Caixa</button>
+    <button class="fin-tab" onclick="finSwitchTab('indicadores')">📈 Indicadores</button>
   </div>
 
   <!-- VISÃO GERAL -->
@@ -4520,7 +4525,7 @@ function renderFinanceiro(c){
     <div class="fin-section-header">
       <div class="fin-section-title">Despesas</div>
       <div style="display:flex;gap:8px;align-items:center">
-        <select class="fin-filter-select" id="fin-filter-desp-cat" onchange="finRenderDespesas()"><option value="">Todas as categorias</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Consumo</option><option>Outras Despesas</option></select>
+        <select class="fin-filter-select" id="fin-filter-desp-cat" onchange="finRenderDespesas()"><option value="">Todas as categorias</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Marketing</option><option>Consumo</option><option>Outras Despesas</option></select>
         <select class="fin-filter-select" id="fin-filter-desp-tipo" onchange="finRenderDespesas()"><option value="">Todos os tipos</option><option value="unica">Avulsa</option><option value="recorrente">Recorrente</option><option value="parcelada">Parcelada</option></select>
         <button class="btn-ghost" onclick="finOpenGestaoFornecedores()" style="margin-right:6px">🏢 Fornecedores</button>
         <button class="btn-ghost" onclick="finImportarExtrato()" style="margin-right:6px">🏦 Importar extrato</button>
@@ -4608,6 +4613,10 @@ function renderFinanceiro(c){
       <div style="font-size:12px;color:var(--text3)">Movimentação bancária importada do extrato</div>
     </div>
     <div id="fin-fluxo-content"></div>
+  </div>
+
+  <div class="fin-panel" id="fin-panel-indicadores">
+    <div id="fin-indicadores-content"></div>
   </div>
   `;
 
@@ -4725,7 +4734,7 @@ function finChangeMonth(d){
   fin_refresh();
 }
 function finSwitchTab(name){
-  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','previsao-caixa','orcamento','fluxo-caixa'];
+  const tabs=['visao-geral','receitas','despesas','repasses','previsao-rec','dre','previsao-caixa','orcamento','fluxo-caixa','indicadores'];
   document.querySelectorAll('.fin-tab').forEach((t,i)=>{
     t.classList.toggle('active',tabs[i]===name);
   });
@@ -4738,6 +4747,7 @@ function finSwitchTab(name){
   if(name==='previsao-caixa') finRenderPrevisaoCaixa();
   if(name==='orcamento') finRenderOrcamento();
   if(name==='fluxo-caixa') finRenderFluxoCaixa();
+  if(name==='indicadores') finRenderIndicadores();
 }
 
 let _finRepTab='prev';
@@ -4773,7 +4783,7 @@ function fin_refresh(){
 
   // DRE
   set('fin-dre-rec', finFmt(totalRec));
-  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Consumo','Outras Despesas'];
+  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Marketing','Consumo','Outras Despesas'];
   const keys=['aluguel','materiais','marketing','sistemas','outras'];
   cats.forEach((c,i)=>{
     const val=mDesp.filter(d=>d.cat===c).reduce((s,d)=>s+d.valor,0);
@@ -5275,7 +5285,7 @@ function finEditDesp(id){
   const desps=finLoad(FK.DESP);
   const d=desps.find(x=>x.id===id); if(!d) return;
   document.getElementById('modal-edit-desp')?.remove();
-  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Consumo','Outras Despesas'];
+  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Marketing','Consumo','Outras Despesas'];
   const isGrupo=d.grupoId&&d.tipo!=='unica';
   const mo=document.createElement('div');
   mo.className='modal-overlay';
@@ -5772,6 +5782,251 @@ function finBuildFatMes(mesKey){
   });
 }
 
+
+// ════════════════════════════════════════════════════════════
+// INDICADORES — painel de métricas do negócio
+// ════════════════════════════════════════════════════════════
+
+// Último mês fechado = mês calendário anterior ao atual (não depende do
+// mês navegado na tela — margens só usam dado consolidado/confiável).
+function finMesFechado(){
+  const hoje=new Date();
+  let mes=hoje.getMonth()-1, ano=hoje.getFullYear();
+  if(mes<0){ mes=11; ano--; }
+  return { mes, ano, key:`${ano}-${String(mes+1).padStart(2,'0')}`, label:FIN_MONTHS[mes]+' de '+ano };
+}
+
+// Recalcula faturamento/margens/repasses de um mês específico, reaproveitando
+// a mesma engine do DRE e da aba Repasses. Troca _finMonth/_finYear só durante
+// o cálculo (síncrono) e restaura em seguida — não afeta a navegação do usuário.
+function finIndDadosMes(mes, ano){
+  const _m0=_finMonth, _y0=_finYear;
+  _finMonth=mes; _finYear=ano;
+  try{
+    const cfg=dreGetConfig();
+    const mRec=finLoad(FK.REC).filter(r=>finInMonth(r.data));
+    const mDesp=finLoad(FK.DESP).filter(d=>finInMonth(d.data));
+
+    const recPaga=mRec.filter(r=>r.status==='Pago').reduce((s,r)=>s+r.valor,0);
+    const qtdAtend=mRec.filter(r=>r.status==='Pago').length;
+    const ticketMedio=qtdAtend>0?recPaga/qtdAtend:0;
+
+    const mesKey=`${ano}-${String(mes+1).padStart(2,'0')}`;
+    const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
+    const repasseRealMes=repassesReais[mesKey]||{};
+    const temRepasseReal=Object.keys(repasseRealMes).length>0;
+    const fat=finBuildFat();
+    const fatTotal=fat.reduce((s,r)=>s+r.fat_previsto,0);
+    const repasses=temRepasseReal
+      ? fat.reduce((s,r)=>s+(repasseRealMes[r.terapeuta]!=null?repasseRealMes[r.terapeuta]:r.repasse),0)
+      : fat.reduce((s,r)=>s+r.repasse,0);
+
+    const somaGrupo=(grupo)=>{
+      let t=grupo.cats.reduce((s,cat)=>s+mDesp.filter(d=>d.cat===cat).reduce((ss,d)=>ss+d.valor,0),0);
+      if(grupo.incluiRepasses) t+=repasses;
+      return t;
+    };
+    const custoVar=somaGrupo(cfg.custoVariavel);
+    const custoFixo=somaGrupo(cfg.custoFixo);
+    const despesasGrupo=somaGrupo(cfg.despesas);
+    const juros=somaGrupo(cfg.juros);
+    const impostos=somaGrupo(cfg.impostos);
+
+    const margemContrib=recPaga-custoVar;
+    const lajir=margemContrib-custoFixo-despesasGrupo;
+    const lajr=lajir-juros;
+    const lucroLiquido=lajr-impostos;
+
+    // Faturamento por profissional (consultas pagas)
+    const profMap={};
+    mRec.filter(r=>r.status==='Pago'&&r.especialista).forEach(r=>{
+      const k=r.especialista.trim();
+      if(!profMap[k]) profMap[k]={total:0,count:0};
+      profMap[k].total+=r.valor; profMap[k].count++;
+    });
+
+    // Marketing / CAC — novos pacientes = leads fechados no mês
+    const marketing=mDesp.filter(d=>d.cat==='Marketing').reduce((s,d)=>s+d.valor,0);
+    const novosPacientes=loadLeads().filter(l=>l.status==='Fechado' && (l.data||'').startsWith(mesKey)).length;
+
+    return {
+      mes, ano, mesKey,
+      recPaga, qtdAtend, ticketMedio,
+      custoVar, custoFixo, despesas:despesasGrupo, juros, impostos,
+      margemContrib, lajir, lajr, lucroLiquido,
+      repasses, fatTotal, profMap,
+      marketing, novosPacientes,
+      custoFixoConfigurado: cfg.custoFixo.cats.length>0,
+    };
+  } finally {
+    _finMonth=_m0; _finYear=_y0;
+  }
+}
+
+// Bloco semanal (mês corrente, em andamento) — usa o extrato bancário (Fluxo de Caixa)
+function finIndSemanaAtual(){
+  const hoje=new Date();
+  const fmt=dt=>{ const y=dt.getFullYear(),m=String(dt.getMonth()+1).padStart(2,'0'),d=String(dt.getDate()).padStart(2,'0'); return y+'-'+m+'-'+d; };
+
+  const diaSemana=(hoje.getDay()+6)%7; // 0=segunda ... 6=domingo
+  const seg=new Date(hoje); seg.setDate(hoje.getDate()-diaSemana);
+  const dom=new Date(seg); dom.setDate(seg.getDate()+6);
+  const segStr=fmt(seg), domStr=fmt(dom), hojeStr=fmt(hoje);
+
+  const todos=fluxoLoad();
+  const daSemana=todos.filter(m=>m.data>=segStr && m.data<=domStr);
+  const entradas=daSemana.filter(m=>m.tipo==='entrada').reduce((s,m)=>s+m.valor,0);
+  const saidas=daSemana.filter(m=>m.tipo==='saida').reduce((s,m)=>s+m.valor,0);
+
+  const saldoCaixa=fluxoSaldoAte(hojeStr);
+
+  // Ritmo: entradas − saídas acumuladas do mês corrente até hoje, vs mesmo
+  // número de dias do mês anterior (compara o "ritmo" de caixa, não só receita)
+  const diaDoMes=hoje.getDate();
+  const inicioMesAtual=fmt(new Date(hoje.getFullYear(),hoje.getMonth(),1));
+  const ritmoAtual=todos.filter(m=>m.data>=inicioMesAtual && m.data<=hojeStr)
+    .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor),0);
+
+  const mesAnt=new Date(hoje.getFullYear(),hoje.getMonth()-1,1);
+  const inicioMesAnt=fmt(mesAnt);
+  const ultimoDiaMesAnt=new Date(mesAnt.getFullYear(),mesAnt.getMonth()+1,0).getDate();
+  const fimMesAntStr=fmt(new Date(mesAnt.getFullYear(),mesAnt.getMonth(),Math.min(diaDoMes,ultimoDiaMesAnt)));
+  const ritmoAnterior=todos.filter(m=>m.data>=inicioMesAnt && m.data<=fimMesAntStr)
+    .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor),0);
+
+  let variacaoPct=null;
+  if(ritmoAnterior!==0) variacaoPct=((ritmoAtual-ritmoAnterior)/Math.abs(ritmoAnterior))*100;
+
+  const ultimaImportacao=todos.length?todos.reduce((max,m)=>m.data>max?m.data:max,todos[0].data):null;
+
+  return { segStr, domStr, entradas, saidas, saldoSemana:entradas-saidas, saldoCaixa,
+    ritmoAtual, ritmoAnterior, variacaoPct, ultimaImportacao, diaDoMes };
+}
+
+function finRenderIndicadores(){
+  const el=document.getElementById('fin-indicadores-content'); if(!el) return;
+  const mf=finMesFechado();
+  const d=finIndDadosMes(mf.mes, mf.ano);
+  const sem=finIndSemanaAtual();
+
+  const pct=(v)=>isFinite(v)?v.toFixed(1)+'%':'—';
+  const card=(cls,label,value,meta)=>`
+    <div class="fin-card ${cls}">
+      <div class="fin-card-label">${label}</div>
+      <div class="fin-card-value">${value}</div>
+      <div class="fin-card-meta">${meta||''}</div>
+    </div>`;
+
+  // ── Margens (mês fechado) ──────────────────────────────────
+  const margemContribPct = d.recPaga>0 ? (d.margemContrib/d.recPaga*100) : NaN;
+  const margemLiqPct = d.recPaga>0 ? (d.lucroLiquido/d.recPaga*100) : NaN;
+  const margensHtml = `
+    <div class="fin-section-header">
+      <div>
+        <div class="fin-section-title">📈 Margens</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Referente a ${esc(mf.label)} — último mês fechado (dado consolidado)</div>
+      </div>
+      <button class="btn-ghost" style="font-size:12px" onclick="dreOpenConfig()">⚙️ Configurar grupos do DRE</button>
+    </div>
+    <div class="fin-summary-grid" style="grid-template-columns:repeat(3,1fr)">
+      ${card(d.margemContrib>=0?'fin-card-receita':'fin-card-despesa','Margem de Contribuição', pct(margemContribPct), finFmt(d.margemContrib)+' sobre '+finFmt(d.recPaga)+' de receita paga')}
+      ${card(d.lucroLiquido>=0?'fin-card-receita':'fin-card-despesa','Margem Líquida', pct(margemLiqPct), (d.lucroLiquido>=0?'Lucro de ':'Prejuízo de ')+finFmt(Math.abs(d.lucroLiquido)))}
+      ${card(d.lucroLiquido>=0?'fin-card-resultado':'fin-card-despesa','Resultado do Mês', finFmt(d.lucroLiquido), 'Receita paga − custos, despesas, juros e impostos')}
+    </div>`;
+
+  // ── Receita (mês fechado) ──────────────────────────────────
+  const profs=Object.entries(d.profMap).sort((a,b)=>b[1].total-a[1].total);
+  const maxV=profs.length?profs[0][1].total:1;
+  const receitaHtml = `
+    <div class="fin-section-header">
+      <div class="fin-section-title">💰 Receita</div>
+      <div style="font-size:12px;color:var(--text3)">${esc(mf.label)}</div>
+    </div>
+    <div class="fin-summary-grid" style="grid-template-columns:repeat(2,1fr);margin-bottom:18px">
+      ${card('fin-card-receita','Faturamento Total', finFmt(d.recPaga), d.qtdAtend+' atendimento'+(d.qtdAtend!==1?'s':'')+' pago'+(d.qtdAtend!==1?'s':''))}
+      ${card('fin-card-teal','Ticket Médio', finFmt(d.ticketMedio), 'por atendimento pago')}
+    </div>
+    <div style="font-size:12.5px;color:var(--text3);margin-bottom:10px">Faturamento por profissional</div>
+    <div class="fin-pro-grid">
+      ${profs.length?profs.map(([n,v])=>`
+        <div class="fin-pro-card">
+          <div class="fin-pro-name">${esc(n)}</div>
+          <div class="fin-pro-value">${finFmt(v.total)}</div>
+          <div class="fin-pro-meta">${v.count} atendimento${v.count!==1?'s':''}</div>
+          <div class="fin-pro-bar-wrap"><div class="fin-pro-bar" style="width:${Math.round(v.total/maxV*100)}%"></div></div>
+        </div>`).join('')
+      :'<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--text3)">Nenhuma receita paga em '+esc(mf.label)+'.</div>'}
+    </div>`;
+
+  // ── Eficiência (mês fechado) ───────────────────────────────
+  const pctRepasse = d.fatTotal>0 ? (d.repasses/d.fatTotal*100) : NaN;
+  let cacHtml, cacMeta;
+  if(d.novosPacientes>0 && d.marketing>0){
+    cacHtml=finFmt(d.marketing/d.novosPacientes);
+    cacMeta=finFmt(d.marketing)+' em marketing ÷ '+d.novosPacientes+' paciente'+(d.novosPacientes!==1?'s':'')+' novo'+(d.novosPacientes!==1?'s':'');
+  } else if(d.marketing<=0){
+    cacHtml='—'; cacMeta='Sem despesa categorizada como "Marketing" em '+esc(mf.label);
+  } else {
+    cacHtml='—'; cacMeta='Nenhum lead fechado (paciente novo) em '+esc(mf.label);
+  }
+  let peHtml, peMeta;
+  if(!d.custoFixoConfigurado){
+    peHtml='—'; peMeta='Configure quais categorias são Custo Fixo no DRE';
+  } else if(margemContribPct>0){
+    const peReceita=d.custoFixo/(margemContribPct/100);
+    const peAtend=d.ticketMedio>0?Math.ceil(peReceita/d.ticketMedio):null;
+    peHtml=finFmt(peReceita);
+    peMeta='Custo fixo '+finFmt(d.custoFixo)+(peAtend?' · ≈ '+peAtend+' atendimentos/mês':'');
+  } else {
+    peHtml='—'; peMeta='Margem de contribuição insuficiente para cobrir custos fixos';
+  }
+  const eficienciaHtml = `
+    <div class="fin-section-header">
+      <div class="fin-section-title">⚡ Eficiência</div>
+      <div style="font-size:12px;color:var(--text3)">${esc(mf.label)}</div>
+    </div>
+    <div class="fin-summary-grid" style="grid-template-columns:repeat(3,1fr)">
+      ${card('fin-card-resultado','% Repasse sobre Faturamento', pct(pctRepasse), finFmt(d.repasses)+' repassados de '+finFmt(d.fatTotal)+' faturados')}
+      ${card('fin-card-purple','Custo de Aquisição / Paciente', cacHtml, cacMeta)}
+      ${card('fin-card-pendente','Ponto de Equilíbrio', peHtml, peMeta)}
+    </div>`;
+
+  // ── Semanal (mês corrente, separado) ───────────────────────
+  const variacaoTxt = sem.variacaoPct==null ? 'sem base de comparação' :
+    (sem.variacaoPct>=0?'▲ ':'▼ ')+Math.abs(sem.variacaoPct).toFixed(1)+'% vs mesmo período do mês anterior';
+  const variacaoCor = sem.variacaoPct==null?'var(--text3)':(sem.variacaoPct>=0?'var(--green)':'var(--red)');
+  const semanalHtml = `
+    <div style="border:1px solid var(--border2);background:var(--accent-light);border-radius:var(--radius);padding:18px 20px;margin-top:8px">
+      <div class="fin-section-header" style="margin-bottom:12px">
+        <div>
+          <div class="fin-section-title" style="font-size:15px">📆 Acompanhamento Semanal</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">Mês corrente (${FIN_MONTHS[new Date().getMonth()]} ${new Date().getFullYear()}) — em andamento${sem.ultimaImportacao?' · extrato atualizado até '+finFmtDate(sem.ultimaImportacao):' · nenhum extrato importado ainda'}</div>
+        </div>
+      </div>
+      <div class="fin-summary-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:0">
+        <div class="fin-card">
+          <div class="fin-card-label">Saldo em Caixa (hoje)</div>
+          <div class="fin-card-value" style="color:${sem.saldoCaixa>=0?'var(--green)':'var(--red)'}">${finFmt(sem.saldoCaixa)}</div>
+          <div class="fin-card-meta">Saldo bancário acumulado</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Entradas × Saídas da Semana</div>
+          <div class="fin-card-value" style="font-size:16px">
+            <span style="color:var(--green)">${finFmt(sem.entradas)}</span> / <span style="color:var(--red)">${finFmt(sem.saidas)}</span>
+          </div>
+          <div class="fin-card-meta">${finFmtDate(sem.segStr)} a ${finFmtDate(sem.domStr)} · saldo ${finFmt(sem.saldoSemana)}</div>
+        </div>
+        <div class="fin-card">
+          <div class="fin-card-label">Ritmo vs Mês Anterior</div>
+          <div class="fin-card-value" style="color:${variacaoCor};font-size:18px">${variacaoTxt}</div>
+          <div class="fin-card-meta">Entradas − saídas acumuladas até o dia ${sem.diaDoMes}</div>
+        </div>
+      </div>
+    </div>`;
+
+  el.innerHTML = margensHtml + '<div style="height:26px"></div>' + receitaHtml + '<div style="height:26px"></div>' + eficienciaHtml + semanalHtml;
+}
+
 // ════════════════════════════════════════════════════════════
 // PREVISÃO DE CAIXA
 // ════════════════════════════════════════════════════════════
@@ -6150,9 +6405,29 @@ async function xlsxEnsureLib(){
 
 async function xlsxLerArquivo(file){
   await xlsxEnsureLib();
+  const isCsv=/\.csv$/i.test(file.name);
   const buf=await file.arrayBuffer();
-  // cellDates converte datas em objeto Date; codepage cobre CSV em Latin-1
-  const wb=XLSX.read(buf,{type:'array', cellDates:true, codepage:1252});
+
+  if(isCsv){
+    // CSV é texto puro: decodifica nós mesmos em vez de deixar o SheetJS
+    // adivinhar a codificação/o tipo de cada célula. Tenta UTF-8 estrito
+    // (padrão dos extratos atuais); se não for UTF-8 válido, cai para
+    // Windows-1252 (padrão de CSV exportado pelo Excel no Brasil).
+    let texto;
+    try{ texto=new TextDecoder('utf-8',{fatal:true}).decode(buf); }
+    catch(e){ texto=new TextDecoder('windows-1252').decode(buf); }
+    texto=texto.replace(/^\uFEFF/,'');
+    // raw:false preserva o texto original da célula (ex: "1.234,56").
+    // Com raw:true o SheetJS tenta converter para número sozinho e erra
+    // o formato brasileiro (vírgula decimal), inflando os valores.
+    const wb=XLSX.read(texto,{type:'string', cellDates:true, raw:false});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+  }
+
+  // .xlsx/.xls: células numéricas já vêm com o valor real do arquivo binário,
+  // então raw:true é seguro e preciso aqui.
+  const wb=XLSX.read(buf,{type:'array', cellDates:true});
   const ws=wb.Sheets[wb.SheetNames[0]];
   return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:true});
 }
@@ -8194,7 +8469,7 @@ function _finInjectModals(){
               <option value="">Selecione ou deixe em branco...</option>
             </select></div>
           <div class="form-group"><label class="form-label">Categoria</label>
-            <select class="form-select" id="find-cat"><option value="">Selecione...</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Consumo</option><option>Outras Despesas</option></select></div>
+            <select class="form-select" id="find-cat"><option value="">Selecione...</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Marketing</option><option>Consumo</option><option>Outras Despesas</option></select></div>
           <div class="form-group full"><label class="form-label">Descrição</label><input class="form-input" type="text" id="find-desc" placeholder="Ex: Fatura EDP março, Mensalidade Doctoralia..."></div>
           <div class="form-group"><label class="form-label" id="find-valor-label">Valor (R$)</label><input class="form-input" type="number" id="find-valor" placeholder="0,00" step="0.01"></div>
         </div>
@@ -8305,7 +8580,7 @@ function finPopulateFornSelect(){
 function finOpenGestaoFornecedores(){
   document.getElementById('modal-forn')?.remove();
   const forns=finLoad(FK.FORN).sort((a,b)=>a.nome.localeCompare(b.nome));
-  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Consumo','Outras Despesas'];
+  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Marketing','Consumo','Outras Despesas'];
   const mo=document.createElement('div');
   mo.className='modal-overlay';
   mo.id='modal-forn';
@@ -8358,7 +8633,7 @@ function finSaveForn(){
 function finEditForn(id){
   const forns=finLoad(FK.FORN);
   const f=forns.find(x=>x.id===id); if(!f) return;
-  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Consumo','Outras Despesas'];
+  const cats=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Reforma','Cartão Crédito Empresa','Cartão Crédito Pessoal','Marketing','Consumo','Outras Despesas'];
   document.getElementById('modal-forn')?.remove();
   const mo=document.createElement('div');
   mo.className='modal-overlay';
