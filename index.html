@@ -6346,11 +6346,40 @@ function finIndSemanaAtual(){
     ritmoAtual, ritmoAnterior, variacaoPct, ultimaImportacao, diaDoMes };
 }
 
+// Mês selecionado no painel de Indicadores — começa no último mês fechado,
+// mas pode navegar livremente (inclusive até o mês em andamento) pra
+// acompanhar os indicadores conforme os dados vão sendo lançados no sistema.
+let _indMes=null, _indAno=null;
+function indChangeMes(delta){
+  if(_indMes==null){ const mf=finMesFechado(); _indMes=mf.mes; _indAno=mf.ano; }
+  const hoje=new Date();
+  let m=_indMes+delta, a=_indAno;
+  if(m<0){ m=11; a--; }
+  if(m>11){ m=0; a++; }
+  // não deixa navegar além do mês corrente (dado futuro não existe)
+  if(a>hoje.getFullYear() || (a===hoje.getFullYear() && m>hoje.getMonth())) return;
+  _indMes=m; _indAno=a;
+  finRenderIndicadores();
+}
+function indVoltarMesFechado(){
+  const mf=finMesFechado();
+  _indMes=mf.mes; _indAno=mf.ano;
+  finRenderIndicadores();
+}
+
 function finRenderIndicadores(){
   const el=document.getElementById('fin-indicadores-content'); if(!el) return;
-  const mf=finMesFechado();
+  const mfFechado=finMesFechado();
+  if(_indMes==null){ _indMes=mfFechado.mes; _indAno=mfFechado.ano; }
+  const mf={ mes:_indMes, ano:_indAno, label:FIN_MONTHS[_indMes]+' de '+_indAno };
   const d=finIndDadosMes(mf.mes, mf.ano);
   const sem=finIndSemanaAtual();
+  const hoje=new Date();
+  const isMesAtual = _indAno===hoje.getFullYear() && _indMes===hoje.getMonth();
+  const isMesFechadoPadrao = _indAno===mfFechado.ano && _indMes===mfFechado.mes;
+  const statusBadge = isMesAtual
+    ? '<span style="font-size:11px;background:var(--amber-light);color:var(--amber);padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap">🔓 mês em andamento — dado pode mudar</span>'
+    : '<span style="font-size:11px;background:var(--green-light);color:var(--green);padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap">🔒 mês fechado</span>';
 
   const pct=(v)=>isFinite(v)?v.toFixed(1)+'%':'—';
   const card=(cls,label,value,meta)=>`
@@ -6360,14 +6389,26 @@ function finRenderIndicadores(){
       <div class="fin-card-meta">${meta||''}</div>
     </div>`;
 
-  // ── Margens (mês fechado) ──────────────────────────────────
+  // ── Navegação mês a mês ─────────────────────────────────────
+  const navMesHtml = `
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap">
+      <div class="fin-month-selector" style="width:fit-content">
+        <button class="fin-month-btn" onclick="indChangeMes(-1)">‹</button>
+        <div class="fin-month-label">${esc(mf.label)}</div>
+        <button class="fin-month-btn" onclick="indChangeMes(1)" ${isMesAtual?'disabled style="opacity:.35;cursor:not-allowed"':''}>›</button>
+      </div>
+      ${statusBadge}
+      ${!isMesFechadoPadrao?'<button class="btn-ghost" style="font-size:12px" onclick="indVoltarMesFechado()">↩️ Voltar ao mês fechado</button>':''}
+    </div>`;
+
+  // ── Margens ──────────────────────────────────────────────────
   const margemContribPct = d.recPaga>0 ? (d.margemContrib/d.recPaga*100) : NaN;
   const margemLiqPct = d.recPaga>0 ? (d.lucroLiquido/d.recPaga*100) : NaN;
   const margensHtml = `
     <div class="fin-section-header">
       <div>
         <div class="fin-section-title">📈 Margens</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">Referente a ${esc(mf.label)} — último mês fechado (dado consolidado)</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Referente a ${esc(mf.label)}${isMesAtual?' — dados parciais, ainda em andamento':' (dado consolidado)'}</div>
       </div>
       <button class="btn-ghost" style="font-size:12px" onclick="dreOpenConfig()">⚙️ Configurar grupos do DRE</button>
     </div>
@@ -6413,13 +6454,15 @@ function finRenderIndicadores(){
     cacHtml='—'; cacMeta='Nenhum lead fechado (paciente novo) em '+esc(mf.label);
   }
   let peHtml, peMeta;
+  const peBase=d.custoFixo+d.despesas;
   if(!d.custoFixoConfigurado){
     peHtml='—'; peMeta='Configure quais categorias são Custo Fixo no DRE';
   } else if(margemContribPct>0){
-    const peReceita=d.custoFixo/(margemContribPct/100);
+    // Ponto de equilíbrio = (Custo Fixo + Despesas) / Margem de Contribuição × 100
+    const peReceita=peBase/margemContribPct*100;
     const peAtend=d.ticketMedio>0?Math.ceil(peReceita/d.ticketMedio):null;
     peHtml=finFmt(peReceita);
-    peMeta='Custo fixo '+finFmt(d.custoFixo)+(peAtend?' · ≈ '+peAtend+' atendimentos/mês':'');
+    peMeta='Custo fixo + despesas '+finFmt(peBase)+(peAtend?' · ≈ '+peAtend+' atendimentos/mês':'');
   } else {
     peHtml='—'; peMeta='Margem de contribuição insuficiente para cobrir custos fixos';
   }
@@ -6467,7 +6510,7 @@ function finRenderIndicadores(){
       </div>
     </div>`;
 
-  el.innerHTML = margensHtml + '<div style="height:26px"></div>' + receitaHtml + '<div style="height:26px"></div>' + eficienciaHtml + semanalHtml;
+  el.innerHTML = navMesHtml + margensHtml + '<div style="height:26px"></div>' + receitaHtml + '<div style="height:26px"></div>' + eficienciaHtml + semanalHtml;
 }
 
 // ════════════════════════════════════════════════════════════
