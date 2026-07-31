@@ -4760,13 +4760,17 @@ function finRepTab(tab){
 }
 
 function fin_refresh(){
-  const mRec  = finLoad(FK.REC).filter(r=>finInMonth(r.data));
+  const allRec  = finLoad(FK.REC);
+  // Por competência (data da consulta) — usado p/ pendências e filtros da tela.
+  const mRec  = allRec.filter(r=>finInMonth(r.data));
+  // Por caixa (data efetiva do recebimento) — usado p/ tudo que é "receita paga".
+  const mRecPagas = allRec.filter(r=>r.status==='Pago' && finInMonth(finReceitaEfetivaData(r)));
   const mDesp = finLoad(FK.DESP).filter(d=>finInMonth(d.data));
-  const totalRec  = mRec.filter(r=>r.status==='Pago').reduce((s,r)=>s+r.valor,0);
+  const totalRec  = mRecPagas.reduce((s,r)=>s+r.valor,0);
   const totalPend = mRec.filter(r=>r.status==='Pendente').reduce((s,r)=>s+r.valor,0);
   const totalDesp = mDesp.reduce((s,d)=>s+d.valor,0);
   const result    = totalRec - totalDesp;
-  const paidCount = mRec.filter(r=>r.status==='Pago'&&r.valor).length;
+  const paidCount = mRecPagas.filter(r=>r.valor).length;
   const pendCount = mRec.filter(r=>r.status==='Pendente').length;
 
   const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
@@ -4792,7 +4796,7 @@ function fin_refresh(){
 
   // Por profissional
   const profMap={};
-  mRec.filter(r=>r.status==='Pago'&&r.especialista&&r.valor).forEach(r=>{
+  mRecPagas.filter(r=>r.especialista&&r.valor).forEach(r=>{
     if(!profMap[r.especialista]) profMap[r.especialista]={total:0,count:0};
     profMap[r.especialista].total+=r.valor; profMap[r.especialista].count++;
   });
@@ -5025,13 +5029,22 @@ const DRE_CATS_TODAS=['Aluguel / Condomínio','Utilidades','Impostos e Taxas','P
 function finRenderDRE(){
   const el=document.getElementById('fin-dre-full'); if(!el) return;
   const cfg=dreGetConfig();
-  const mRec  = finLoad(FK.REC).filter(r=>finInMonth(r.data));
+  const allRec = finLoad(FK.REC);
+  const mRec  = allRec.filter(r=>finInMonth(r.data));
   const mDesp = finLoad(FK.DESP).filter(d=>finInMonth(d.data));
+  // Receita paga considerando a data efetiva do recebimento (não a data da
+  // consulta) — assim um pagamento em atraso conta no mês em que caiu no caixa.
+  const mRecPagas = allRec.filter(r=>r.status==='Pago' && finInMonth(finReceitaEfetivaData(r)));
 
   // Faturamento (receita paga) + qtd atendimentos
-  const recPaga  = mRec.filter(r=>r.status==='Pago').reduce((s,r)=>s+r.valor,0);
-  const qtdAtend = mRec.filter(r=>r.status==='Pago'&&r.valor).length;
+  const recPaga  = mRecPagas.reduce((s,r)=>s+r.valor,0);
+  const qtdAtend = mRecPagas.filter(r=>r.valor).length;
   const ticketMedio = qtdAtend>0?recPaga/qtdAtend:0;
+
+  // Receitas ainda pendentes de consultas realizadas neste mês (inadimplência
+  // do próprio mês) — informativo, não entra no resultado do DRE.
+  const pendentesMes = mRec.filter(r=>r.status==='Pendente');
+  const totalPendenteMes = pendentesMes.reduce((s,r)=>s+r.valor,0);
 
   // Repasses do mês
   const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
@@ -5119,6 +5132,13 @@ function finRenderDRE(){
     </div>
     ${section('FATURAMENTO')}
     ${row('Receita paga no mês', recPaga, false, false)}
+    ${totalPendenteMes>0?`<div class="fin-dre-full-row" style="background:var(--amber-light)">
+      <span class="fin-dre-indent" style="color:var(--amber)">⚠️ Receita a Receber (inadimplência)</span>
+      <span style="display:flex;gap:14px;align-items:center">
+        <span style="font-size:11px;color:var(--amber)">${pendentesMes.length} paciente${pendentesMes.length!==1?'s':''}</span>
+        <span style="min-width:100px;text-align:right;color:var(--amber);font-weight:600">${finFmt(totalPendenteMes)}</span>
+      </span>
+    </div>`:''}
     ${section('CUSTO VARIÁVEL')}
     ${grupoBloco(cfg.custoVariavel, custoVar)}
     ${subtotal('= MARGEM DE CONTRIBUIÇÃO', margemContrib)}
@@ -5436,8 +5456,9 @@ function dfcDadosMes(mes, ano){
   const mesKey=`${ano}-${String(mes+1).padStart(2,'0')}`;
   const cfg=dfcGetConfig();
 
-  // Entradas
-  const receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey)).reduce((s,r)=>s+r.valor,0);
+  // Entradas — usa a data efetiva do recebimento (não a data da consulta),
+  // para refletir o mês em que o dinheiro realmente entrou no caixa.
+  const receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(finReceitaEfetivaData(r)||'').startsWith(mesKey)).reduce((s,r)=>s+r.valor,0);
   const entradasManuais=dfcLoadEntradas().filter(e=>(e.data||'').startsWith(mesKey));
   const somaCat=(cat)=>entradasManuais.filter(e=>e.cat===cat).reduce((s,e)=>s+e.valor,0);
   const emprestimoEntrada=somaCat('Empréstimo/Entrada de Recursos');
@@ -5661,16 +5682,25 @@ function finRenderReceitas(){
     .filter(r=>!fFo||r.forma===fFo)
     .sort((a,b)=>b.data.localeCompare(a.data));
   if(!fl.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Nenhuma receita encontrada.</td></tr>'; return; }
-  tbody.innerHTML=fl.map(r=>`<tr>
+  tbody.innerHTML=fl.map(r=>{
+    const pagoAtrasado = r.status==='Pago' && r.dataPagamento && r.dataPagamento.slice(0,7)!==r.data.slice(0,7);
+    const statusCell = r.status==='Pago'
+      ? `<span class="fin-badge fin-badge-pago"><span class="fin-badge-dot"></span>Pago</span>${pagoAtrasado?`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">recebido em ${finFmtDate(r.dataPagamento)}</div>`:''}`
+      : `<span class="fin-badge fin-badge-pendente"><span class="fin-badge-dot"></span>Pendente</span>`;
+    const baixaBtn = r.status==='Pendente'
+      ? `<button class="btn-ghost" style="font-size:11px;padding:4px 8px;color:var(--green)" onclick="finAbrirBaixaReceita(${r.id})" title="Registrar recebimento">✓ Dar baixa</button>`
+      : '';
+    return `<tr>
     <td>${finFmtDate(r.data)}</td>
     <td>${esc(r.paciente||'—')}</td>
     <td>${esc(r.especialista||'—')}</td>
     <td style="color:var(--text3);font-size:12.5px">${esc(r.servico||'—')}</td>
     <td>${r.forma?`<span class="fin-forma-tag">${esc(r.forma)}</span>`:'—'}</td>
     <td style="font-weight:500">${finFmt(r.valor)}</td>
-    <td><span class="fin-badge ${r.status==='Pago'?'fin-badge-pago':'fin-badge-pendente'}"><span class="fin-badge-dot"></span>${r.status}</span></td>
-    <td><button class="btn-delete" onclick="finDelReceita(${r.id})" title="Excluir">✕</button></td>
-  </tr>`).join('');
+    <td>${statusCell}</td>
+    <td style="display:flex;gap:5px;align-items:center">${baixaBtn}<button class="btn-delete" onclick="finDelReceita(${r.id})" title="Excluir">✕</button></td>
+  </tr>`;
+  }).join('');
 }
 
 function finRenderDespesas(){
@@ -5832,6 +5862,58 @@ function finSaveEditDesp(id){
 }
 
 function finDelReceita(id){ finSave(FK.REC, finLoad(FK.REC).filter(r=>r.id!==id)); fin_refresh(); toast('Receita removida.'); }
+
+// Data "efetiva" da receita para fins de caixa/DRE: se já foi paga, usa a data
+// real do recebimento (dataPagamento) quando informada — senão usa a data da
+// consulta (comportamento igual ao de sempre, pagamento em dia).
+function finReceitaEfetivaData(r){
+  return r.status==='Pago' ? (r.dataPagamento||r.data) : r.data;
+}
+
+// ── Baixa de receita pendente (inadimplência) ──────────────────────────────
+function finAbrirBaixaReceita(id){
+  const recs=finLoad(FK.REC);
+  const r=recs.find(x=>x.id===id); if(!r) return;
+  document.getElementById('modal-baixa-receita')?.remove();
+  const hoje=new Date().toISOString().split('T')[0];
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-baixa-receita';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">✓ Dar baixa no recebimento</div>
+      <button class="modal-close" onclick="document.getElementById('modal-baixa-receita').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        Paciente: <strong>${esc(r.paciente||'—')}</strong> · Consulta em ${finFmtDate(r.data)} · Valor: <strong>${finFmt(r.valor)}</strong>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Data em que o pagamento foi recebido</label>
+        <input type="date" class="form-input" id="baixa-data" value="${hoje}">
+      </div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:6px">Esse valor passa a contar como receita paga no mês da data informada acima — o mês da consulta (${finFmtDate(r.data)}) continua mostrando essa consulta no histórico, sem entrar no resultado dele.</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-baixa-receita').remove()">Cancelar</button>
+      <button class="btn-primary" onclick="finConfirmarBaixaReceita(${id})">✓ Confirmar recebimento</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+}
+
+function finConfirmarBaixaReceita(id){
+  const dataPagamento=document.getElementById('baixa-data')?.value;
+  if(!dataPagamento){ toast('Informe a data do recebimento.'); return; }
+  const recs=finLoad(FK.REC);
+  const r=recs.find(x=>x.id===id); if(!r) return;
+  r.status='Pago';
+  r.dataPagamento=dataPagamento;
+  finSave(FK.REC, recs);
+  document.getElementById('modal-baixa-receita')?.remove();
+  fin_refresh();
+  toast('✓ Recebimento de '+(r.paciente||'paciente')+' registrado em '+finFmtDate(dataPagamento)+'!');
+}
 function finDelDesp(id){ finSave(FK.DESP, finLoad(FK.DESP).filter(d=>d.id!==id)); fin_refresh(); toast('Despesa removida.'); }
 function finDelGrupo(id, gid){
   const g=finLoad(FK.DESP).filter(d=>d.grupoId===gid);
@@ -6234,12 +6316,15 @@ function finIndDadosMes(mes, ano){
   _finMonth=mes; _finYear=ano;
   try{
     const cfg=dreGetConfig();
-    const mRec=finLoad(FK.REC).filter(r=>finInMonth(r.data));
+    const allRec=finLoad(FK.REC);
+    const mRec=allRec.filter(r=>finInMonth(r.data));
     const mDesp=finLoad(FK.DESP).filter(d=>finInMonth(d.data));
+    const mRecPagas=allRec.filter(r=>r.status==='Pago' && finInMonth(finReceitaEfetivaData(r)));
 
-    const recPaga=mRec.filter(r=>r.status==='Pago').reduce((s,r)=>s+r.valor,0);
-    const qtdAtend=mRec.filter(r=>r.status==='Pago'&&r.valor).length;
+    const recPaga=mRecPagas.reduce((s,r)=>s+r.valor,0);
+    const qtdAtend=mRecPagas.filter(r=>r.valor).length;
     const ticketMedio=qtdAtend>0?recPaga/qtdAtend:0;
+    const totalPendenteMes=mRec.filter(r=>r.status==='Pendente').reduce((s,r)=>s+r.valor,0);
 
     const mesKey=`${ano}-${String(mes+1).padStart(2,'0')}`;
     const repassesReais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
@@ -6269,7 +6354,7 @@ function finIndDadosMes(mes, ano){
 
     // Faturamento por profissional (consultas pagas)
     const profMap={};
-    mRec.filter(r=>r.status==='Pago'&&r.especialista&&r.valor).forEach(r=>{
+    mRecPagas.filter(r=>r.especialista&&r.valor).forEach(r=>{
       const k=r.especialista.trim();
       if(!profMap[k]) profMap[k]={total:0,count:0};
       profMap[k].total+=r.valor; profMap[k].count++;
@@ -6281,7 +6366,7 @@ function finIndDadosMes(mes, ano){
 
     return {
       mes, ano, mesKey,
-      recPaga, qtdAtend, ticketMedio,
+      recPaga, qtdAtend, ticketMedio, totalPendenteMes,
       custoVar, custoFixo, despesas:despesasGrupo, juros, impostos,
       margemContrib, lajir, lajr, lucroLiquido,
       repasses, fatTotal, profMap,
@@ -6417,6 +6502,7 @@ function finRenderIndicadores(){
       ${card('fin-card-receita','Faturamento Total', finFmt(d.recPaga), d.qtdAtend+' atendimento'+(d.qtdAtend!==1?'s':'')+' pago'+(d.qtdAtend!==1?'s':''))}
       ${card('fin-card-teal','Ticket Médio', finFmt(d.ticketMedio), 'por atendimento pago')}
     </div>
+    ${d.totalPendenteMes>0?`<div style="font-size:12.5px;color:var(--amber);background:var(--amber-light);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:14px">⚠️ ${finFmt(d.totalPendenteMes)} ainda pendentes de pacientes que não pagaram em ${esc(mf.label)} — dê baixa em Financeiro → Receitas assim que o pagamento entrar.</div>`:''}
     <div style="font-size:12.5px;color:var(--text3);margin-bottom:10px">Faturamento por profissional</div>
     <div class="fin-pro-grid">
       ${profs.length?profs.map(([n,v])=>`
@@ -6865,7 +6951,7 @@ function gerarRelatorioMensal(){
   const conv=getConvertidos();
 
   // Financeiro
-  const recMes=recs.filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey));
+  const recMes=recs.filter(r=>r.status==='Pago'&&(finReceitaEfetivaData(r)||'').startsWith(mesKey));
   const despMes=desps.filter(d=>(d.data||'').startsWith(mesKey));
   const totalRec=recMes.reduce((s,r)=>s+r.valor,0);
   const totalDesp=despMes.reduce((s,d)=>s+d.valor,0);
@@ -7496,7 +7582,7 @@ function orcRealizado(mesKey){
     receita=plan.realizado.total;
     receitaOrigem='planilha';
   } else {
-    receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(r.data||'').startsWith(mesKey))
+    receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(finReceitaEfetivaData(r)||'').startsWith(mesKey))
       .reduce((s,r)=>s+(r.valor||0),0);
     receitaOrigem='sistema';
   }
