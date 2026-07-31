@@ -5676,19 +5676,30 @@ function finRenderReceitas(){
   const fSt=(document.getElementById('fin-filter-status')?.value)||'';
   const fPr=(document.getElementById('fin-filter-prof')?.value)||'';
   const fFo=(document.getElementById('fin-filter-forma')?.value)||'';
-  const fl=finLoad(FK.REC).filter(r=>finInMonth(r.data))
+  const allRec=finLoad(FK.REC);
+  const fl=allRec.filter(r=>finInMonth(r.data))
     .filter(r=>!fSt||r.status===fSt)
     .filter(r=>!fPr||r.especialista===fPr)
     .filter(r=>!fFo||r.forma===fFo)
     .sort((a,b)=>b.data.localeCompare(a.data));
   if(!fl.length){ tbody.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text3)">Nenhuma receita encontrada.</td></tr>'; return; }
+  // Conta quantas pendências cada paciente tem no total (qualquer mês), pra avisar
+  // quando a baixa vai juntar mais de uma sessão.
+  const pendPorPaciente={};
+  allRec.filter(r=>r.status==='Pendente').forEach(r=>{
+    const k=(r.paciente||'').trim().toLowerCase();
+    pendPorPaciente[k]=(pendPorPaciente[k]||0)+1;
+  });
   tbody.innerHTML=fl.map(r=>{
     const pagoAtrasado = r.status==='Pago' && r.dataPagamento && r.dataPagamento.slice(0,7)!==r.data.slice(0,7);
+    const descontoNota = r.status==='Pago' && r.desconto>0
+      ? `<div style="font-size:10.5px;color:var(--amber);margin-top:2px">desconto de ${finFmt(r.desconto)}</div>` : '';
     const statusCell = r.status==='Pago'
-      ? `<span class="fin-badge fin-badge-pago"><span class="fin-badge-dot"></span>Pago</span>${pagoAtrasado?`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">recebido em ${finFmtDate(r.dataPagamento)}</div>`:''}`
+      ? `<span class="fin-badge fin-badge-pago"><span class="fin-badge-dot"></span>Pago</span>${pagoAtrasado?`<div style="font-size:10.5px;color:var(--text3);margin-top:2px">recebido em ${finFmtDate(r.dataPagamento)}</div>`:''}${descontoNota}`
       : `<span class="fin-badge fin-badge-pendente"><span class="fin-badge-dot"></span>Pendente</span>`;
+    const qtdPend = pendPorPaciente[(r.paciente||'').trim().toLowerCase()]||0;
     const baixaBtn = r.status==='Pendente'
-      ? `<button class="btn-ghost" style="font-size:11px;padding:4px 8px;color:var(--green)" onclick="finAbrirBaixaReceita(${r.id})" title="Registrar recebimento">✓ Dar baixa</button>`
+      ? `<button class="btn-ghost" style="font-size:11px;padding:4px 8px;color:var(--green)" onclick="finAbrirBaixaReceita(${r.id})" title="Registrar recebimento">✓ Dar baixa${qtdPend>1?` (${qtdPend})`:''}</button>`
       : '';
     return `<tr>
     <td>${finFmtDate(r.data)}</td>
@@ -5873,46 +5884,108 @@ function finReceitaEfetivaData(r){
 // ── Baixa de receita pendente (inadimplência) ──────────────────────────────
 function finAbrirBaixaReceita(id){
   const recs=finLoad(FK.REC);
-  const r=recs.find(x=>x.id===id); if(!r) return;
+  const alvo=recs.find(x=>x.id===id); if(!alvo) return;
+  // Junta todas as pendências do mesmo paciente (qualquer mês) pra dar baixa
+  // de uma vez só, em vez de sessão por sessão.
+  const nomeAlvo=(alvo.paciente||'').trim().toLowerCase();
+  const pendencias=recs.filter(r=>r.status==='Pendente' && (r.paciente||'').trim().toLowerCase()===nomeAlvo)
+    .sort((a,b)=>a.data.localeCompare(b.data));
   document.getElementById('modal-baixa-receita')?.remove();
   const hoje=new Date().toISOString().split('T')[0];
+  const totalGeral=pendencias.reduce((s,r)=>s+r.valor,0);
+
+  const linhas=pendencias.map(r=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer">
+      <input type="checkbox" class="baixa-item-check" data-id="${r.id}" data-valor="${r.valor}" checked onchange="finBaixaRecalc()">
+      <span style="flex:1">${finFmtDate(r.data)} — ${esc(r.servico||r.especialista||'—')}</span>
+      <span style="font-weight:600">${finFmt(r.valor)}</span>
+    </label>`).join('');
+
   const mo=document.createElement('div');
   mo.className='modal-overlay'; mo.id='modal-baixa-receita';
   mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
-  mo.innerHTML=`<div class="modal" style="max-width:420px">
+  mo.innerHTML=`<div class="modal" style="max-width:460px">
     <div class="modal-header">
       <div class="modal-title">✓ Dar baixa no recebimento</div>
       <button class="modal-close" onclick="document.getElementById('modal-baixa-receita').remove()">×</button>
     </div>
     <div class="modal-body">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
-        Paciente: <strong>${esc(r.paciente||'—')}</strong> · Consulta em ${finFmtDate(r.data)} · Valor: <strong>${finFmt(r.valor)}</strong>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
+        Paciente: <strong>${esc(alvo.paciente||'—')}</strong>
+        ${pendencias.length>1?`<div style="font-size:11.5px;color:var(--text3);margin-top:2px">${pendencias.length} pendências encontradas — desmarque as que não quer incluir nesta baixa.</div>`:''}
       </div>
-      <div class="form-group">
-        <label class="form-label">Data em que o pagamento foi recebido</label>
-        <input type="date" class="form-input" id="baixa-data" value="${hoje}">
+      <div style="max-height:220px;overflow-y:auto;margin-bottom:12px">${linhas}</div>
+      <div class="form-grid" style="margin-bottom:0">
+        <div class="form-group">
+          <label class="form-label">Data em que o pagamento foi recebido</label>
+          <input type="date" class="form-input" id="baixa-data" value="${hoje}">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Desconto concedido (R$) <span style="font-weight:400;color:var(--text3)">— opcional</span></label>
+          <input type="number" class="form-input" id="baixa-desconto" min="0" step="0.01" placeholder="0,00" oninput="finBaixaRecalc()">
+        </div>
       </div>
-      <div style="font-size:11.5px;color:var(--text3);margin-top:6px">Esse valor passa a contar como receita paga no mês da data informada acima — o mês da consulta (${finFmtDate(r.data)}) continua mostrando essa consulta no histórico, sem entrar no resultado dele.</div>
+      <div style="display:flex;justify-content:space-between;font-size:13px;margin-top:12px;padding-top:10px;border-top:1px solid var(--border);color:var(--text2)">
+        <span>Total selecionado</span>
+        <strong id="baixa-total-selecionado">${finFmt(totalGeral)}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:14.5px;margin-top:4px">
+        <span style="color:var(--text2)">Valor a receber (com desconto)</span>
+        <strong id="baixa-total-final" style="color:var(--green)">${finFmt(totalGeral)}</strong>
+      </div>
+      <div style="font-size:11.5px;color:var(--text3);margin-top:8px">O valor final passa a contar como receita paga no mês da data informada acima. O mês de cada consulta original continua mostrando o histórico, sem entrar no resultado dele.</div>
     </div>
     <div class="modal-footer">
       <button class="btn-ghost" onclick="document.getElementById('modal-baixa-receita').remove()">Cancelar</button>
-      <button class="btn-primary" onclick="finConfirmarBaixaReceita(${id})">✓ Confirmar recebimento</button>
+      <button class="btn-primary" onclick="finConfirmarBaixaReceita()">✓ Confirmar recebimento</button>
     </div>
   </div>`;
   document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
 }
 
-function finConfirmarBaixaReceita(id){
+function finBaixaRecalc(){
+  const checks=[...document.querySelectorAll('.baixa-item-check')];
+  const total=checks.filter(c=>c.checked).reduce((s,c)=>s+parseFloat(c.dataset.valor),0);
+  const desconto=Math.min(total, Math.max(0, parseFloat(document.getElementById('baixa-desconto')?.value)||0));
+  const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  set('baixa-total-selecionado', finFmt(total));
+  set('baixa-total-final', finFmt(total-desconto));
+}
+
+function finConfirmarBaixaReceita(){
   const dataPagamento=document.getElementById('baixa-data')?.value;
   if(!dataPagamento){ toast('Informe a data do recebimento.'); return; }
+  const checks=[...document.querySelectorAll('.baixa-item-check')].filter(c=>c.checked);
+  if(!checks.length){ toast('Selecione ao menos uma pendência para dar baixa.'); return; }
+  const ids=checks.map(c=>Number(c.dataset.id));
+
   const recs=finLoad(FK.REC);
-  const r=recs.find(x=>x.id===id); if(!r) return;
-  r.status='Pago';
-  r.dataPagamento=dataPagamento;
+  const selecionados=recs.filter(r=>ids.includes(r.id));
+  const totalSelecionado=selecionados.reduce((s,r)=>s+r.valor,0);
+  const descontoInformado=Math.max(0, parseFloat(document.getElementById('baixa-desconto')?.value)||0);
+  const descontoAplicavel=Math.min(descontoInformado, totalSelecionado);
+
+  // Rateia o desconto proporcionalmente ao valor de cada pendência, com o
+  // último item absorvendo o arredondamento pra fechar a soma certinha.
+  let restante=descontoAplicavel;
+  selecionados.forEach((r,i)=>{
+    const ultimo=i===selecionados.length-1;
+    const parcela=ultimo?restante:Math.round((r.valor/totalSelecionado)*descontoAplicavel*100)/100;
+    restante-=parcela;
+    r.valorOriginal = r.valorOriginal ?? r.valor;
+    r.desconto = Math.round(((r.desconto||0)+parcela)*100)/100;
+    r.valor = Math.round((r.valor-parcela)*100)/100;
+    r.status='Pago';
+    r.dataPagamento=dataPagamento;
+  });
   finSave(FK.REC, recs);
   document.getElementById('modal-baixa-receita')?.remove();
   fin_refresh();
-  toast('✓ Recebimento de '+(r.paciente||'paciente')+' registrado em '+finFmtDate(dataPagamento)+'!');
+
+  const nomePaciente=selecionados[0]?.paciente||'paciente';
+  const msgDesconto=descontoAplicavel>0?` (com desconto de ${finFmt(descontoAplicavel)})`:'';
+  toast('✓ '+selecionados.length+' pendência'+(selecionados.length!==1?'s':'')+' de '+nomePaciente+' quitada'+(selecionados.length!==1?'s':'')+' em '+finFmtDate(dataPagamento)+msgDesconto+'!');
 }
 function finDelDesp(id){ finSave(FK.DESP, finLoad(FK.DESP).filter(d=>d.id!==id)); fin_refresh(); toast('Despesa removida.'); }
 function finDelGrupo(id, gid){
