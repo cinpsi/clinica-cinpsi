@@ -4453,6 +4453,7 @@ function renderFinanceiro(c){
     <button class="fin-tab" onclick="finSwitchTab('orcamento')">🎯 Orçamento Anual</button>
     <button class="fin-tab" onclick="finSwitchTab('fluxo-caixa')">🏦 Fluxo de Caixa</button>
     <button class="fin-tab" onclick="finSwitchTab('indicadores')">📈 Indicadores</button>
+    <button class="fin-tab" onclick="finSwitchTab('simulador')">🧮 Simulador</button>
   </div>
 
   <!-- VISÃO GERAL -->
@@ -4609,6 +4610,10 @@ function renderFinanceiro(c){
   <div class="fin-panel" id="fin-panel-indicadores">
     <div id="fin-indicadores-content"></div>
   </div>
+
+  <div class="fin-panel" id="fin-panel-simulador">
+    <div id="fin-simulador-content"></div>
+  </div>
   `;
 
   // Modais financeiros
@@ -4725,7 +4730,7 @@ function finChangeMonth(d){
   fin_refresh();
 }
 function finSwitchTab(name){
-  const tabs=['receitas','despesas','repasses','dre','dfc','previsao-caixa','orcamento','fluxo-caixa','indicadores'];
+  const tabs=['receitas','despesas','repasses','dre','dfc','previsao-caixa','orcamento','fluxo-caixa','indicadores','simulador'];
   document.querySelectorAll('.fin-tab').forEach((t,i)=>{
     t.classList.toggle('active',tabs[i]===name);
   });
@@ -4740,6 +4745,7 @@ function finSwitchTab(name){
   if(name==='orcamento') finRenderOrcamento();
   if(name==='fluxo-caixa') finRenderFluxoCaixa();
   if(name==='indicadores') finRenderIndicadores();
+  if(name==='simulador') finRenderSimulador();
 }
 
 let _finRepTab='prev';
@@ -5855,8 +5861,12 @@ function finDefaultPct(ter){
 }
 // Terapeutas com repasse fixo por atendimento (valor em R$ por consulta)
 function finRepasseFixo(ter){
-  const fixos={'Nayra Vieira':100, Nayra:100};
-  return fixos[ter]??null;
+  // Reconhece variações de nome (com/sem sobrenome, com/sem acento) via prefixo,
+  // igual ao padrão já usado em fatProfKey().
+  const n=String(ter||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  if(n.startsWith('nayra')) return 100;
+  if(n.startsWith('luciana')) return 100;
+  return null;
 }
 // Calcula o repasse de um terapeuta dado faturamento e número de atendimentos
 function finCalcRepasse(ter, fat, nAtend){
@@ -6488,6 +6498,123 @@ function finRenderIndicadores(){
     </div>`;
 
   el.innerHTML = navMesHtml + margensHtml + '<div style="height:26px"></div>' + receitaHtml + '<div style="height:26px"></div>' + eficienciaHtml + semanalHtml;
+}
+
+// ════════════════════════════════════════════════════════════
+// SIMULADOR — projeção de lucro (cenário hipotético, "e se")
+// ════════════════════════════════════════════════════════════
+function simGetVal(id){
+  const el=document.getElementById(id);
+  if(!el) return 0;
+  const v=parseFloat(String(el.value).replace(',','.'));
+  return isNaN(v)?0:v;
+}
+
+function finRenderSimulador(){
+  const el=document.getElementById('fin-simulador-content'); if(!el) return;
+  const mf=finMesFechado();
+  el.innerHTML=`
+    <div class="fin-section-header">
+      <div>
+        <div class="fin-section-title">🧮 Simulador de Lucro</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Ajuste a quantidade de atendimentos para simular o resultado — os demais campos já vêm preenchidos com base em ${esc(mf.label)}, mas podem ser editados.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" style="font-size:12px" onclick="simCarregarBase()">🔄 Atualizar com dados de ${esc(mf.label)}</button>
+        <button class="btn-ghost" style="font-size:12px" onclick="simLimpar()">🗑️ Limpar tudo</button>
+      </div>
+    </div>
+
+    <div class="form-grid" style="margin-bottom:22px">
+      <div class="form-group">
+        <label class="form-label">Quantidade de atendimentos/mês</label>
+        <input class="form-input" type="number" min="0" step="1" id="sim-qtd" placeholder="0" oninput="simRecalcular()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ticket médio por atendimento (R$) <span style="font-weight:400;color:var(--text3)">— base: mês anterior</span></label>
+        <input class="form-input" type="number" min="0" step="0.01" id="sim-ticket" placeholder="0,00" oninput="simRecalcular()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">% médio de repasse às profissionais <span style="font-weight:400;color:var(--text3)">— base: mês anterior</span></label>
+        <input class="form-input" type="number" min="0" max="100" step="0.1" id="sim-pct-repasse" placeholder="0" oninput="simRecalcular()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Custo fixo mensal (R$) <span style="font-weight:400;color:var(--text3)">— base: mês anterior</span></label>
+        <input class="form-input" type="number" min="0" step="0.01" id="sim-custo-fixo" placeholder="0,00" oninput="simRecalcular()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Despesas do mês (R$) <span style="font-weight:400;color:var(--text3)">— base: mês anterior</span></label>
+        <input class="form-input" type="number" min="0" step="0.01" id="sim-despesas" placeholder="0,00" oninput="simRecalcular()">
+      </div>
+    </div>
+
+    <div class="fin-summary-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="fin-card fin-card-receita"><div class="fin-card-label">Receita Total</div><div class="fin-card-value" id="sim-out-receita">R$ 0</div><div class="fin-card-meta">atendimentos × ticket médio</div></div>
+      <div class="fin-card fin-card-despesa"><div class="fin-card-label">Custo Variável (repasses)</div><div class="fin-card-value" id="sim-out-custovar">R$ 0</div><div class="fin-card-meta">% de repasse sobre a receita</div></div>
+      <div class="fin-card fin-card-teal"><div class="fin-card-label">Margem de Contribuição</div><div class="fin-card-value" id="sim-out-margem">R$ 0</div><div class="fin-card-meta" id="sim-out-margem-pct">0% da receita</div></div>
+      <div class="fin-card fin-card-resultado"><div class="fin-card-label">Resultado do Mês (Lucro)</div><div class="fin-card-value" id="sim-out-resultado">R$ 0</div><div class="fin-card-meta">Margem − Custo Fixo − Despesas</div></div>
+      <div class="fin-card fin-card-pendente"><div class="fin-card-label">Ponto de Equilíbrio</div><div class="fin-card-value" id="sim-out-pe">R$ 0</div><div class="fin-card-meta">receita mínima para não ter prejuízo</div></div>
+    </div>
+  `;
+  simCarregarBase();
+}
+
+function simRecalcular(){
+  const qtd=simGetVal('sim-qtd');
+  const ticket=simGetVal('sim-ticket');
+  const pctRepasse=simGetVal('sim-pct-repasse');
+  const custoFixo=simGetVal('sim-custo-fixo');
+  const despesas=simGetVal('sim-despesas');
+
+  const receita=qtd*ticket;
+  const custoVar=receita*(pctRepasse/100);
+  const margem=receita-custoVar;
+  const margemPct=receita>0?(margem/receita*100):0;
+  const resultado=margem-custoFixo-despesas;
+  const pe=margemPct>0?((custoFixo+despesas)/margemPct*100):0;
+
+  const set=(id,v)=>{const e=document.getElementById(id); if(e) e.textContent=v;};
+  set('sim-out-receita', finFmt(receita));
+  set('sim-out-custovar', finFmt(custoVar));
+  set('sim-out-margem', finFmt(margem));
+  set('sim-out-margem-pct', margemPct.toFixed(1)+'% da receita');
+  set('sim-out-resultado', finFmt(resultado));
+  set('sim-out-pe', finFmt(pe));
+
+  const elRes=document.getElementById('sim-out-resultado');
+  if(elRes) elRes.style.color=resultado>=0?'var(--green)':'var(--red)';
+}
+
+// Preenche Ticket médio, % de repasse, Custo fixo e Despesas com base no último mês
+// fechado. A Quantidade de atendimentos fica em branco — é a variável que o
+// usuário ajusta para simular o cenário.
+function simCarregarBase(){
+  const mf=finMesFechado();
+  const d=finIndDadosMes(mf.mes, mf.ano);
+  const pctRepasse=d.recPaga>0?(d.custoVar/d.recPaga*100):0;
+  document.getElementById('sim-ticket').value=d.ticketMedio?d.ticketMedio.toFixed(2):0;
+  document.getElementById('sim-pct-repasse').value=pctRepasse.toFixed(1);
+  document.getElementById('sim-custo-fixo').value=d.custoFixo?d.custoFixo.toFixed(2):0;
+  document.getElementById('sim-despesas').value=d.despesas?d.despesas.toFixed(2):0;
+  simRecalcular();
+}
+
+// Além da base, também preenche a quantidade de atendimentos com o valor real
+// do mês fechado — útil para conferir o cenário "tudo igual ao mês passado".
+function simCarregarMesFechado(){
+  simCarregarBase();
+  const mf=finMesFechado();
+  const d=finIndDadosMes(mf.mes, mf.ano);
+  document.getElementById('sim-qtd').value=d.qtdAtend||0;
+  simRecalcular();
+  toast('📥 Dados de '+mf.label+' carregados. Ajuste como quiser para simular.');
+}
+
+function simLimpar(){
+  ['sim-qtd','sim-ticket','sim-pct-repasse','sim-custo-fixo','sim-despesas'].forEach(id=>{
+    const e=document.getElementById(id); if(e) e.value='';
+  });
+  simRecalcular();
 }
 
 // ════════════════════════════════════════════════════════════
