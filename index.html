@@ -631,6 +631,26 @@ async function initFirebase(){
               _cache[col]=val;
               localStorage.setItem(col,JSON.stringify(val));
             }
+          } else if(col==='cinpsi_fat_planilha'){
+            // Previsão de Caixa (previsto x realizado por mês): nunca aceita o
+            // snapshot remoto como substituto total — faz merge mês a mês, pra
+            // um mês que só exista de um lado (local ou nuvem) nunca sumir.
+            const localPlan=(_cache[col]!==undefined?_cache[col]:load(col))||{};
+            const remotoPlan=val||{};
+            const mesclado={};
+            new Set([...Object.keys(localPlan),...Object.keys(remotoPlan)]).forEach(mk=>{
+              const lm=localPlan[mk]||{}, rm=remotoPlan[mk]||{};
+              mesclado[mk]={};
+              ['previsto','realizado'].forEach(tipo=>{
+                const lv=lm[tipo], rv=rm[tipo];
+                mesclado[mk][tipo]=(lv&&rv)?(((rv.importadoEm||'')>=(lv.importadoEm||''))?rv:lv):(rv||lv);
+              });
+            });
+            _cache[col]=mesclado;
+            localStorage.setItem(col,JSON.stringify(mesclado));
+            localStorage.setItem(col+'_ts', fbTs);
+            // Se o merge trouxe de volta algo que a nuvem não tinha, reenvia a versão completa
+            if(JSON.stringify(mesclado)!==JSON.stringify(remotoPlan)) _fbWrite(col, mesclado);
           } else {
             const localTs=parseInt(localStorage.getItem(col+'_ts')||'0');
             // Nunca aceita dados vazios do Firebase sobre dados locais existentes
@@ -6785,11 +6805,128 @@ function finRenderPrevisaoCaixa(){
 }
 
 // ── Previsto x Realizado por profissional ──────────────────────
+// ── Comparação Previsto x Realizado: descobre pacientes novos ─────────────
+// "Novo" = o par (paciente, terapeuta) apareceu no Realizado mas não estava
+// no Previsto. Se o mesmo paciente começou um segundo tratamento com outra
+// terapeuta no mês, isso também conta como novo (é uma combinação inédita).
+function prevFatCompararPacientes(mesKey){
+  const plan=fatPlanLoad()[mesKey]||{};
+  const prevPac=plan.previsto?.pacientes||[];
+  const realPac=plan.realizado?.pacientes||[];
+  const chavesPrevisto=new Set(prevPac.map(p=>p.chave));
+  const novos=realPac.filter(p=>!chavesPrevisto.has(p.chave));
+
+  document.getElementById('modal-comparar-pac')?.remove();
+  const [ano,mm]=mesKey.split('-');
+  const label=(FIN_MONTHS[parseInt(mm)-1]||mm)+' '+ano;
+
+  if(!novos.length){
+    toast('Nenhum paciente novo encontrado — todos do realizado já estavam na previsão de '+label+'.');
+    return;
+  }
+
+  const linhas=novos.map((p,i)=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:7px 2px;border-bottom:1px solid var(--border);font-size:12.5px;cursor:pointer">
+      <input type="checkbox" class="comppac-check" data-idx="${i}" checked>
+      <span style="flex:1">
+        <div style="font-weight:500">${esc(p.paciente)}</div>
+        <div style="font-size:11px;color:var(--text3)">${esc(p.terapeuta)}${p.servico?' · '+esc(p.servico):''}${p.data?' · '+finFmtDate(p.data):''}</div>
+      </span>
+    </label>`).join('');
+
+  window._prevFatNovosPacientes=novos;
+
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-comparar-pac';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:480px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">🔍 Pacientes novos em ${esc(label)}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-comparar-pac').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <div style="font-size:12.5px;color:var(--text2);margin-bottom:10px">
+        ${novos.length} combinação${novos.length!==1?'ões':''} de paciente + terapeuta apareceu${novos.length!==1?'ram':''} no realizado sem estar na previsão. Desmarque quem não quer cadastrar.
+      </div>
+      ${linhas}
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="document.getElementById('modal-comparar-pac').remove()">Cancelar</button>
+      <button class="btn-primary" onclick="prevFatConfirmarNovosPacientes()">➕ Cadastrar selecionados</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function prevFatConfirmarNovosPacientes(){
+  const novos=window._prevFatNovosPacientes||[];
+  const checks=[...document.querySelectorAll('.comppac-check')].filter(c=>c.checked);
+  if(!checks.length){ toast('Selecione ao menos um paciente para cadastrar.'); return; }
+
+  const pacs=loadPac();
+  const conv=loadConvAntigos();
+  let novoPac=0, novoConv=0, jaExistia=0;
+
+  checks.forEach(c=>{
+    const item=novos[Number(c.dataset.idx)]; if(!item) return;
+    const pacNome=item.paciente, ter=item.terapeuta, servico=item.servico, ds=item.data||new Date().toISOString().split('T')[0];
+    let criouAlgo=false;
+
+    if(!pacs.find(p=>p.nome.toLowerCase()===pacNome.toLowerCase()&&(p.terapeuta||'').toLowerCase()===ter.toLowerCase())){
+      pacs.push({
+        id:'plan_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+        nome:pacNome, terapeuta:ter, idade:'', inicio:ds,
+        queixa:servico, telefone:'', origem:'Doctoralia', obs:'', fromLead:true
+      });
+      novoPac++; criouAlgo=true;
+    }
+    if(!conv.find(c2=>(c2.paciente||'').toLowerCase()===pacNome.toLowerCase()&&(c2.terapeuta||'').toLowerCase()===ter.toLowerCase())){
+      conv.push({
+        id:'ca_plan_'+Date.now()+'_'+Math.random().toString(36).slice(2),
+        paciente:pacNome, terapeuta:ter, valor:null,
+        origem:'Doctoralia', servico, status:'Fechado',
+        observacao:'Paciente novo (comparação previsto x realizado)', leadConvertido:false, ativo:true, data:ds
+      });
+      novoConv++; criouAlgo=true;
+    }
+    if(!criouAlgo) jaExistia++;
+  });
+
+  if(novoPac>0) savePac(pacs);
+  if(novoConv>0) saveConvAntigos(conv);
+
+  document.getElementById('modal-comparar-pac')?.remove();
+  window._prevFatNovosPacientes=null;
+
+  let msg=novoConv+' paciente'+(novoConv!==1?'s':'')+' novo'+(novoConv!==1?'s':'')+' cadastrado'+(novoConv!==1?'s':'');
+  if(jaExistia>0) msg+=` (${jaExistia} já existia${jaExistia!==1?'m':''} no sistema)`;
+  toast('✅ '+msg+'!');
+
+  if(typeof renderConvertidos==='function' && _currentView==='convertidos') renderConvertidos(document.getElementById('main-content'));
+}
+
 function prevFatSecao(){
   const mesKey=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
   const label=FIN_MONTHS[_finMonth]+' '+_finYear;
-  const plan=fatPlanLoad()[mesKey]||{};
+  const planTodos=fatPlanLoad();
+  const plan=planTodos[mesKey]||{};
   const prev=plan.previsto, real=plan.realizado;
+
+  // Lista de todos os meses que já têm previsto e/ou realizado salvos — dá
+  // visibilidade de que o histórico está preservado (nenhum mês some).
+  const mesesComDados=Object.keys(planTodos).filter(mk=>planTodos[mk]?.previsto||planTodos[mk]?.realizado).sort();
+  const historicoHtml=mesesComDados.length?`
+    <div style="font-size:11.5px;color:var(--text3);margin-bottom:10px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span>Meses com dados salvos:</span>
+      ${mesesComDados.map(mk=>{
+        const [a,m]=mk.split('-');
+        const lbl=(FIN_MONTHS[parseInt(m)-1]||m).slice(0,3)+'/'+a.slice(2);
+        const temAmbos=planTodos[mk]?.previsto&&planTodos[mk]?.realizado;
+        const ativo=mk===mesKey;
+        return `<span onclick="_finMonth=${parseInt(m)-1};_finYear=${parseInt(a)};finRenderPrevisaoCaixa();" style="cursor:pointer;padding:2px 8px;border-radius:20px;font-weight:${ativo?'700':'400'};background:${ativo?'var(--purple-light)':'var(--surface2)'};color:${ativo?'var(--purple)':'var(--text3)'}">${lbl}${temAmbos?' ✓':''}</span>`;
+      }).join('')}
+    </div>`:'';
 
   const info=(d,txt)=>d
     ? `<span style="font-size:11px;color:var(--text3)">${txt}: <strong>${d.n}</strong> consultas · importado em ${finFmtDate(d.importadoEm)}</span>`
@@ -6863,9 +7000,11 @@ function prevFatSecao(){
         <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn-ghost" style="font-size:12.5px" onclick="fatPlanImportar('previsto')">📅 Importar previsão</button>
           <button class="btn-ghost" style="font-size:12.5px" onclick="fatPlanImportar('realizado')">✅ Importar realizado</button>
+          ${(prev?.pacientes?.length&&real?.pacientes?.length)?`<button class="btn-primary" style="font-size:12.5px" onclick="prevFatCompararPacientes('${mesKey}')">🔍 Comparar pacientes</button>`:''}
           ${(prev||real)?`<button class="btn-ghost" style="font-size:12.5px" onclick="prevFatImprimir()">🖨️ Imprimir</button>`:''}
         </div>
       </div>
+      ${historicoHtml}
       <div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:4px">
         ${info(prev,'📅 Previsão')} ${info(real,'✅ Realizado')}
       </div>
@@ -7223,8 +7362,39 @@ function planColunas(header){
     if(ix.estado==null && /^estado$/.test(n)) ix.estado=i;
     if(ix.data==null && /^data/.test(n)) ix.data=i;
     if(ix.pac==null && /paciente/.test(n)) ix.pac=i;
+    if(ix.servico==null && /servic/.test(n)) ix.servico=i;
   });
   return ix;
+}
+
+// Extrai a lista de pares únicos (paciente, terapeuta) de uma planilha de
+// consultas do Doctoralia — usado para comparar Previsão x Realizado e achar
+// pacientes novos. Reaproveita a mesma detecção de colunas de planColunas.
+function planParsePacientesUnicos(rows, filtro){
+  if(!rows||rows.length<2) return [];
+  const ix=planColunas(rows[0]);
+  if(ix.prof==null||ix.pac==null) return [];
+  const mapa={};
+  rows.slice(1).forEach(r=>{
+    if(!r||!r.length) return;
+    const profRaw=String(r[ix.prof]||'').trim();
+    const pacRaw=String(r[ix.pac]||'').trim();
+    if(!profRaw||!pacRaw) return;
+    const pgto=ix.pgto!=null?planNorm(r[ix.pgto]):'';
+    const estado=ix.estado!=null?planNorm(r[ix.estado]):'';
+    if(filtro==='pago' && !/pago/.test(pgto)) return;
+    if(filtro==='realizada' && !/realizada/.test(estado)) return;
+    const ter=normTer(profRaw);
+    const servico=ix.servico!=null?String(r[ix.servico]||'').trim():'';
+    const dt=ix.data!=null?planData(r[ix.data]):'';
+    const chave=pacRaw.toLowerCase()+'|'+ter.toLowerCase();
+    if(!mapa[chave]){
+      mapa[chave]={paciente:pacRaw, terapeuta:ter, servico, data:dt, chave};
+    } else if(dt && (!mapa[chave].data || dt<mapa[chave].data)){
+      mapa[chave].data=dt; // guarda a data mais antiga da ocorrência
+    }
+  });
+  return Object.values(mapa);
 }
 
 // filtro: 'todas' | 'pago' | 'realizada'
@@ -7320,17 +7490,18 @@ async function fatPlanHandleFile(file,tipo){
       if(erro){ erro.textContent='Não encontrei as colunas de Especialista e Preço na planilha.'; erro.style.display='block'; }
       return;
     }
+    const pacientes=planParsePacientesUnicos(rows,filtro);
     const mes=document.getElementById('fatplan-mes')?.value||dados.mesSugerido;
     document.getElementById('modal-fatplan')?.remove();
-    fatPlanRevisar(dados,mes,tipo,filtro);
+    fatPlanRevisar(dados,mes,tipo,filtro,pacientes);
   }catch(err){
     if(status) status.style.display='none';
     if(erro){ erro.textContent='Erro ao ler a planilha. Verifique o formato do arquivo.'; erro.style.display='block'; }
   }
 }
 
-function fatPlanRevisar(dados,mes,tipo,filtro){
-  window._fatPlanTmp={dados,mes,tipo,filtro};
+function fatPlanRevisar(dados,mes,tipo,filtro,pacientes){
+  window._fatPlanTmp={dados,mes,tipo,filtro,pacientes:pacientes||[]};
   document.getElementById('modal-fatplan-rev')?.remove();
   const linhas=Object.entries(dados.porProf).sort((a,b)=>b[1].valor-a[1].valor).map(([prof,d])=>{
     const rep=finCalcRepasse(fatProfKey(prof), d.valor, d.n);
@@ -7384,7 +7555,8 @@ function fatPlanConfirmar(){
   if(!plan[t.mes]) plan[t.mes]={};
   plan[t.mes][t.tipo]={
     total:t.dados.total, porProf:t.dados.porProf, n:t.dados.n,
-    filtro:t.filtro, importadoEm:new Date().toISOString().slice(0,10)
+    filtro:t.filtro, importadoEm:new Date().toISOString().slice(0,10),
+    pacientes:t.pacientes||[]
   };
   fatPlanSave(plan);
   // marca o lembrete do mês como resolvido
