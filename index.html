@@ -8119,7 +8119,17 @@ function finRenderFluxoCaixa(){
   todos.filter(m=>m.data>ini.data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)))
     .forEach(m=>{ run+=(m.tipo==='entrada'?m.valor:-m.valor); acum[m.id]=run; });
 
+  // Última data já importada (de qualquer origem) — pra saber a partir de
+  // que dia pedir o próximo extrato ao banco.
+  const ultimaImportacao=todos.length?todos.reduce((max,m)=>m.data>max?m.data:max,todos[0].data):null;
+  const proximaData=ultimaImportacao?(()=>{ const d=new Date(ultimaImportacao+'T12:00:00'); d.setDate(d.getDate()+1); return d.toISOString().split('T')[0]; })():null;
+  const bannerImportacao=ultimaImportacao?`
+    <div style="background:var(--purple-light);border:1px solid var(--purple);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:var(--purple);display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      📅 Extrato importado até <strong>${finFmtDate(ultimaImportacao)}</strong> — no próximo upload, baixe o extrato do banco a partir de <strong>${finFmtDate(proximaData)}</strong>.
+    </div>`:'';
+
   el.innerHTML=`
+    ${bannerImportacao}
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
       <button class="btn-primary" style="font-size:13px" onclick="fluxoImportar()">🏦 Importar extrato</button>
       <select class="form-select" style="font-size:12px;padding:6px 10px;width:auto" onchange="_fluxoTipo=this.value;finRenderFluxoCaixa()">
