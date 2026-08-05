@@ -7794,7 +7794,7 @@ function fatPlanImportar(tipo){
   document.getElementById('modal-fatplan')?.remove();
   const hoje=new Date();
   const mesPadrao=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
-  const titulo=tipo==='previsto'?'📅 Importar previsão de faturamento':'✅ Importar faturamento realizado';
+  const titulo=tipo==='previsto'?'📅 Importar previsão de faturamento':tipo==='orcamento'?'📈 Atualizar receita da semana (Orçamento)':'✅ Importar faturamento realizado';
   const filtroPadrao=tipo==='previsto'?'todas':'realizada';
 
   const mo=document.createElement('div');
@@ -7806,6 +7806,9 @@ function fatPlanImportar(tipo){
       <button class="modal-close" onclick="document.getElementById('modal-fatplan').remove()">×</button>
     </div>
     <div class="modal-body">
+      ${tipo==='orcamento'?`<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:14px;font-size:12.5px;color:#3730A3;line-height:1.5">
+        💡 Suba a planilha do Doctoralia acumulada do mês até hoje. Cada envio <strong>substitui</strong> o anterior — não precisa se preocupar em contar duas vezes.
+      </div>`:''}
       <div class="form-grid" style="margin-bottom:14px">
         <div class="form-group">
           <label class="form-label">📅 Competência</label>
@@ -7883,7 +7886,7 @@ function fatPlanRevisar(dados,mes,tipo,filtro,pacientes){
   mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
   mo.innerHTML=`<div class="modal" style="max-width:640px;max-height:90vh;display:flex;flex-direction:column">
     <div class="modal-header">
-      <div class="modal-title">${tipo==='previsto'?'📅 Previsão':'✅ Realizado'} — ${label}</div>
+      <div class="modal-title">${tipo==='previsto'?'📅 Previsão':tipo==='orcamento'?'📈 Receita da semana':'✅ Realizado'} — ${label}</div>
       <button class="modal-close" onclick="document.getElementById('modal-fatplan-rev').remove()">×</button>
     </div>
     <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
@@ -7985,6 +7988,7 @@ function finRenderOrcamento(){
         <button class="orc-view-btn" id="orc-btn-resumo" onclick="orcSwitchView('resumo')" style="padding:8px 16px;border:none;background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer">📅 Resumo anual</button>
       </div>
       <div style="flex:1"></div>
+      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('orcamento')">📈 Atualizar receita da semana</button>
       <button class="btn-ghost" style="font-size:13px" onclick="orcImprimir()">🖨️ Imprimir</button>
     </div>
     <div id="orc-view-content"></div>`;
@@ -8206,53 +8210,59 @@ function orcRealizado(mesKey){
   return {receita, receitaOrigem, despesaTotal, despPorCat, repasses};
 }
 
-// Repasse previsto: estima o repasse às profissionais a partir do previsto
-// da Previsão de Caixa (aba Previsto x Realizado), em vez do realizado.
-function orcRepassePrevistoMes(mesKey){
-  try{
-    const plan=fatPlanLoad()[mesKey];
-    if(plan&&plan.previsto&&plan.previsto.porProf){
-      return Object.entries(plan.previsto.porProf)
-        .reduce((s,[prof,d])=>s+finCalcRepasse(fatProfKey(prof), d.valor, d.n),0);
-    }
-  }catch(e){}
-  return 0;
+// Repasse estimado a partir de um recorte "por profissional" (previsto do
+// início do mês, ou a receita acumulada semanal) — reaproveitado tanto para
+// a meta original quanto para a receita acumulada em tempo real.
+function orcCalcRepasse(porProf){
+  if(!porProf) return 0;
+  return Object.entries(porProf).reduce((s,[prof,d])=>s+finCalcRepasse(fatProfKey(prof), d.valor, d.n),0);
 }
 
 function orcMetaMes(mesKey){
   const orc=orcLoad();
   const m=orc[mesKey]||{};
-
-  // Receita orçada: usa o total previsto na Previsão de Caixa (aba Previsto x
-  // Realizado) quando existir, para os dois lugares baterem sempre. Sem
-  // previsão importada para o mês, cai de volta na meta lançada manualmente.
-  let recMeta;
   const plan=fatPlanLoad()[mesKey];
+
+  // Meta original (fixa): vem do previsto importado na Previsão de Caixa no
+  // início do mês, ou da meta manual quando não há previsto. Não muda durante
+  // o mês — serve de referência para comparar contra o planejado.
+  let recMeta;
   if(plan&&plan.previsto&&plan.previsto.porProf){
     recMeta=Object.values(plan.previsto.porProf).reduce((s,d)=>s+(d.valor||0),0);
   } else {
     recMeta=Object.values(m.receita||{}).reduce((s,v)=>s+v,0);
   }
 
-  // Despesa orçada: todas as despesas já lançadas no mês, mais a previsão de
-  // repasse (calculada a partir do previsto na Previsão de Caixa).
+  // Receita acumulada (ao vivo): vem da planilha semanal de receitas que
+  // você sobe na aba Orçamento ("Atualizar receita da semana"). Cada envio
+  // substitui o anterior — é sempre o acumulado do mês até aquela data. Sem
+  // upload ainda, usa o previsto/meta original como melhor estimativa.
+  const porProfAtual = plan?.orcamento?.porProf || plan?.previsto?.porProf || null;
+  const recAcumulada = plan?.orcamento?.porProf
+    ? Object.values(plan.orcamento.porProf).reduce((s,d)=>s+(d.valor||0),0)
+    : recMeta;
+
+  // Despesa orçada: todas as despesas já lançadas no mês, mais o repasse
+  // recalculado a partir da receita acumulada mais recente — segue a
+  // receita automaticamente conforme ela sobe ou desce.
   const desps=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
   const despCats={};
   desps.forEach(d=>{ const c=d.cat||'Outras Despesas'; despCats[c]=(despCats[c]||0)+(d.valor||0); });
-  const repassePrevisto=orcRepassePrevistoMes(mesKey);
+  const repassePrevisto=orcCalcRepasse(porProfAtual);
   if(repassePrevisto>0) despCats['Repasses aos Profissionais']=repassePrevisto;
   const despMeta=desps.reduce((s,d)=>s+(d.valor||0),0)+repassePrevisto;
 
-  return {recMeta, despMeta, despCats};
+  return {recMeta, recAcumulada, despMeta, despCats};
 }
 
 function orcViewComparativo(){
   let linhas=`
     <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3">
-      💡 A <strong>receita realizada</strong> vem da planilha do Doctoralia importada. As <strong>despesas</strong> vêm dos lançamentos do sistema, mais a linha de repasses aos profissionais.
+      💡 A coluna <strong>Orçado</strong> mostra a receita acumulada da planilha semanal (atualiza ao vivo). Quando ela difere da meta original do mês, a meta aparece pequena abaixo. As <strong>despesas</strong> vêm dos lançamentos do sistema, mais o repasse recalculado sobre a receita acumulada.
     </div>
-    <div style="margin-bottom:16px">
+    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('realizado')">📊 Importar receita do Doctoralia</button>
+      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('orcamento')">📈 Atualizar receita da semana</button>
     </div>`;
 
   ORC_MESES_IDX.forEach((mIdx,i)=>{
@@ -8260,9 +8270,9 @@ function orcViewComparativo(){
     const meta=orcMetaMes(key);
     const real=orcRealizado(key);
 
-    const recDesvio=meta.recMeta>0?((real.receita-meta.recMeta)/meta.recMeta*100):0;
+    const recDesvio=meta.recAcumulada>0?((real.receita-meta.recAcumulada)/meta.recAcumulada*100):0;
     const despDesvio=meta.despMeta>0?((real.despesaTotal-meta.despMeta)/meta.despMeta*100):0;
-    const resultMeta=meta.recMeta-meta.despMeta;
+    const resultMeta=meta.recAcumulada-meta.despMeta;
     const resultReal=real.receita-real.despesaTotal;
     const repMeta=meta.despCats['Repasses aos Profissionais']||0;
     const repDesvio=repMeta>0?((real.repasses-repMeta)/repMeta*100):0;
@@ -8271,6 +8281,8 @@ function orcViewComparativo(){
     const origem=real.receitaOrigem==='planilha'
       ? '<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:20px;margin-left:6px">Doctoralia</span>'
       : '<span style="font-size:10px;background:var(--surface2);color:var(--text3);padding:1px 7px;border-radius:20px;margin-left:6px">sistema</span>';
+    const metaRef=Math.round(meta.recAcumulada)!==Math.round(meta.recMeta)
+      ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(meta.recMeta)}</div>` : '';
 
     linhas+=`
       <div class="card" style="margin-bottom:14px;padding:16px 20px">
@@ -8285,9 +8297,9 @@ function orcViewComparativo(){
           <tbody>
             <tr>
               <td style="padding:6px 8px;color:var(--green);font-weight:600">Receita${origem}</td>
-              <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.recMeta)}</td>
+              <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.recAcumulada)}${metaRef}</td>
               <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.receita)}</td>
-              <td style="padding:6px 8px;text-align:right;color:${corDesvio(recDesvio,false)}">${meta.recMeta>0?(recDesvio>=0?'+':'')+recDesvio.toFixed(0)+'%':'—'}</td>
+              <td style="padding:6px 8px;text-align:right;color:${corDesvio(recDesvio,false)}">${meta.recAcumulada>0?(recDesvio>=0?'+':'')+recDesvio.toFixed(0)+'%':'—'}</td>
             </tr>
             <tr>
               <td style="padding:6px 8px;color:var(--red);font-weight:600">Despesas</td>
@@ -8335,32 +8347,36 @@ function orcDetalheDespesas(key, meta, real){
 }
 
 function orcViewResumo(){
-  let totRecMeta=0,totRecReal=0,totDespMeta=0,totDespReal=0;
+  let totRecMeta=0,totRecAcumulada=0,totRecReal=0,totDespMeta=0,totDespReal=0;
   const linhas=ORC_MESES_IDX.map((mIdx,i)=>{
     const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
     const meta=orcMetaMes(key);
     const real=orcRealizado(key);
-    totRecMeta+=meta.recMeta; totRecReal+=real.receita;
+    totRecMeta+=meta.recMeta; totRecAcumulada+=meta.recAcumulada; totRecReal+=real.receita;
     totDespMeta+=meta.despMeta; totDespReal+=real.despesaTotal;
-    const resMeta=meta.recMeta-meta.despMeta;
+    const resMeta=meta.recAcumulada-meta.despMeta;
     const resReal=real.receita-real.despesaTotal;
+    const metaRef=Math.round(meta.recAcumulada)!==Math.round(meta.recMeta)
+      ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(meta.recMeta)}</div>` : '';
     return `<tr>
       <td style="padding:8px 10px;font-weight:600">${ORC_MESES[i]}</td>
-      <td style="padding:8px 10px;text-align:right;color:var(--green)">${fmtBRL(meta.recMeta)}</td>
+      <td style="padding:8px 10px;text-align:right;color:var(--green)">${fmtBRL(meta.recAcumulada)}${metaRef}</td>
       <td style="padding:8px 10px;text-align:right;color:var(--red)">${fmtBRL(meta.despMeta)}</td>
       <td style="padding:8px 10px;text-align:right;font-weight:600">${fmtBRL(resMeta)}</td>
       <td style="padding:8px 10px;text-align:right;font-weight:700;color:${resReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resReal)}</td>
     </tr>`;
   }).join('');
 
-  const totResMeta=totRecMeta-totDespMeta;
+  const totResMeta=totRecAcumulada-totDespMeta;
   const totResReal=totRecReal-totDespReal;
+  const totMetaRef=Math.round(totRecAcumulada)!==Math.round(totRecMeta)
+    ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(totRecMeta)}</div>` : '';
 
   return `
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
-      <div class="stat-card"><div class="stat-label">Receita planejada</div><div class="stat-value" style="font-size:17px;color:var(--green)">${fmtBRL(totRecMeta)}</div></div>
-      <div class="stat-card"><div class="stat-label">Despesa planejada</div><div class="stat-value" style="font-size:17px;color:var(--red)">${fmtBRL(totDespMeta)}</div></div>
-      <div class="stat-card"><div class="stat-label">Resultado planejado</div><div class="stat-value" style="font-size:17px;color:${totResMeta>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResMeta)}</div></div>
+      <div class="stat-card"><div class="stat-label">Receita acumulada</div><div class="stat-value" style="font-size:17px;color:var(--green)">${fmtBRL(totRecAcumulada)}</div>${totMetaRef}</div>
+      <div class="stat-card"><div class="stat-label">Despesa orçada</div><div class="stat-value" style="font-size:17px;color:var(--red)">${fmtBRL(totDespMeta)}</div></div>
+      <div class="stat-card"><div class="stat-label">Resultado orçado</div><div class="stat-value" style="font-size:17px;color:${totResMeta>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResMeta)}</div></div>
       <div class="stat-card"><div class="stat-label">Resultado realizado</div><div class="stat-value" style="font-size:17px;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</div></div>
     </div>
     <div class="fin-table-wrap">
@@ -8375,7 +8391,7 @@ function orcViewResumo(){
         <tbody>${linhas}</tbody>
         <tfoot><tr style="background:var(--surface2);font-weight:700">
           <td style="padding:10px">TOTAL Jul–Dez</td>
-          <td style="padding:10px;text-align:right;color:var(--green)">${fmtBRL(totRecMeta)}</td>
+          <td style="padding:10px;text-align:right;color:var(--green)">${fmtBRL(totRecAcumulada)}${totMetaRef}</td>
           <td style="padding:10px;text-align:right;color:var(--red)">${fmtBRL(totDespMeta)}</td>
           <td style="padding:10px;text-align:right">${fmtBRL(totResMeta)}</td>
           <td style="padding:10px;text-align:right;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</td>
