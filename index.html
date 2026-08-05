@@ -2198,7 +2198,7 @@ function refreshConv(){
       ?'<span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:20px;font-weight:500">Ativo</span>'
       :'<span style="font-size:11px;background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:20px;font-weight:500">Inativo</span>'
     }</td>
-    <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--accent)" onclick="duplicarConvertido('${esc(p.id)}')">➕ Duplicar</button></td>
+    <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--accent)" onclick="duplicarConvertido('${esc(p.id)}')">➕ Duplicar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--purple)" onclick="openTermoModal('${esc(p.id)}')">📄 Termo</button></td>
   </tr>`;}).join('');
 }
 
@@ -2350,6 +2350,8 @@ function openConvModal(id){
           <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="ec-telefone"></div>
           <div class="form-group"><label class="form-label">🎂 Data de nascimento</label><input class="form-input" id="ec-nasc" type="date"></div>
           <div class="form-group"><label class="form-label">🏫 Escola</label><input class="form-input" id="ec-escola" placeholder="Nome da escola"></div>
+          <div class="form-group"><label class="form-label">👤 Responsável legal</label><input class="form-input" id="ec-resp-legal" placeholder="Nome do responsável"></div>
+          <div class="form-group"><label class="form-label">🪪 CPF</label><input class="form-input" id="ec-cpf" placeholder="000.000.000-00"></div>
           <div class="form-group"><label class="form-label">Origem</label>
             <select class="form-select" id="ec-origem">
               <option value="">Selecione...</option>
@@ -2425,6 +2427,8 @@ function openConvModal(id){
   document.getElementById('ec-obs').value=p.observacao||'';
   document.getElementById('ec-nasc').value=p.nascimento||'';
   document.getElementById('ec-escola').value=p.escola||'';
+  document.getElementById('ec-resp-legal').value=p.responsavelLegal||'';
+  document.getElementById('ec-cpf').value=p.cpf||'';
   document.getElementById('ec-nf').value=p.notaFiscal==='sim'?'sim':'nao';
   // Modalidade
   const mod=p.modalidade||'mensal';
@@ -2481,6 +2485,8 @@ function saveConv(){
       telefone:document.getElementById('ec-telefone').value.trim()||null,
       nascimento:document.getElementById('ec-nasc').value||null,
       escola:document.getElementById('ec-escola').value.trim()||null,
+      responsavelLegal:document.getElementById('ec-resp-legal').value.trim()||null,
+      cpf:document.getElementById('ec-cpf').value.trim()||null,
       origem:document.getElementById('ec-origem').value||leadsAll[leadsIdx].origem,
       servico:document.getElementById('ec-servico').value||null,
       terapeuta:novaTer||null,
@@ -2500,6 +2506,8 @@ function saveConv(){
         telefone:document.getElementById('ec-telefone').value.trim()||null,
         nascimento:document.getElementById('ec-nasc').value||null,
         escola:document.getElementById('ec-escola').value.trim()||null,
+        responsavelLegal:document.getElementById('ec-resp-legal').value.trim()||null,
+        cpf:document.getElementById('ec-cpf').value.trim()||null,
         origem:document.getElementById('ec-origem').value||antigos[idx].origem,
         servico:document.getElementById('ec-servico').value||null,
         terapeuta:novaTer||null,
@@ -2524,6 +2532,335 @@ function saveConv(){
   closeConvModal();
   renderConvertidos(document.getElementById('main-content'));
   toast('Convertido atualizado! ✅');
+}
+
+// ════════════════════════════════════════════════════════════
+// TERMO DE ADESÃO — geração de documento por especialidade
+// ════════════════════════════════════════════════════════════
+// Texto-base do termo (comum às especialidades). O parâmetro `area` troca o
+// adjetivo "psicológico" pelo termo correto de cada especialidade. `opts`
+// controla variações: comEscola (menções à escola/pais, desligado para
+// atendimento adulto) e comResponsavel (linha de responsável legal e "e/ou
+// responsável legal" no aceite, desligado para atendimento adulto). O valor
+// do investimento chega pronto em v.investimentoLinha.
+function termoCorpoBase(v,area,opts){
+  opts=opts||{};
+  const comEscola=opts.comEscola!==false;
+  const comResponsavel=opts.comResponsavel!==false;
+
+  const itemEscola=comEscola?'\n        <li>✔️ Integração e contato com a escola quando clinicamente necessário</li>':'';
+  const obsEscola=comEscola?`
+        <li>Sessões com escola, responsáveis ou reuniões multidisciplinares poderão:
+          <ul>
+            <li>- ser cobradas separadamente; ou</li>
+            <li>- substituir a sessão semanal da criança, sem custo adicional.</li>
+          </ul>
+        </li>`:'';
+  const aceiteIntro=comResponsavel
+    ? 'Ao assinar este termo, o(a) paciente e/ou responsável legal declara estar ciente e de acordo com as condições descritas neste documento.'
+    : 'Ao assinar este termo, o(a) paciente declara estar ciente e de acordo com as condições descritas neste documento.';
+  const linhaResponsavel=comResponsavel?`\n        <p><strong>Responsável legal:</strong> ${v.responsavel}</p>`:'';
+  const labelCpf=comResponsavel?'CPF do responsável legal':'CPF do paciente';
+  const quem=comResponsavel?'o(a) paciente e/ou responsável legal':'o(a) paciente';
+
+  return `
+      <h2>1. Natureza do Serviço</h2>
+      <p>O presente Termo de Adesão formaliza a participação do(a) paciente nos serviços de acompanhamento ${area} oferecidos pelo Centro Integrado de Neurociências e Psicologia (CINPSI), realizados conforme os princípios éticos e técnicos da profissão e fundamentados em práticas baseadas em evidências.</p>
+      <p>O atendimento possui caráter clínico, individualizado e poderá envolver integração interdisciplinar com outros profissionais da equipe, sempre que necessário para o desenvolvimento do plano terapêutico.</p>
+
+      <h2>2. Frequência e Comprometimento com o Tratamento</h2>
+      <p>As evidências científicas indicam que a frequência mínima recomendada para maior efetividade do acompanhamento é de uma sessão semanal, favorecendo:</p>
+      <ul>
+        <li>fortalecimento do vínculo terapêutico;</li>
+        <li>continuidade do processo clínico;</li>
+        <li>monitoramento adequado da evolução;</li>
+        <li>melhores resultados terapêuticos.</li>
+      </ul>
+      <p>A adesão ao tratamento envolve compromisso com frequência, pontualidade e organização dos atendimentos.</p>
+
+      <h2>3. Plano Mensal de Atendimento</h2>
+      <p>Após definição da indicação terapêutica, os atendimentos passam a ocorrer em formato de Plano Mensal.</p>
+      <p><strong>Investimento:</strong></p>
+      <p>${v.investimentoLinha}</p>
+      <ul class="check">
+        <li>✔️ Sessões individuais de 50 minutos com especialista</li>
+        <li>✔️ Horário fixo reservado na agenda</li>
+        <li>✔️ Possibilidade de reagendamento em até 6 dias corridos em caso de cancelamento comunicado, conforme disponibilidade do profissional</li>
+        <li>✔️ Canal direto de comunicação com o(a) terapeuta via WhatsApp para alinhamentos terapêuticos</li>
+        <li>✔️ Sessões periódicas com familiares/responsáveis</li>${itemEscola}
+      </ul>
+      <p><strong>Observações Importantes:</strong></p>
+      <ul>${obsEscola}
+        <li>Em meses com cinco semanas, a quinta sessão será incluída no planejamento terapêutico e faturada proporcionalmente.</li>
+      </ul>
+
+      <h2>4. Modalidade Presencial e Online</h2>
+      <p>Os atendimentos poderão ocorrer de forma presencial ou online, conforme necessidade clínica e disponibilidade do profissional.</p>
+      <p>Os atendimentos online seguem integralmente as normas dos respectivos conselhos profissionais, garantindo ética, sigilo e segurança das informações.</p>
+
+      <h2>5. Cancelamentos, Faltas e Reposições</h2>
+      <ul>
+        <li>Cancelamentos deverão ser comunicados com antecedência mínima de 2 horas.</li>
+        <li>Cancelamentos fora desse prazo serão considerados como sessão realizada.</li>
+        <li>Havendo disponibilidade na agenda do profissional, a sessão poderá ser reposta em até 6 dias corridos após a ausência.</li>
+      </ul>
+
+      <h2>6. Atrasos</h2>
+      <p>Atrasos não implicam extensão do horário da sessão, que permanecerá dentro do tempo previsto de 50 minutos.</p>
+
+      <h2>7. Interrupções e Pausas no Tratamento</h2>
+      <p>Em casos de interrupção temporária, férias ou afastamentos prolongados por parte do(a) paciente, o horário reservado poderá ser disponibilizado para outro paciente, sem garantia de manutenção da vaga.</p>
+      <p>Na impossibilidade de atendimento por parte do profissional, as sessões serão remarcadas sem prejuízo financeiro ao paciente.</p>
+
+      <h2>8. Confidencialidade e Ética Profissional</h2>
+      <p>Todas as informações compartilhadas durante o acompanhamento são protegidas por sigilo profissional, conforme os códigos de ética profissionais e legislação vigente.</p>
+      <p>A quebra de sigilo ocorrerá apenas em situações previstas em lei ou quando houver risco à integridade do(a) paciente ou de terceiros.</p>
+
+      <h2>9. Vigência e Cancelamento</h2>
+      <p>O presente Termo de Adesão possui vigência inicial de 30 dias, sendo renovado automaticamente por prazo indeterminado enquanto houver continuidade do acompanhamento.</p>
+      <p>O cancelamento poderá ser solicitado a qualquer momento pelo(a) paciente ou responsável legal, estando ciente de que valores já pagos referentes ao mês vigente não serão restituídos.</p>
+
+      <h2>10. Consentimento Livre e Esclarecido para Uso de Imagem e Áudio</h2>
+      <p>Este Termo de Consentimento Livre e Esclarecido tem como finalidade informar e obter a autorização de ${quem} para a eventual utilização de recortes de áudio e/ou imagem captados durante as sessões, exclusivamente para fins terapêuticos — como supervisão clínica, discussão de caso entre a equipe multiprofissional e aprimoramento técnico do atendimento.</p>
+      <p>A utilização desses registros:</p>
+      <ul>
+        <li>respeitará o sigilo profissional e a identidade do(a) paciente, sempre que possível;</li>
+        <li>será restrita à equipe técnica do CINPSI envolvida no acompanhamento;</li>
+        <li>não será divulgada publicamente nem utilizada para finalidades distintas das aqui descritas sem nova autorização expressa.</li>
+      </ul>
+
+      <h2>11. Aceite</h2>
+      <p>${aceiteIntro}</p>
+      <div class="assinaturas">
+        <p><strong>Paciente:</strong> ${v.paciente}</p>${linhaResponsavel}
+        <p><strong>${labelCpf}:</strong> ${v.cpf}</p>
+        <p><strong>Data:</strong> ${v.data}</p>
+        <p class="linha-assinatura"><strong>Assinatura:</strong> _________________________________________</p>
+      </div>`;
+}
+
+// Uma chave por especialidade — todas reaproveitam o mesmo corpo (seções 1 a
+// 10) via termoCorpoBase, mudando apenas título e adjetivo de área. Existem
+// só dois formatos possíveis: Infantil (com escola e responsável legal) e
+// Adulto (sem escola, sem responsável legal — CPF é do próprio paciente).
+// Psicoterapia e Fonoaudiologia têm as duas versões; Psicopedagogia só tem
+// a versão Infantil. Para acrescentar uma nova especialidade, basta
+// adicionar uma (ou duas) chaves aqui reaproveitando os mesmos opts.
+const TERMOS_TEXTO={
+  psicoterapia:{
+    label:'Psicoterapia Infantil',
+    titulo:'TERMO DE ADESÃO AO ACOMPANHAMENTO PSICOLOGIA',
+    adulto:false,
+    corpo:(v)=>termoCorpoBase(v,'psicológico',{comEscola:true,comResponsavel:true})
+  },
+  'psicoterapia-adulto':{
+    label:'Psicoterapia Adulto',
+    titulo:'TERMO DE ADESÃO AO ACOMPANHAMENTO EM PSICOTERAPIA (ADULTO)',
+    adulto:true,
+    corpo:(v)=>termoCorpoBase(v,'psicológico',{comEscola:false,comResponsavel:false})
+  },
+  fonoaudiologia:{
+    label:'Fonoaudiologia Infantil',
+    titulo:'TERMO DE ADESÃO AO ACOMPANHAMENTO EM FONOAUDIOLOGIA',
+    adulto:false,
+    corpo:(v)=>termoCorpoBase(v,'fonoaudiológico',{comEscola:true,comResponsavel:true})
+  },
+  'fonoaudiologia-adulto':{
+    label:'Fonoaudiologia Adulto',
+    titulo:'TERMO DE ADESÃO AO ACOMPANHAMENTO EM FONOAUDIOLOGIA (ADULTO)',
+    adulto:true,
+    corpo:(v)=>termoCorpoBase(v,'fonoaudiológico',{comEscola:false,comResponsavel:false})
+  },
+  psicopedagogia:{
+    label:'Psicopedagogia',
+    titulo:'TERMO DE ADESÃO AO ACOMPANHAMENTO EM PSICOPEDAGOGIA',
+    adulto:false,
+    corpo:(v)=>termoCorpoBase(v,'psicopedagógico',{comEscola:true,comResponsavel:true})
+  }
+};
+
+let termoConvId=null;
+
+function openTermoModal(id){
+  const todos=getConvertidos();
+  const p=todos.find(x=>x.id===id); if(!p) return;
+  termoConvId=id;
+
+  let mo=document.getElementById('modal-termo');
+  if(!mo){
+    mo=document.createElement('div');
+    mo.className='modal-overlay';
+    mo.id='modal-termo';
+    mo.onclick=e=>{if(e.target===mo)closeTermoModal();};
+    mo.innerHTML=`<div class="modal">
+      <div class="modal-header">
+        <div class="modal-title">📄 Gerar Termo de Adesão</div>
+        <button class="modal-close" onclick="closeTermoModal()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <div class="form-group full"><label class="form-label">Especialidade do termo</label>
+            <select class="form-select" id="tm-especialidade" onchange="tmAtualizarCamposEspecialidade()">
+              ${Object.entries(TERMOS_TEXTO).map(([k,t])=>`<option value="${k}">${esc(t.label)}</option>`).join('')}
+            </select></div>
+          <div class="form-group full"><label class="form-label">Paciente</label><input class="form-input" id="tm-paciente" disabled></div>
+          <div class="form-group" id="tm-grupo-resp-legal"><label class="form-label">👤 Responsável legal</label><input class="form-input" id="tm-resp-legal"></div>
+          <div class="form-group"><label class="form-label" id="tm-label-cpf">🪪 CPF do responsável legal</label><input class="form-input" id="tm-cpf" placeholder="000.000.000-00"></div>
+          <div class="form-group full"><label class="form-label">Forma de cobrança</label>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button type="button" id="tm-btn-mensal" class="fin-tipo-btn active" onclick="tmSetModalidade('mensal')">📅 Mensal fixo</button>
+              <button type="button" id="tm-btn-sessao" class="fin-tipo-btn" onclick="tmSetModalidade('sessao')">🗓️ Por sessão</button>
+            </div>
+          </div>
+          <div class="form-group" id="tm-bloco-mensal"><label class="form-label">💰 Valor mensal do plano (R$)</label>
+            <input class="form-input" id="tm-valor-mensal" type="number" step="0.01" placeholder="0,00"></div>
+          <div class="form-group" id="tm-bloco-sessao" style="display:none"><label class="form-label">💰 Valor por sessão (R$)</label>
+            <input class="form-input" id="tm-valor-sessao" type="number" step="0.01" placeholder="0,00">
+            <small style="color:var(--text3);font-size:11px;margin-top:4px;display:block">Sem valor total fixo — a quantidade de sessões pode variar a cada mês.</small></div>
+          <div class="form-group"><label class="form-label">📆 Dia de vencimento</label>
+            <select class="form-select" id="tm-vencimento">
+              <option value="05">Dia 05</option>
+              <option value="10">Dia 10</option>
+              <option value="15">Dia 15</option>
+            </select></div>
+          <div class="form-group"><label class="form-label">📅 Data do termo</label><input class="form-input" id="tm-data" type="date"></div>
+        </div>
+        <small style="color:var(--text3);font-size:11px;display:block;margin-top:8px">Se preencher Responsável legal e CPF aqui, eles também serão salvos no cadastro do paciente.</small>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-ghost" onclick="closeTermoModal()">Cancelar</button>
+        <button class="btn-save" onclick="termoGerar()">Gerar documento</button>
+      </div>
+    </div>`;
+    document.body.appendChild(mo);
+  }
+
+  document.getElementById('tm-especialidade').value='psicoterapia';
+  document.getElementById('tm-paciente').value=p.paciente||'';
+  document.getElementById('tm-resp-legal').value=p.responsavelLegal||'';
+  document.getElementById('tm-cpf').value=p.cpf||'';
+  document.getElementById('tm-valor-mensal').value='';
+  document.getElementById('tm-valor-sessao').value='';
+  document.getElementById('tm-vencimento').value='05';
+  document.getElementById('tm-data').value=new Date().toISOString().slice(0,10);
+  tmSetModalidade('mensal');
+  tmAtualizarCamposEspecialidade();
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function tmAtualizarCamposEspecialidade(){
+  const esp=document.getElementById('tm-especialidade').value;
+  const tpl=TERMOS_TEXTO[esp];
+  const adulto=!!(tpl&&tpl.adulto);
+  const lblCpf=document.getElementById('tm-label-cpf');
+  if(lblCpf) lblCpf.textContent=adulto?'🪪 CPF do paciente':'🪪 CPF do responsável legal';
+  const grupoResp=document.getElementById('tm-grupo-resp-legal');
+  if(grupoResp) grupoResp.style.display=adulto?'none':'block';
+}
+
+function tmSetModalidade(tipo){
+  ['mensal','sessao'].forEach(t=>{
+    document.getElementById('tm-btn-'+t)?.classList.toggle('active',t===tipo);
+  });
+  document.getElementById('tm-bloco-mensal').style.display=tipo==='mensal'?'block':'none';
+  document.getElementById('tm-bloco-sessao').style.display=tipo==='sessao'?'block':'none';
+}
+
+function closeTermoModal(){
+  document.getElementById('modal-termo')?.classList.remove('open');
+}
+
+function termoGerar(){
+  const todos=getConvertidos();
+  const p=todos.find(x=>x.id===termoConvId);
+  if(!p){toast('Paciente não encontrado.');return;}
+
+  const esp=document.getElementById('tm-especialidade').value;
+  const tpl=TERMOS_TEXTO[esp];
+  if(!tpl){toast('Modelo não disponível para esta especialidade.');return;}
+  const adulto=!!tpl.adulto;
+
+  const modalidade=document.getElementById('tm-btn-sessao')?.classList.contains('active')?'sessao':'mensal';
+  const dataStr=document.getElementById('tm-data').value;
+  const respLegal=adulto?'':document.getElementById('tm-resp-legal').value.trim();
+  const cpf=document.getElementById('tm-cpf').value.trim();
+
+  const fmtBRLnum=n=>Number(n).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const vencimento=document.getElementById('tm-vencimento').value||'05';
+  let investimentoLinha;
+  if(modalidade==='sessao'){
+    const valorSessaoRaw=document.getElementById('tm-valor-sessao').value;
+    if(!valorSessaoRaw){toast('Informe o valor da sessão.');return;}
+    const valorSessao=Number(valorSessaoRaw);
+    investimentoLinha=`R$ ${fmtBRLnum(valorSessao)} por sessão, conforme a quantidade de sessões realizadas no mês, com vencimento todo dia ${vencimento} de cada mês.`;
+  } else {
+    const valorRaw=document.getElementById('tm-valor-mensal').value;
+    if(!valorRaw){toast('Informe o valor mensal do plano.');return;}
+    investimentoLinha=`R$ ${fmtBRLnum(valorRaw)} mensais, com vencimento todo dia ${vencimento} de cada mês, contemplando:`;
+  }
+
+  // Salva Responsável legal / CPF no cadastro, se informados
+  if(respLegal||cpf){
+    const isLead=termoConvId.startsWith('lead_');
+    if(isLead){
+      const leadId=termoConvId.replace('lead_','');
+      const leadsAll=loadLeads();
+      const li=leadsAll.findIndex(l=>l.id===leadId||'lead_'+l.id===termoConvId);
+      if(li!==-1){
+        if(respLegal) leadsAll[li].responsavelLegal=respLegal;
+        if(cpf) leadsAll[li].cpf=cpf;
+        saveLeads(leadsAll);
+      }
+    } else {
+      const antigos=loadConvAntigos();
+      const ai=antigos.findIndex(x=>x.id===termoConvId);
+      if(ai!==-1){
+        if(respLegal) antigos[ai].responsavelLegal=respLegal;
+        if(cpf) antigos[ai].cpf=cpf;
+        saveConvAntigos(antigos);
+      }
+    }
+  }
+
+  let dataFmt='';
+  if(dataStr){
+    const [ano,mes,dia]=dataStr.split('-');
+    dataFmt=`${dia}/${mes}/${ano}`;
+  }
+
+  const v={
+    paciente:p.paciente||'',
+    responsavel:respLegal||'—',
+    cpf:cpf||'—',
+    investimentoLinha,
+    data:dataFmt||'—'
+  };
+
+  const w=window.open('','_blank','width=900,height=700');
+  w.document.write(`<!DOCTYPE html><html><head><title>${esc(tpl.titulo)} - ${esc(v.paciente)}</title>
+  <style>
+    body{font-family:Arial,sans-serif;padding:36px;color:#1a1a1a;font-size:13px;line-height:1.55;max-width:760px;margin:0 auto}
+    h1{font-size:17px;text-align:center;margin:0 0 4px}
+    .sub{text-align:center;color:#666;font-size:12px;margin-bottom:28px}
+    h2{font-size:13px;margin:22px 0 8px;padding-bottom:4px;border-bottom:1px solid #ddd}
+    p{margin:0 0 8px}
+    ul{margin:0 0 8px;padding-left:22px}
+    ul.check{list-style:none;padding-left:4px}
+    li{margin-bottom:4px}
+    .assinaturas{margin-top:24px;border-top:1px solid #ddd;padding-top:16px}
+    .assinaturas p{margin-bottom:14px}
+    .linha-assinatura{margin-top:24px}
+    @media print{ body{padding:0} }
+  </style></head><body>
+  <h1>${esc(tpl.titulo)}</h1>
+  <p class="sub">Centro Integrado de Neurociências e Psicologia – CINPSI</p>
+  ${tpl.corpo(v)}
+  </body></html>`);
+  w.document.close();
+  setTimeout(()=>w.print(),500);
+
+  closeTermoModal();
+  toast('Termo de Adesão gerado! ✅');
 }
 
 // ════════════════════════════════════════════════════════════
