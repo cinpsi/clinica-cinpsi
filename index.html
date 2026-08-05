@@ -1334,6 +1334,8 @@ function launchApp(){
     setTimeout(nfCheckLembrete, 1000);
     setTimeout(checkAniversariosLogin, 1200);
     setTimeout(prevFatCheckLembrete, 1600);
+    setTimeout(orcCheckLembreteFechamento, 2000);
+    setTimeout(orcCheckLembreteSemana, 2400);
   } else {
     showView('registros');
   }
@@ -7790,10 +7792,10 @@ function planParseConsultas(rows, filtro){
 }
 
 // ── Modal de importação ────────────────────────────────────────
-function fatPlanImportar(tipo){
+function fatPlanImportar(tipo,mesForce){
   document.getElementById('modal-fatplan')?.remove();
   const hoje=new Date();
-  const mesPadrao=`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
+  const mesPadrao=mesForce||`${hoje.getFullYear()}-${String(hoje.getMonth()+1).padStart(2,'0')}`;
   const titulo=tipo==='previsto'?'📅 Importar previsão de faturamento':tipo==='orcamento'?'📈 Atualizar receita da semana (Orçamento)':'✅ Importar faturamento realizado';
   const filtroPadrao=tipo==='previsto'?'todas':'realizada';
 
@@ -7967,6 +7969,87 @@ function prevFatCheckLembrete(){
   setTimeout(()=>mo.classList.add('open'),10);
 }
 
+// ── Lembrete semanal: subir a receita acumulada da semana (Orçamento) ──
+// Dispara se já se passaram 7+ dias desde o último envio do tipo
+// 'orcamento' no mês corrente (ou se nunca houve envio). Só avisa 1x/dia.
+function orcCheckLembreteSemana(){
+  if(!CU||(CU.role!=='admin'&&CU.role!=='supervisora')) return;
+  const hoje=new Date();
+  const mIdx=hoje.getMonth();
+  if(!ORC_MESES_IDX.includes(mIdx)) return; // fora do período Jul-Dez do orçamento
+  const hojeStr=hoje.toISOString().slice(0,10);
+  if(localStorage.getItem('cinpsi_orcsemana_visto_'+hojeStr)) return; // já avisou hoje
+
+  const mk=`${hoje.getFullYear()}-${String(mIdx+1).padStart(2,'0')}`;
+  const plan=fatPlanLoad();
+  const ultimoUpload=plan[mk]?.orcamento?.importadoEm;
+  const diasSemUpload=ultimoUpload ? Math.floor((hoje-new Date(ultimoUpload+'T00:00:00'))/86400000) : 999;
+  if(diasSemUpload<7) return; // já atualizou nos últimos 7 dias
+
+  const label=hoje.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+  document.getElementById('modal-orcsemana-lembrete')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-orcsemana-lembrete';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">📈 Receita da semana</div>
+      <button class="modal-close" onclick="document.getElementById('modal-orcsemana-lembrete').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#EEF2FF;border-radius:var(--radius-sm);padding:14px 16px;font-size:13px;color:#3730A3;line-height:1.6">
+        ${ultimoUpload?`Já faz ${diasSemUpload} dias desde o último envio.`:`Ainda não há envio em ${label}.`} Suba a planilha do Doctoralia acumulada até hoje para manter a Receita orçada do Orçamento Anual em dia.
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin:12px 0 0">Você pode fazer isso depois em <strong>Financeiro → Orçamento Anual</strong>.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="localStorage.setItem('cinpsi_orcsemana_visto_${hojeStr}','1');document.getElementById('modal-orcsemana-lembrete').remove()">Depois</button>
+      <button class="btn-save-purple" onclick="localStorage.setItem('cinpsi_orcsemana_visto_${hojeStr}','1');document.getElementById('modal-orcsemana-lembrete').remove();fatPlanImportar('orcamento')">📈 Atualizar agora</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+// ── Lembrete de fechamento: subir a receita final do mês anterior ──
+// Mesma janela do lembrete de previsão (dia 1 ao 5), mas olhando para o mês
+// que acabou de fechar e para o tipo 'realizado'.
+function orcCheckLembreteFechamento(){
+  if(!CU||(CU.role!=='admin'&&CU.role!=='supervisora')) return;
+  const hoje=new Date();
+  if(hoje.getDate()>5) return; // janela do dia 1 ao 5
+  const mesAnt=new Date(hoje.getFullYear(), hoje.getMonth()-1, 1);
+  const mk=`${mesAnt.getFullYear()}-${String(mesAnt.getMonth()+1).padStart(2,'0')}`;
+  if(!ORC_MESES_IDX.includes(mesAnt.getMonth())) return; // fora do período Jul-Dez do orçamento
+  if(localStorage.getItem('cinpsi_fechamento_visto_'+mk)) return;
+  const plan=fatPlanLoad();
+  if(plan[mk]&&plan[mk].realizado) return;
+  const label=mesAnt.toLocaleDateString('pt-BR',{month:'long',year:'numeric'});
+
+  document.getElementById('modal-fechamento-lembrete')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-fechamento-lembrete';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">✅ Fechar receita do mês</div>
+      <button class="modal-close" onclick="document.getElementById('modal-fechamento-lembrete').remove()">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#FEF3C7;border-radius:var(--radius-sm);padding:14px 16px;font-size:13px;color:#78350F;line-height:1.6">
+        <strong>${label}</strong> terminou — hora de subir o número final e oficial do Doctoralia para fechar a coluna Realizado do Orçamento Anual.
+      </div>
+      <p style="font-size:12px;color:var(--text3);margin:12px 0 0">Você pode fazer isso depois em <strong>Financeiro → Orçamento Anual</strong>.</p>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" onclick="localStorage.setItem('cinpsi_fechamento_visto_${mk}','1');document.getElementById('modal-fechamento-lembrete').remove()">Depois</button>
+      <button class="btn-save-purple" onclick="document.getElementById('modal-fechamento-lembrete').remove();fatPlanImportar('realizado','${mk}')">✅ Fechar agora</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
 // ════════════════════════════════════════════════════════════
 // ORÇAMENTO ANUAL
 // ════════════════════════════════════════════════════════════
@@ -7975,48 +8058,96 @@ function orcSave(d){ localStorage.setItem('cinpsi_orcamento',JSON.stringify(d));
 
 const ORC_CATS_DESP=['Repasses aos Profissionais','Aluguel / Condomínio','Utilidades','Impostos e Taxas','Pessoal','Serviços Terceirizados','Equipamentos','Empréstimo / Financiamento','Manutenção e Limpeza','Marketing','Consumo','Outras Despesas'];
 let _orcAno=2026;
-let _orcView='metas'; // metas | comparativo | resumo
-
-function finRenderOrcamento(){
-  const el=document.getElementById('fin-orcamento-content'); if(!el) return;
-
-  el.innerHTML=`
-    <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center">
-      <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius-sm);overflow:hidden">
-        <button class="orc-view-btn" id="orc-btn-metas" onclick="orcSwitchView('metas')" style="padding:8px 16px;border:none;background:var(--purple);color:#fff;font-size:13px;font-weight:600;cursor:pointer">📝 Definir metas</button>
-        <button class="orc-view-btn" id="orc-btn-comparativo" onclick="orcSwitchView('comparativo')" style="padding:8px 16px;border:none;background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer">📊 Orçado vs Realizado</button>
-        <button class="orc-view-btn" id="orc-btn-resumo" onclick="orcSwitchView('resumo')" style="padding:8px 16px;border:none;background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer">📅 Resumo anual</button>
-      </div>
-      <div style="flex:1"></div>
-      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('orcamento')">📈 Atualizar receita da semana</button>
-      <button class="btn-ghost" style="font-size:13px" onclick="orcImprimir()">🖨️ Imprimir</button>
-    </div>
-    <div id="orc-view-content"></div>`;
-
-  orcRenderView();
-}
-
-function orcSwitchView(v){
-  _orcView=v;
-  ['metas','comparativo','resumo'].forEach(x=>{
-    const btn=document.getElementById('orc-btn-'+x);
-    if(btn){
-      btn.style.background=x===v?'var(--purple)':'var(--surface)';
-      btn.style.color=x===v?'#fff':'var(--text2)';
-      btn.style.fontWeight=x===v?'600':'400';
-    }
-  });
-  orcRenderView();
-}
-
 const ORC_MESES=['Jul','Ago','Set','Out','Nov','Dez'];
 const ORC_MESES_IDX=[6,7,8,9,10,11]; // julho a dezembro (0-indexed)
 
-function orcRenderView(){
-  const c=document.getElementById('orc-view-content'); if(!c) return;
-  if(_orcView==='metas') c.innerHTML=orcViewMetas();
-  else if(_orcView==='comparativo') c.innerHTML=orcViewComparativo();
-  else c.innerHTML=orcViewResumo();
+// Tela única do Orçamento Anual: cards do total do semestre + tabela com um
+// mês por linha, que expande para o detalhe (receita/despesas/repasses) ao
+// clicar. Metas manuais (respaldo) ficam num modal à parte, já que só
+// importam para meses sem Previsão de Caixa importada.
+function finRenderOrcamento(){
+  const el=document.getElementById('fin-orcamento-content'); if(!el) return;
+
+  let totRecMeta=0,totRecAcumulada=0,totRecReal=0,totDespMeta=0,totDespReal=0;
+  const dados=ORC_MESES_IDX.map((mIdx,i)=>{
+    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
+    const meta=orcMetaMes(key);
+    const real=orcRealizado(key);
+    totRecMeta+=meta.recMeta; totRecAcumulada+=meta.recAcumulada; totRecReal+=real.receita;
+    totDespMeta+=meta.despMeta; totDespReal+=real.despesaTotal;
+    return {key,i,meta,real};
+  });
+
+  const totResMeta=totRecAcumulada-totDespMeta;
+  const totResReal=totRecReal-totDespReal;
+  const totMetaRef=Math.round(totRecAcumulada)!==Math.round(totRecMeta)
+    ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta original: ${fmtBRL(totRecMeta)}</div>` : '';
+
+  const linhas=dados.map(({key,i,meta,real})=>{
+    const resMeta=meta.recAcumulada-meta.despMeta;
+    const resReal=real.receita-real.despesaTotal;
+    const metaRef=Math.round(meta.recAcumulada)!==Math.round(meta.recMeta)
+      ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(meta.recMeta)}</div>` : '';
+    return `
+      <tr style="cursor:pointer" onclick="orcToggleMes('${key}')">
+        <td style="padding:10px;font-weight:600"><span id="orc-arrow-${key}" style="display:inline-block;width:14px;color:var(--text3)">▸</span>${ORC_MESES[i]}</td>
+        <td style="padding:10px;text-align:right;color:var(--green)">${fmtBRL(meta.recAcumulada)}${metaRef}</td>
+        <td style="padding:10px;text-align:right;color:var(--red)">${fmtBRL(meta.despMeta)}</td>
+        <td style="padding:10px;text-align:right;font-weight:600">${fmtBRL(resMeta)}</td>
+        <td style="padding:10px;text-align:right;font-weight:700;color:${resReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resReal)}</td>
+      </tr>
+      <tr id="orc-detail-${key}" style="display:none">
+        <td colspan="5" style="padding:0 14px 16px;background:var(--surface2)">${orcDetalheMesHTML(key,i,meta,real)}</td>
+      </tr>`;
+  }).join('');
+
+  el.innerHTML=`
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('orcamento')" title="Toda semana: sobe o acumulado do mês até hoje. Atualiza a Receita orçada ao vivo.">📈 Atualizar receita da semana</button>
+      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('realizado')" title="Quando o mês fechar: sobe o número final e oficial do Doctoralia. Vira a coluna Realizado.">✅ Fechar receita do mês</button>
+      <div style="flex:1"></div>
+      <button class="btn-ghost" style="font-size:13px" onclick="orcAbrirMetasModal()">⚙️ Ajustar metas manuais</button>
+      <button class="btn-ghost" style="font-size:13px" onclick="orcImprimir()">🖨️ Imprimir</button>
+    </div>
+    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:13px;color:#3730A3;line-height:1.6">
+      💡 Dois momentos de envio: toda semana suba o acumulado parcial em <strong>"Atualizar receita da semana"</strong> — isso mantém a Receita orçada em tempo real. Quando o mês terminar, suba o número final em <strong>"Fechar receita do mês"</strong> — isso vira a coluna Realizado. Clique em um mês na tabela para ver o detalhe.
+    </div>
+    <div id="orc-view-content">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
+        <div class="stat-card"><div class="stat-label">Receita acumulada</div><div class="stat-value" style="font-size:17px;color:var(--green)">${fmtBRL(totRecAcumulada)}</div>${totMetaRef}</div>
+        <div class="stat-card"><div class="stat-label">Despesa orçada</div><div class="stat-value" style="font-size:17px;color:var(--red)">${fmtBRL(totDespMeta)}</div></div>
+        <div class="stat-card"><div class="stat-label">Resultado orçado</div><div class="stat-value" style="font-size:17px;color:${totResMeta>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResMeta)}</div></div>
+        <div class="stat-card"><div class="stat-label">Resultado realizado</div><div class="stat-value" style="font-size:17px;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</div></div>
+      </div>
+      <div class="fin-table-wrap">
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--surface2)">
+            <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Mês</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Receita orçada</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Despesa orçada</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Result. orçado</th>
+            <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Result. real</th>
+          </tr></thead>
+          <tbody>${linhas}</tbody>
+          <tfoot><tr style="background:var(--surface2);font-weight:700">
+            <td style="padding:10px">TOTAL Jul–Dez</td>
+            <td style="padding:10px;text-align:right;color:var(--green)">${fmtBRL(totRecAcumulada)}${totMetaRef}</td>
+            <td style="padding:10px;text-align:right;color:var(--red)">${fmtBRL(totDespMeta)}</td>
+            <td style="padding:10px;text-align:right">${fmtBRL(totResMeta)}</td>
+            <td style="padding:10px;text-align:right;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+    </div>`;
+}
+
+function orcToggleMes(key){
+  const row=document.getElementById('orc-detail-'+key);
+  const arrow=document.getElementById('orc-arrow-'+key);
+  if(!row) return;
+  const open=row.style.display!=='none';
+  row.style.display=open?'none':'table-row';
+  if(arrow) arrow.textContent=open?'▸':'▾';
 }
 
 function orcViewMetas(){
@@ -8032,9 +8163,9 @@ function orcViewMetas(){
 
   return `
     <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3;line-height:1.6">
-      💡 A <strong>Receita orçada</strong> e a <strong>Despesa orçada</strong> mostradas em "Orçado vs Realizado" e "Resumo anual" agora são calculadas automaticamente:
-      a receita usa o valor previsto na aba <strong>Previsão de Caixa</strong> (quando já foi importada para o mês), e a despesa soma tudo que já está lançado na aba <strong>Despesas</strong> mais a previsão de repasse.
-      Os campos abaixo só valem como respaldo para meses em que ainda não há Previsão de Caixa importada — e o botão "Puxar despesas" deixou de afetar a Despesa orçada.
+      💡 A <strong>Receita orçada</strong> e a <strong>Despesa orçada</strong> exibidas na tela principal do Orçamento agora são calculadas automaticamente:
+      a receita usa o previsto na aba <strong>Previsão de Caixa</strong> (ou a receita acumulada, se você já subiu a planilha semanal), e a despesa soma tudo que está lançado na aba <strong>Despesas</strong> mais a previsão de repasse.
+      Os campos abaixo só valem como respaldo para meses em que ainda não há Previsão de Caixa importada nem receita semanal — e o botão "Puxar despesas" não afeta a Despesa orçada.
     </div>
     <div style="margin-bottom:16px">
       <button class="btn-primary" style="font-size:13px" onclick="orcPuxarDespesas()">📥 Puxar despesas do sistema</button>
@@ -8255,82 +8386,90 @@ function orcMetaMes(mesKey){
   return {recMeta, recAcumulada, despMeta, despCats};
 }
 
-function orcViewComparativo(){
-  let linhas=`
-    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3">
-      💡 A coluna <strong>Orçado</strong> mostra a receita acumulada da planilha semanal (atualiza ao vivo). Quando ela difere da meta original do mês, a meta aparece pequena abaixo. As <strong>despesas</strong> vêm dos lançamentos do sistema, mais o repasse recalculado sobre a receita acumulada.
+// Bloco de detalhe exibido ao expandir um mês na tabela única do Orçamento.
+function orcDetalheMesHTML(key,i,meta,real){
+  const recDesvio=meta.recAcumulada>0?((real.receita-meta.recAcumulada)/meta.recAcumulada*100):0;
+  const despDesvio=meta.despMeta>0?((real.despesaTotal-meta.despMeta)/meta.despMeta*100):0;
+  const resultMeta=meta.recAcumulada-meta.despMeta;
+  const resultReal=real.receita-real.despesaTotal;
+  const repMeta=meta.despCats['Repasses aos Profissionais']||0;
+  const repDesvio=repMeta>0?((real.repasses-repMeta)/repMeta*100):0;
+
+  const corDesvio=(d,inv)=>{ if(!d) return 'var(--text3)'; return (inv?d<0:d>0)?'var(--green)':'var(--red)'; };
+  const origem=real.receitaOrigem==='planilha'
+    ? '<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:20px;margin-left:6px">Doctoralia</span>'
+    : '<span style="font-size:10px;background:var(--surface2);color:var(--text3);padding:1px 7px;border-radius:20px;margin-left:6px">sistema</span>';
+  const metaRef=Math.round(meta.recAcumulada)!==Math.round(meta.recMeta)
+    ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta original: ${fmtBRL(meta.recMeta)}</div>` : '';
+
+  return `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;background:var(--surface);border-radius:var(--radius-sm)">
+      <thead><tr style="color:var(--text3);font-size:11px;text-transform:uppercase">
+        <th style="text-align:left;padding:8px"></th>
+        <th style="text-align:right;padding:8px">Orçado</th>
+        <th style="text-align:right;padding:8px">Realizado</th>
+        <th style="text-align:right;padding:8px">Desvio</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td style="padding:6px 8px;color:var(--green);font-weight:600">Receita${origem}</td>
+          <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.recAcumulada)}${metaRef}</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.receita)}</td>
+          <td style="padding:6px 8px;text-align:right;color:${corDesvio(recDesvio,false)}">${meta.recAcumulada>0?(recDesvio>=0?'+':'')+recDesvio.toFixed(0)+'%':'—'}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 8px;color:var(--red);font-weight:600">Despesas</td>
+          <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.despMeta)}</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.despesaTotal)}</td>
+          <td style="padding:6px 8px;text-align:right;color:${corDesvio(despDesvio,true)}">${meta.despMeta>0?(despDesvio>=0?'+':'')+despDesvio.toFixed(0)+'%':'—'}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px 4px 22px;font-size:12px;color:var(--text2)">↳ Repasses aos profissionais</td>
+          <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(repMeta)}</td>
+          <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--purple);font-weight:600">${fmtBRL(real.repasses)}</td>
+          <td style="padding:4px 8px;text-align:right;font-size:12px;color:${corDesvio(repDesvio,true)}">${repMeta>0?(repDesvio>=0?'+':'')+repDesvio.toFixed(0)+'%':'—'}</td>
+        </tr>
+        <tr>
+          <td style="padding:4px 8px 4px 22px;font-size:12px;color:var(--text2)">↳ Demais despesas</td>
+          <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(Math.max(0,meta.despMeta-repMeta))}</td>
+          <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(Math.max(0,real.despesaTotal-real.repasses))}</td>
+          <td style="padding:4px 8px"></td>
+        </tr>
+        <tr style="border-top:2px solid var(--border)">
+          <td style="padding:6px 8px;font-weight:700">Resultado</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(resultMeta)}</td>
+          <td style="padding:6px 8px;text-align:right;font-weight:700;color:${resultReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resultReal)}</td>
+          <td style="padding:6px 8px"></td>
+        </tr>
+      </tbody>
+    </table>
+    ${orcDetalheDespesas(key, meta, real)}`;
+}
+
+// Modal de metas manuais (respaldo) — só é relevante para meses sem
+// Previsão de Caixa importada, então fica fora do fluxo principal.
+function orcAbrirMetasModal(){
+  document.getElementById('modal-orc-metas')?.remove();
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-orc-metas';
+  mo.onclick=e=>{ if(e.target===mo) orcFecharMetasModal(); };
+  mo.innerHTML=`<div class="modal" style="max-width:760px">
+    <div class="modal-header">
+      <div class="modal-title">⚙️ Ajustar metas manuais</div>
+      <button class="modal-close" onclick="orcFecharMetasModal()">×</button>
     </div>
-    <div style="margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('realizado')">📊 Importar receita do Doctoralia</button>
-      <button class="btn-primary" style="font-size:13px" onclick="fatPlanImportar('orcamento')">📈 Atualizar receita da semana</button>
-    </div>`;
+    <div class="modal-body">${orcViewMetas()}</div>
+    <div class="modal-footer">
+      <button class="btn-save-purple" onclick="orcFecharMetasModal()">Concluído</button>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
 
-  ORC_MESES_IDX.forEach((mIdx,i)=>{
-    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
-    const meta=orcMetaMes(key);
-    const real=orcRealizado(key);
-
-    const recDesvio=meta.recAcumulada>0?((real.receita-meta.recAcumulada)/meta.recAcumulada*100):0;
-    const despDesvio=meta.despMeta>0?((real.despesaTotal-meta.despMeta)/meta.despMeta*100):0;
-    const resultMeta=meta.recAcumulada-meta.despMeta;
-    const resultReal=real.receita-real.despesaTotal;
-    const repMeta=meta.despCats['Repasses aos Profissionais']||0;
-    const repDesvio=repMeta>0?((real.repasses-repMeta)/repMeta*100):0;
-
-    const corDesvio=(d,inv)=>{ if(!d) return 'var(--text3)'; return (inv?d<0:d>0)?'var(--green)':'var(--red)'; };
-    const origem=real.receitaOrigem==='planilha'
-      ? '<span style="font-size:10px;background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:20px;margin-left:6px">Doctoralia</span>'
-      : '<span style="font-size:10px;background:var(--surface2);color:var(--text3);padding:1px 7px;border-radius:20px;margin-left:6px">sistema</span>';
-    const metaRef=Math.round(meta.recAcumulada)!==Math.round(meta.recMeta)
-      ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(meta.recMeta)}</div>` : '';
-
-    linhas+=`
-      <div class="card" style="margin-bottom:14px;padding:16px 20px">
-        <h3 style="font-size:14px;font-weight:700;margin:0 0 12px">${ORC_MESES[i]}/${_orcAno}</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px">
-          <thead><tr style="color:var(--text3);font-size:11px;text-transform:uppercase">
-            <th style="text-align:left;padding:4px 8px"></th>
-            <th style="text-align:right;padding:4px 8px">Orçado</th>
-            <th style="text-align:right;padding:4px 8px">Realizado</th>
-            <th style="text-align:right;padding:4px 8px">Desvio</th>
-          </tr></thead>
-          <tbody>
-            <tr>
-              <td style="padding:6px 8px;color:var(--green);font-weight:600">Receita${origem}</td>
-              <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.recAcumulada)}${metaRef}</td>
-              <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.receita)}</td>
-              <td style="padding:6px 8px;text-align:right;color:${corDesvio(recDesvio,false)}">${meta.recAcumulada>0?(recDesvio>=0?'+':'')+recDesvio.toFixed(0)+'%':'—'}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 8px;color:var(--red);font-weight:600">Despesas</td>
-              <td style="padding:6px 8px;text-align:right">${fmtBRL(meta.despMeta)}</td>
-              <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(real.despesaTotal)}</td>
-              <td style="padding:6px 8px;text-align:right;color:${corDesvio(despDesvio,true)}">${meta.despMeta>0?(despDesvio>=0?'+':'')+despDesvio.toFixed(0)+'%':'—'}</td>
-            </tr>
-            <tr>
-              <td style="padding:4px 8px 4px 22px;font-size:12px;color:var(--text2)">↳ Repasses aos profissionais</td>
-              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(repMeta)}</td>
-              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--purple);font-weight:600">${fmtBRL(real.repasses)}</td>
-              <td style="padding:4px 8px;text-align:right;font-size:12px;color:${corDesvio(repDesvio,true)}">${repMeta>0?(repDesvio>=0?'+':'')+repDesvio.toFixed(0)+'%':'—'}</td>
-            </tr>
-            <tr>
-              <td style="padding:4px 8px 4px 22px;font-size:12px;color:var(--text2)">↳ Demais despesas</td>
-              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(Math.max(0,meta.despMeta-repMeta))}</td>
-              <td style="padding:4px 8px;text-align:right;font-size:12px;color:var(--text2)">${fmtBRL(Math.max(0,real.despesaTotal-real.repasses))}</td>
-              <td style="padding:4px 8px"></td>
-            </tr>
-            <tr style="border-top:2px solid var(--border)">
-              <td style="padding:6px 8px;font-weight:700">Resultado</td>
-              <td style="padding:6px 8px;text-align:right;font-weight:600">${fmtBRL(resultMeta)}</td>
-              <td style="padding:6px 8px;text-align:right;font-weight:700;color:${resultReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resultReal)}</td>
-              <td style="padding:6px 8px"></td>
-            </tr>
-          </tbody>
-        </table>
-        ${orcDetalheDespesas(key, meta, real)}
-      </div>`;
-  });
-  return linhas;
+function orcFecharMetasModal(){
+  document.getElementById('modal-orc-metas')?.remove();
+  finRenderOrcamento();
 }
 
 function orcDetalheDespesas(key, meta, real){
@@ -8344,60 +8483,6 @@ function orcDetalheDespesas(key, meta, real){
   });
   if(!alertas.length) return '';
   return `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border2)"><span style="font-size:11px;color:var(--text3);font-weight:600">⚠️ Categorias acima da meta:</span><br>${alertas.join('')}</div>`;
-}
-
-function orcViewResumo(){
-  let totRecMeta=0,totRecAcumulada=0,totRecReal=0,totDespMeta=0,totDespReal=0;
-  const linhas=ORC_MESES_IDX.map((mIdx,i)=>{
-    const key=`${_orcAno}-${String(mIdx+1).padStart(2,'0')}`;
-    const meta=orcMetaMes(key);
-    const real=orcRealizado(key);
-    totRecMeta+=meta.recMeta; totRecAcumulada+=meta.recAcumulada; totRecReal+=real.receita;
-    totDespMeta+=meta.despMeta; totDespReal+=real.despesaTotal;
-    const resMeta=meta.recAcumulada-meta.despMeta;
-    const resReal=real.receita-real.despesaTotal;
-    const metaRef=Math.round(meta.recAcumulada)!==Math.round(meta.recMeta)
-      ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(meta.recMeta)}</div>` : '';
-    return `<tr>
-      <td style="padding:8px 10px;font-weight:600">${ORC_MESES[i]}</td>
-      <td style="padding:8px 10px;text-align:right;color:var(--green)">${fmtBRL(meta.recAcumulada)}${metaRef}</td>
-      <td style="padding:8px 10px;text-align:right;color:var(--red)">${fmtBRL(meta.despMeta)}</td>
-      <td style="padding:8px 10px;text-align:right;font-weight:600">${fmtBRL(resMeta)}</td>
-      <td style="padding:8px 10px;text-align:right;font-weight:700;color:${resReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(resReal)}</td>
-    </tr>`;
-  }).join('');
-
-  const totResMeta=totRecAcumulada-totDespMeta;
-  const totResReal=totRecReal-totDespReal;
-  const totMetaRef=Math.round(totRecAcumulada)!==Math.round(totRecMeta)
-    ? `<div style="font-size:10px;color:var(--text3);font-weight:400">meta: ${fmtBRL(totRecMeta)}</div>` : '';
-
-  return `
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px">
-      <div class="stat-card"><div class="stat-label">Receita acumulada</div><div class="stat-value" style="font-size:17px;color:var(--green)">${fmtBRL(totRecAcumulada)}</div>${totMetaRef}</div>
-      <div class="stat-card"><div class="stat-label">Despesa orçada</div><div class="stat-value" style="font-size:17px;color:var(--red)">${fmtBRL(totDespMeta)}</div></div>
-      <div class="stat-card"><div class="stat-label">Resultado orçado</div><div class="stat-value" style="font-size:17px;color:${totResMeta>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResMeta)}</div></div>
-      <div class="stat-card"><div class="stat-label">Resultado realizado</div><div class="stat-value" style="font-size:17px;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</div></div>
-    </div>
-    <div class="fin-table-wrap">
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="background:var(--surface2)">
-          <th style="padding:8px 10px;text-align:left;font-size:11px;color:var(--text3)">Mês</th>
-          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Receita orçada</th>
-          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Despesa orçada</th>
-          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Result. orçado</th>
-          <th style="padding:8px 10px;text-align:right;font-size:11px;color:var(--text3)">Result. real</th>
-        </tr></thead>
-        <tbody>${linhas}</tbody>
-        <tfoot><tr style="background:var(--surface2);font-weight:700">
-          <td style="padding:10px">TOTAL Jul–Dez</td>
-          <td style="padding:10px;text-align:right;color:var(--green)">${fmtBRL(totRecAcumulada)}${totMetaRef}</td>
-          <td style="padding:10px;text-align:right;color:var(--red)">${fmtBRL(totDespMeta)}</td>
-          <td style="padding:10px;text-align:right">${fmtBRL(totResMeta)}</td>
-          <td style="padding:10px;text-align:right;color:${totResReal>=0?'var(--green)':'var(--red)'}">${fmtBRL(totResReal)}</td>
-        </tr></tfoot>
-      </table>
-    </div>`;
 }
 
 function orcImprimir(){
