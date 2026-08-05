@@ -5399,6 +5399,12 @@ function finRenderDRE(){
   // consulta) — assim um pagamento em atraso conta no mês em que caiu no caixa.
   const mRecPagas = allRec.filter(r=>r.status==='Pago' && finInMonth(finReceitaEfetivaData(r)));
 
+  // Dentro do que foi pago neste mês, separa o que é de competência de meses
+  // anteriores (inadimplência de meses passados que só caiu no caixa agora).
+  const anoMesAtual=`${_finYear}-${String(_finMonth+1).padStart(2,'0')}`;
+  const recPagasMesAnterior = mRecPagas.filter(r=>(r.data||'').slice(0,7)!==anoMesAtual);
+  const totalRecPagasMesAnterior = recPagasMesAnterior.reduce((s,r)=>s+r.valor,0);
+
   // Faturamento (receita paga) + qtd atendimentos
   const recPaga  = mRecPagas.reduce((s,r)=>s+r.valor,0);
   const qtdAtend = mRecPagas.filter(r=>r.valor).length;
@@ -5495,6 +5501,13 @@ function finRenderDRE(){
     </div>
     ${section('FATURAMENTO')}
     ${row('Receita paga no mês', recPaga, false, false)}
+    ${totalRecPagasMesAnterior>0?`<div class="fin-dre-full-row" style="background:var(--green-light,#D1FAE5)">
+      <span class="fin-dre-indent" style="color:var(--green)">💰 Receitas pagas de meses anteriores</span>
+      <span style="display:flex;gap:14px;align-items:center">
+        <span style="font-size:11px;color:var(--green)">${recPagasMesAnterior.length} paciente${recPagasMesAnterior.length!==1?'s':''}</span>
+        <span style="min-width:100px;text-align:right;color:var(--green);font-weight:600">${finFmt(totalRecPagasMesAnterior)}</span>
+      </span>
+    </div>`:''}
     ${totalPendenteMes>0?`<div class="fin-dre-full-row" style="background:var(--amber-light)">
       <span class="fin-dre-indent" style="color:var(--amber)">⚠️ Receita a Receber (inadimplência)</span>
       <span style="display:flex;gap:14px;align-items:center">
@@ -6084,7 +6097,13 @@ function finRenderDespesas(){
   const fl=finLoad(FK.DESP).filter(d=>finInMonth(d.data))
     .filter(d=>!fCat||d.cat===fCat)
     .filter(d=>!fTip||d.tipo===fTip)
-    .sort((a,b)=>a.data.localeCompare(b.data));
+    .sort((a,b)=>{
+      // Parceladas/recorrentes primeiro, avulsas depois; dentro de cada grupo, por data.
+      const pa=(a.tipo==='recorrente'||a.tipo==='parcelada')?0:1;
+      const pb=(b.tipo==='recorrente'||b.tipo==='parcelada')?0:1;
+      if(pa!==pb) return pa-pb;
+      return a.data.localeCompare(b.data);
+    });
   if(!fl.length){ tbody.innerHTML='<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text3)">Nenhuma despesa lançada.</td></tr>'; return; }
   const hoje=new Date(); hoje.setHours(0,0,0,0);
   tbody.innerHTML=fl.map(d=>{
@@ -8008,14 +8027,16 @@ function orcViewMetas(){
   };
 
   return `
-    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3">
-      💡 As <strong>receitas</strong> você lança manualmente. As <strong>despesas</strong> podem ser puxadas dos lançamentos que já existem no sistema — a maioria é recorrente.
+    <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:14px;font-size:13px;color:#3730A3;line-height:1.6">
+      💡 A <strong>Receita orçada</strong> e a <strong>Despesa orçada</strong> mostradas em "Orçado vs Realizado" e "Resumo anual" agora são calculadas automaticamente:
+      a receita usa o valor previsto na aba <strong>Previsão de Caixa</strong> (quando já foi importada para o mês), e a despesa soma tudo que já está lançado na aba <strong>Despesas</strong> mais a previsão de repasse.
+      Os campos abaixo só valem como respaldo para meses em que ainda não há Previsão de Caixa importada — e o botão "Puxar despesas" deixou de afetar a Despesa orçada.
     </div>
     <div style="margin-bottom:16px">
       <button class="btn-primary" style="font-size:13px" onclick="orcPuxarDespesas()">📥 Puxar despesas do sistema</button>
     </div>
 
-    <h3 style="font-size:13px;font-weight:700;color:var(--green);margin:0 0 8px">📈 RECEITA (meta mensal)</h3>
+    <h3 style="font-size:13px;font-weight:700;color:var(--green);margin:0 0 8px">📈 RECEITA (meta mensal — respaldo)</h3>
     <div class="fin-table-wrap" style="margin-bottom:24px;overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:640px">
         <thead><tr style="background:var(--surface2)">
@@ -8026,7 +8047,7 @@ function orcViewMetas(){
       </table>
     </div>
 
-    <h3 style="font-size:13px;font-weight:700;color:var(--red);margin:0 0 8px">📉 DESPESAS (meta mensal por categoria)</h3>
+    <h3 style="font-size:13px;font-weight:700;color:var(--red);margin:0 0 8px">📉 DESPESAS (meta mensal por categoria — não usado na Despesa orçada)</h3>
     <div class="fin-table-wrap" style="overflow-x:auto">
       <table style="width:100%;border-collapse:collapse;min-width:640px">
         <thead><tr style="background:var(--surface2)">
@@ -8185,12 +8206,44 @@ function orcRealizado(mesKey){
   return {receita, receitaOrigem, despesaTotal, despPorCat, repasses};
 }
 
+// Repasse previsto: estima o repasse às profissionais a partir do previsto
+// da Previsão de Caixa (aba Previsto x Realizado), em vez do realizado.
+function orcRepassePrevistoMes(mesKey){
+  try{
+    const plan=fatPlanLoad()[mesKey];
+    if(plan&&plan.previsto&&plan.previsto.porProf){
+      return Object.entries(plan.previsto.porProf)
+        .reduce((s,[prof,d])=>s+finCalcRepasse(fatProfKey(prof), d.valor, d.n),0);
+    }
+  }catch(e){}
+  return 0;
+}
+
 function orcMetaMes(mesKey){
   const orc=orcLoad();
   const m=orc[mesKey]||{};
-  const recMeta=Object.values(m.receita||{}).reduce((s,v)=>s+v,0);
-  const despMeta=Object.values(m.despesa||{}).reduce((s,v)=>s+v,0);
-  return {recMeta, despMeta, despCats:m.despesa||{}};
+
+  // Receita orçada: usa o total previsto na Previsão de Caixa (aba Previsto x
+  // Realizado) quando existir, para os dois lugares baterem sempre. Sem
+  // previsão importada para o mês, cai de volta na meta lançada manualmente.
+  let recMeta;
+  const plan=fatPlanLoad()[mesKey];
+  if(plan&&plan.previsto&&plan.previsto.porProf){
+    recMeta=Object.values(plan.previsto.porProf).reduce((s,d)=>s+(d.valor||0),0);
+  } else {
+    recMeta=Object.values(m.receita||{}).reduce((s,v)=>s+v,0);
+  }
+
+  // Despesa orçada: todas as despesas já lançadas no mês, mais a previsão de
+  // repasse (calculada a partir do previsto na Previsão de Caixa).
+  const desps=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
+  const despCats={};
+  desps.forEach(d=>{ const c=d.cat||'Outras Despesas'; despCats[c]=(despCats[c]||0)+(d.valor||0); });
+  const repassePrevisto=orcRepassePrevistoMes(mesKey);
+  if(repassePrevisto>0) despCats['Repasses aos Profissionais']=repassePrevisto;
+  const despMeta=desps.reduce((s,d)=>s+(d.valor||0),0)+repassePrevisto;
+
+  return {recMeta, despMeta, despCats};
 }
 
 function orcViewComparativo(){
