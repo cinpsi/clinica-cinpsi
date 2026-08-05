@@ -2556,6 +2556,14 @@ function termoCorpoBase(v,area,opts){
             <li>- substituir a sessão semanal da criança, sem custo adicional.</li>
           </ul>
         </li>`:'';
+  // A observação de "5ª sessão em mês de 5 semanas" só faz sentido na cobrança
+  // por sessão (no plano mensal fixo o valor não muda, então não se aplica).
+  const obsQuintaSemana=v.modalidade==='sessao'
+    ?'\n        <li>Em meses com cinco semanas, a quinta sessão será incluída no planejamento terapêutico e faturada proporcionalmente.</li>'
+    :'';
+  const obsBloco=(obsEscola||obsQuintaSemana)
+    ?`<p><strong>Observações Importantes:</strong></p>\n      <ul>${obsEscola}${obsQuintaSemana}\n      </ul>`
+    :'';
   const aceiteIntro=comResponsavel
     ? 'Ao assinar este termo, o(a) paciente e/ou responsável legal declara estar ciente e de acordo com as condições descritas neste documento.'
     : 'Ao assinar este termo, o(a) paciente declara estar ciente e de acordo com as condições descritas neste documento.';
@@ -2589,10 +2597,7 @@ function termoCorpoBase(v,area,opts){
         <li>✔️ Canal direto de comunicação com o(a) terapeuta via WhatsApp para alinhamentos terapêuticos</li>
         <li>✔️ Sessões periódicas com familiares/responsáveis</li>${itemEscola}
       </ul>
-      <p><strong>Observações Importantes:</strong></p>
-      <ul>${obsEscola}
-        <li>Em meses com cinco semanas, a quinta sessão será incluída no planejamento terapêutico e faturada proporcionalmente.</li>
-      </ul>
+      ${obsBloco}
 
       <h2>4. Modalidade Presencial e Online</h2>
       <p>Os atendimentos poderão ocorrer de forma presencial ou online, conforme necessidade clínica e disponibilidade do profissional.</p>
@@ -2833,6 +2838,7 @@ function termoGerar(){
     responsavel:respLegal||'—',
     cpf:cpf||'—',
     investimentoLinha,
+    modalidade,
     data:dataFmt||'—'
   };
 
