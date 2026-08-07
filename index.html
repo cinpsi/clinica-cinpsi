@@ -6142,6 +6142,34 @@ function finEditDesp(id){
   mo.className='modal-overlay';
   mo.id='modal-edit-desp';
   mo.onclick=e=>{if(e.target===mo)mo.remove();};
+
+  // Item de uma série (recorrente/parcelada): só os campos simples ficam
+  // editáveis, e a alteração afeta SOMENTE esta parcela — as demais do
+  // grupo (passadas e futuras) continuam intactas. Isso evita o bug de
+  // editar um mês e a série inteira ser recriada/reordenada.
+  const blocoTipo=isGrupo
+    ? `<div class="form-group full">
+        <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:#3730A3;line-height:1.5">
+          💡 Esta é a parcela <strong>${d.parcelaAtual}/${d.totalParcelas}</strong> de uma série ${d.tipo==='recorrente'?'recorrente':'parcelada'}. Ao salvar, <strong>só este lançamento</strong> é alterado — os demais do grupo (antes e depois) continuam iguais.
+        </div>
+        <button type="button" class="btn-ghost" style="font-size:12.5px;margin-top:8px" onclick="finCorrigirSerie('${d.grupoId}')">🔧 Corrigir sequência de parcelas</button>
+      </div>`
+    : `<div class="form-group full"><label class="form-label">Tipo</label>
+        <div style="display:flex;gap:8px">
+          <button type="button" class="fin-tipo-btn${d.tipo==='unica'?' active':''}" id="ed-tipo-unica" onclick="edSetTipo('unica')">Avulsa</button>
+          <button type="button" class="fin-tipo-btn${d.tipo==='recorrente'?' active':''}" id="ed-tipo-recorrente" onclick="edSetTipo('recorrente')">🔁 Recorrente</button>
+          <button type="button" class="fin-tipo-btn${d.tipo==='parcelada'?' active':''}" id="ed-tipo-parcelada" onclick="edSetTipo('parcelada')">💳 Parcelada</button>
+        </div>
+      </div>
+      <div class="form-group full" id="ed-bloco-rec" style="display:${d.tipo==='recorrente'?'block':'none'}">
+        <label class="form-label">Meses a repetir (a partir desta data)</label>
+        <input class="form-input" type="number" id="ed-meses" min="1" max="60" value="${d.totalParcelas||12}" style="width:100px">
+      </div>
+      <div class="form-group full" id="ed-bloco-parc" style="display:${d.tipo==='parcelada'?'block':'none'}">
+        <label class="form-label">Número de parcelas</label>
+        <input class="form-input" type="number" id="ed-parcelas" min="2" max="48" value="${d.totalParcelas||12}" style="width:100px">
+      </div>`;
+
   mo.innerHTML=`
   <div class="modal" style="max-width:520px">
     <div class="modal-header">
@@ -6162,22 +6190,7 @@ function finEditDesp(id){
           <input class="form-input" type="date" id="ed-data" value="${d.data||''}"></div>
         <div class="form-group"><label class="form-label">Vencimento</label>
           <input class="form-input" type="date" id="ed-venc" value="${d.vencimento||''}"></div>
-        <div class="form-group full"><label class="form-label">Tipo</label>
-          <div style="display:flex;gap:8px">
-            <button type="button" class="fin-tipo-btn${d.tipo==='unica'?' active':''}" id="ed-tipo-unica" onclick="edSetTipo('unica')">Avulsa</button>
-            <button type="button" class="fin-tipo-btn${d.tipo==='recorrente'?' active':''}" id="ed-tipo-recorrente" onclick="edSetTipo('recorrente')">🔁 Recorrente</button>
-            <button type="button" class="fin-tipo-btn${d.tipo==='parcelada'?' active':''}" id="ed-tipo-parcelada" onclick="edSetTipo('parcelada')">💳 Parcelada</button>
-          </div>
-        </div>
-        <div class="form-group full" id="ed-bloco-rec" style="display:${d.tipo==='recorrente'?'block':'none'}">
-          <label class="form-label">Meses a repetir (a partir desta data)</label>
-          <input class="form-input" type="number" id="ed-meses" min="1" max="60" value="${d.totalParcelas||12}" style="width:100px">
-          ${isGrupo?`<div style="font-size:12px;color:var(--amber);margin-top:6px">⚠️ Isso criará novos lançamentos. Os anteriores do grupo não serão afetados.</div>`:''}
-        </div>
-        <div class="form-group full" id="ed-bloco-parc" style="display:${d.tipo==='parcelada'?'block':'none'}">
-          <label class="form-label">Número de parcelas</label>
-          <input class="form-input" type="number" id="ed-parcelas" min="2" max="48" value="${d.totalParcelas||12}" style="width:100px">
-        </div>
+        ${blocoTipo}
       </div>
     </div>
     <div class="modal-footer">
@@ -6207,6 +6220,20 @@ function finSaveEditDesp(id){
   const valor=parseFloat(document.getElementById('ed-valor').value)||0;
   const data=document.getElementById('ed-data').value;
   const venc=document.getElementById('ed-venc').value||null;
+
+  const isGrupo=d.grupoId&&d.tipo!=='unica';
+  if(isGrupo){
+    // Parcela de uma série: altera só este lançamento, em qualquer outro
+    // fica intacto (data, ordem e valor). Nada de tipo/grupoId/parcelaAtual
+    // muda aqui — só os campos simples do formulário.
+    desps[idx]={...d, desc, cat, valor, data, vencimento:venc};
+    finSave(FK.DESP,desps);
+    document.getElementById('modal-edit-desp').remove();
+    fin_refresh();
+    toast('✅ Só esta parcela foi alterada!');
+    return;
+  }
+
   const novoTipo=['unica','recorrente','parcelada'].find(t=>document.getElementById('ed-tipo-'+t)?.classList.contains('active'))||d.tipo;
 
   if(novoTipo==='unica'){
@@ -6254,6 +6281,101 @@ function finSaveEditDesp(id){
   document.getElementById('modal-edit-desp').remove();
   fin_refresh();
   toast('✅ Despesa atualizada!');
+}
+
+// ── Corrigir sequência de parcelas de um grupo (recorrente/parcelada) ──
+// Ferramenta separada da edição simples: aqui dá pra ver o grupo inteiro,
+// ajustar data/vencimento/valor/nº da parcela de cada lançamento, remover
+// duplicados e renumerar tudo por data — útil quando o lançamento original
+// ficou com a sequência errada.
+function finCorrigirSerie(grupoId){
+  document.getElementById('modal-edit-desp')?.remove();
+  document.getElementById('modal-corrigir-serie')?.remove();
+  const itens=finLoad(FK.DESP).filter(d=>d.grupoId===grupoId).sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+  if(!itens.length){ toast('Nenhum lançamento encontrado nesse grupo.'); return; }
+
+  const linhas=itens.map(d=>`
+    <tr data-id="${d.id}">
+      <td style="padding:5px"><input type="number" class="form-input cs-parcela" style="width:56px;text-align:center;padding:5px" value="${d.parcelaAtual||1}"></td>
+      <td style="padding:5px"><input type="date" class="form-input cs-data" style="padding:5px" value="${d.data||''}"></td>
+      <td style="padding:5px"><input type="date" class="form-input cs-venc" style="padding:5px" value="${d.vencimento||''}"></td>
+      <td style="padding:5px"><input type="number" step="0.01" class="form-input cs-valor" style="width:100px;text-align:right;padding:5px" value="${d.valor||0}"></td>
+      <td style="padding:5px;text-align:center"><button class="btn-delete" onclick="csRemoverLinha(this)" title="Remover este lançamento">✕</button></td>
+    </tr>`).join('');
+
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-corrigir-serie';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:640px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header">
+      <div class="modal-title">🔧 Corrigir sequência de parcelas</div>
+      <button class="modal-close" onclick="document.getElementById('modal-corrigir-serie').remove()">×</button>
+    </div>
+    <div class="modal-body" style="overflow-y:auto;flex:1">
+      <p style="font-size:12.5px;color:var(--text3);margin:0 0 12px;line-height:1.5">Ajuste data, vencimento, valor ou o número de cada parcela de "<strong>${esc(itens[0].desc||'')}</strong>". Use ✕ para remover um lançamento duplicado ou errado, e "Renumerar" para recontar 1..N pela ordem das datas.</p>
+      <table style="width:100%;border-collapse:collapse;font-size:12.5px" id="cs-tabela">
+        <thead><tr style="background:var(--surface2)">
+          <th style="padding:6px;text-align:center">Parcela</th>
+          <th style="padding:6px;text-align:left">Data</th>
+          <th style="padding:6px;text-align:left">Vencimento</th>
+          <th style="padding:6px;text-align:right">Valor</th>
+          <th style="padding:6px"></th>
+        </tr></thead>
+        <tbody id="cs-tbody">${linhas}</tbody>
+      </table>
+    </div>
+    <div class="modal-footer" style="justify-content:space-between">
+      <button class="btn-ghost" onclick="csRenumerar()">🔢 Renumerar por data</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn-ghost" onclick="document.getElementById('modal-corrigir-serie').remove()">Cancelar</button>
+        <button class="btn-save-purple" onclick="csSalvar('${grupoId}')">💾 Salvar correções</button>
+      </div>
+    </div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+
+function csRemoverLinha(btn){
+  const tr=btn.closest('tr'); if(!tr) return;
+  if(document.querySelectorAll('#cs-tbody tr').length<=1){ toast('Deixe ao menos um lançamento no grupo — para excluir tudo, use o ✕ na lista de despesas.'); return; }
+  tr.remove();
+}
+
+function csRenumerar(){
+  const tbody=document.getElementById('cs-tbody'); if(!tbody) return;
+  const linhas=[...tbody.querySelectorAll('tr')].sort((a,b)=>(a.querySelector('.cs-data').value||'').localeCompare(b.querySelector('.cs-data').value||''));
+  linhas.forEach((tr,i)=>{
+    tr.querySelector('.cs-parcela').value=i+1;
+    tbody.appendChild(tr);
+  });
+  toast('Parcelas renumeradas por data.');
+}
+
+function csSalvar(grupoId){
+  const linhas=[...document.querySelectorAll('#cs-tbody tr')];
+  if(!linhas.length){ toast('O grupo precisa ter ao menos um lançamento.'); return; }
+  const total=linhas.length;
+  const desps=finLoad(FK.DESP);
+  const idsMantidos=new Set();
+  linhas.forEach(tr=>{
+    const id=parseInt(tr.dataset.id);
+    idsMantidos.add(id);
+    const idx=desps.findIndex(x=>x.id===id); if(idx===-1) return;
+    desps[idx]={
+      ...desps[idx],
+      parcelaAtual:parseInt(tr.querySelector('.cs-parcela').value)||1,
+      data:tr.querySelector('.cs-data').value||desps[idx].data,
+      vencimento:tr.querySelector('.cs-venc').value||null,
+      valor:parseFloat(tr.querySelector('.cs-valor').value)||0,
+      totalParcelas:total
+    };
+  });
+  const restante=desps.filter(x=>x.grupoId!==grupoId||idsMantidos.has(x.id));
+  finSave(FK.DESP,restante);
+  document.getElementById('modal-corrigir-serie').remove();
+  fin_refresh();
+  toast('✅ Sequência de parcelas corrigida!');
 }
 
 function finDelReceita(id){ finSave(FK.REC, finLoad(FK.REC).filter(r=>r.id!==id)); fin_refresh(); toast('Receita removida.'); }
