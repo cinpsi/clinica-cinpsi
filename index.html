@@ -6162,8 +6162,11 @@ function finEditDesp(id){
         </div>
       </div>
       <div class="form-group full" id="ed-bloco-rec" style="display:${d.tipo==='recorrente'?'block':'none'}">
-        <label class="form-label">Meses a repetir (a partir desta data)</label>
-        <input class="form-input" type="number" id="ed-meses" min="1" max="60" value="${d.totalParcelas||12}" style="width:100px">
+        <label class="form-label">Repetir até quando?</label>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <input class="form-input" type="date" id="ed-data-final" style="width:170px" value="${new Date().getFullYear()}-12-31">
+          <button type="button" class="btn-ghost" style="font-size:12px;padding:6px 10px" onclick="edRecorrenciaAteFimDoAno()">Até 31/12</button>
+        </div>
       </div>
       <div class="form-group full" id="ed-bloco-parc" style="display:${d.tipo==='parcelada'?'block':'none'}">
         <label class="form-label">Número de parcelas</label>
@@ -6208,6 +6211,15 @@ function edSetTipo(tipo){
   });
   document.getElementById('ed-bloco-rec').style.display=tipo==='recorrente'?'block':'none';
   document.getElementById('ed-bloco-parc').style.display=tipo==='parcelada'?'block':'none';
+  if(tipo==='recorrente') edRecorrenciaAteFimDoAno();
+}
+
+// Preenche "Repetir até quando" com 31/12 do ano da data de lançamento do formulário de edição.
+function edRecorrenciaAteFimDoAno(){
+  const data=document.getElementById('ed-data')?.value;
+  const ano=data?parseInt(data.slice(0,4)):new Date().getFullYear();
+  const el=document.getElementById('ed-data-final');
+  if(el) el.value=ano+'-12-31';
 }
 
 function finSaveEditDesp(id){
@@ -6242,7 +6254,9 @@ function finSaveEditDesp(id){
     finSave(FK.DESP,desps);
 
   } else if(novoTipo==='recorrente'){
-    const meses=parseInt(document.getElementById('ed-meses').value)||12;
+    const dataFinalRec=document.getElementById('ed-data-final').value;
+    const meses=finContarMesesAteData(data,dataFinalRec);
+    if(meses<=0){ toast('A data final da recorrência precisa ser depois da data de lançamento.'); return; }
     // Remove lançamentos futuros do grupo (a partir deste) e recria
     const grupoId='g_'+Date.now();
     const novos=[];
@@ -10089,7 +10103,7 @@ function _finInjectModals(){
           </div>
         </div>
         <div class="form-grid">
-          <div class="form-group"><label class="form-label">Data Lançamento</label><input class="form-input" type="date" id="find-data"></div>
+          <div class="form-group"><label class="form-label">Data Lançamento</label><input class="form-input" type="date" id="find-data" onchange="finAtualizarPreviewRecorrente()"></div>
           <div class="form-group"><label class="form-label">Data Vencimento</label><input class="form-input" type="date" id="find-vencimento"></div>
           <div class="form-group"><label class="form-label">Fornecedor</label>
             <select class="form-select" id="find-forn" onchange="finAutoFillForn()">
@@ -10102,10 +10116,10 @@ function _finInjectModals(){
         </div>
         <div id="fin-bloco-recorrente" style="display:none;margin-top:12px">
           <div class="fin-recorrente-box">
-            <div style="font-size:13px;color:var(--accent);font-weight:500;margin-bottom:8px">🔁 Quantos meses deseja repetir?</div>
-            <div style="display:flex;align-items:center;gap:10px">
-              <input type="number" id="find-meses" min="1" max="60" value="12" class="form-input" style="width:80px">
-              <span style="font-size:13px;color:var(--text2)">meses a partir do lançamento</span>
+            <div style="font-size:13px;color:var(--accent);font-weight:500;margin-bottom:8px">🔁 Repetir até quando?</div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <input type="date" id="find-data-final" class="form-input" style="width:170px" onchange="finAtualizarPreviewRecorrente()">
+              <button type="button" class="btn-ghost" style="font-size:12px;padding:6px 10px" onclick="finRecorrenciaAteFimDoAno()">Até 31/12</button>
             </div>
             <div id="fin-rec-preview" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
           </div>
@@ -10143,7 +10157,7 @@ function finOpenModal(type){
     document.getElementById('find-vencimento').value=today;
     ['find-valor','find-desc','find-total'].forEach(id=>document.getElementById(id).value='');
     document.getElementById('find-cat').value='';
-    document.getElementById('find-meses').value='12';
+    document.getElementById('find-data-final').value=new Date().getFullYear()+'-12-31';
     document.getElementById('find-parcelas').value='12';
     document.getElementById('fin-rec-preview').textContent='';
     document.getElementById('fin-parc-preview').textContent='';
@@ -10163,6 +10177,41 @@ function finSetTipo(tipo){
   const vinput=document.getElementById('find-valor');
   if(tipo==='parcelada'){ lbl.textContent='Valor da Parcela (auto)'; vinput.readOnly=true; vinput.style.opacity='.5'; }
   else { lbl.textContent='Valor (R$)'; vinput.readOnly=false; vinput.style.opacity='1'; }
+  if(tipo==='recorrente') finAtualizarPreviewRecorrente();
+}
+
+// Atalho: define a data final da recorrência como 31/12 do ano da data de lançamento.
+function finRecorrenciaAteFimDoAno(){
+  const data=document.getElementById('find-data')?.value;
+  const ano=data?parseInt(data.slice(0,4)):new Date().getFullYear();
+  const el=document.getElementById('find-data-final');
+  if(el){ el.value=ano+'-12-31'; finAtualizarPreviewRecorrente(); }
+}
+
+// Mostra quantas parcelas mensais cabem entre a data de lançamento e a data final escolhida.
+function finAtualizarPreviewRecorrente(){
+  const data=document.getElementById('find-data')?.value;
+  const dataFinal=document.getElementById('find-data-final')?.value;
+  const preview=document.getElementById('fin-rec-preview'); if(!preview) return;
+  if(!data||!dataFinal){ preview.textContent=''; return; }
+  const n=finContarMesesAteData(data,dataFinal);
+  if(n<=0){ preview.textContent='⚠️ A data final precisa ser depois da data de lançamento.'; return; }
+  const ultima=new Date(data+'T12:00:00'); ultima.setMonth(ultima.getMonth()+(n-1));
+  preview.textContent=n+' parcela'+(n>1?'s':'')+' mensais, de '+finFmtDate(data)+' até '+finFmtDate(ultima.toISOString().split('T')[0])+'.';
+}
+
+// Conta quantas ocorrências mensais (a partir de dataInicio, mesmo dia do mês)
+// caem em ou antes de dataFinal. Usado tanto na Nova Despesa quanto na edição.
+function finContarMesesAteData(dataInicio,dataFinal){
+  if(!dataInicio||!dataFinal) return 0;
+  const fim=new Date(dataFinal+'T12:00:00');
+  let n=0;
+  while(n<240){
+    const d=new Date(dataInicio+'T12:00:00'); d.setMonth(d.getMonth()+n);
+    if(d>fim) break;
+    n++;
+  }
+  return n;
 }
 function finCalcParcela(){
   const total=parseFloat(document.getElementById('find-total').value)||0;
@@ -10324,7 +10373,9 @@ function finSaveDesp(){
   if(_finTipo==='unica'){
     desps.push({id:Date.now(),data,vencimento:venc,valor,desc,cat,fornId,tipo:'unica',grupoId:gid});
   } else if(_finTipo==='recorrente'){
-    const meses=parseInt(document.getElementById('find-meses').value)||1;
+    const dataFinalRec=document.getElementById('find-data-final').value;
+    const meses=finContarMesesAteData(data,dataFinalRec);
+    if(meses<=0){ toast('A data final da recorrência precisa ser depois da data de lançamento.'); return; }
     for(let i=0;i<meses;i++){
       const d=new Date(data+'T12:00:00'); d.setMonth(d.getMonth()+i);
       const v=new Date(venc+'T12:00:00'); v.setMonth(v.getMonth()+i);
