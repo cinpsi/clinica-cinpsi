@@ -6150,9 +6150,9 @@ function finEditDesp(id){
   const blocoTipo=isGrupo
     ? `<div class="form-group full">
         <div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:var(--radius-sm);padding:10px 12px;font-size:12.5px;color:#3730A3;line-height:1.5">
-          💡 Esta é a parcela <strong>${d.parcelaAtual}/${d.totalParcelas}</strong> de uma série ${d.tipo==='recorrente'?'recorrente':'parcelada'}. Ao salvar, <strong>só este lançamento</strong> é alterado — os demais do grupo (antes e depois) continuam iguais.
+          💡 Esta é a parcela <strong>${d.parcelaAtual}/${d.totalParcelas}</strong> de uma série ${d.tipo==='recorrente'?'recorrente':'parcelada'}. Ao salvar, <strong>só este lançamento</strong> é alterado — os demais do grupo (antes e depois) continuam iguais. Para adicionar mais parcelas a esta série (ex: estender até o fim do próximo ano), use o botão abaixo.
         </div>
-        <button type="button" class="btn-ghost" style="font-size:12.5px;margin-top:8px" onclick="finCorrigirSerie('${d.grupoId}')">🔧 Corrigir sequência de parcelas</button>
+        <button type="button" class="btn-ghost" style="font-size:12.5px;margin-top:8px" onclick="finCorrigirSerie('${d.grupoId}')">🔧 Corrigir ou estender parcelas</button>
       </div>`
     : `<div class="form-group full"><label class="form-label">Tipo</label>
         <div style="display:flex;gap:8px">
@@ -6327,6 +6327,12 @@ function finCorrigirSerie(grupoId){
     </div>
     <div class="modal-body" style="overflow-y:auto;flex:1">
       <p style="font-size:12.5px;color:var(--text3);margin:0 0 12px;line-height:1.5">Ajuste data, vencimento, valor ou o número de cada parcela de "<strong>${esc(itens[0].desc||'')}</strong>". Use ✕ para remover um lançamento duplicado ou errado, e "Renumerar" para recontar 1..N pela ordem das datas.</p>
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm)">
+        <span style="font-size:12.5px;font-weight:600;color:var(--text2)">➕ Estender a série até:</span>
+        <input type="date" id="cs-estender-ate" class="form-input" style="width:160px">
+        <button type="button" class="btn-ghost" style="font-size:12px;padding:6px 10px" onclick="csEstenderAteFimDoAno()">Fim do ano</button>
+        <button type="button" class="btn-primary" style="font-size:12px;padding:6px 12px" onclick="csEstenderAte()">Adicionar parcelas até essa data</button>
+      </div>
       <table style="width:100%;border-collapse:collapse;font-size:12.5px" id="cs-tabela">
         <thead><tr style="background:var(--surface2)">
           <th style="padding:6px;text-align:center">Parcela</th>
@@ -6366,24 +6372,86 @@ function csRenumerar(){
   toast('Parcelas renumeradas por data.');
 }
 
+// Acha a linha com a data mais recente na tabela de correção (referência p/ estender).
+function csUltimaLinha(){
+  const tbody=document.getElementById('cs-tbody'); if(!tbody) return null;
+  const linhas=[...tbody.querySelectorAll('tr')];
+  if(!linhas.length) return null;
+  let ultima=linhas[0];
+  linhas.forEach(tr=>{ if((tr.querySelector('.cs-data').value||'') > (ultima.querySelector('.cs-data').value||'')) ultima=tr; });
+  return ultima;
+}
+
+// Atalho: preenche "Estender até" com 31/12 do ano da última parcela (ou do ano seguinte, se ela já for de dezembro em diante).
+function csEstenderAteFimDoAno(){
+  const ultima=csUltimaLinha(); if(!ultima) return;
+  const dataBase=ultima.querySelector('.cs-data').value;
+  const ano=dataBase?parseInt(dataBase.slice(0,4)):new Date().getFullYear();
+  const mes=dataBase?parseInt(dataBase.slice(5,7)):1;
+  const anoAlvo=mes>=12?ano+1:ano; // já em dezembro? aí "fim do ano" é o ano seguinte
+  const el=document.getElementById('cs-estender-ate'); if(el) el.value=anoAlvo+'-12-31';
+}
+
+// Adiciona novas linhas na tabela de correção, mensalmente, a partir da última
+// parcela existente até a data escolhida — mesmo valor da última, editável depois.
+function csEstenderAte(){
+  const tbody=document.getElementById('cs-tbody'); if(!tbody) return;
+  const dataFinal=document.getElementById('cs-estender-ate')?.value;
+  if(!dataFinal){ toast('Escolha até quando estender a série.'); return; }
+  const ultima=csUltimaLinha(); if(!ultima) return;
+  const dataBase=ultima.querySelector('.cs-data').value;
+  if(!dataBase){ toast('A parcela mais recente precisa ter uma data preenchida.'); return; }
+  const vencBase=ultima.querySelector('.cs-venc').value||dataBase;
+  const valorBase=ultima.querySelector('.cs-valor').value;
+  const parcelaBase=parseInt(ultima.querySelector('.cs-parcela').value)||tbody.querySelectorAll('tr').length;
+
+  const n=finContarMesesAteData(dataBase,dataFinal);
+  if(n<=1){ toast('A data escolhida precisa ser depois da última parcela já lançada.'); return; }
+  const novas=n-1;
+  for(let i=1;i<=novas;i++){
+    const d=new Date(dataBase+'T12:00:00'); d.setMonth(d.getMonth()+i);
+    const v=new Date(vencBase+'T12:00:00'); v.setMonth(v.getMonth()+i);
+    const tr=document.createElement('tr');
+    tr.dataset.id=String(Date.now()+i);
+    tr.innerHTML=`
+      <td style="padding:5px"><input type="number" class="form-input cs-parcela" style="width:56px;text-align:center;padding:5px" value="${parcelaBase+i}"></td>
+      <td style="padding:5px"><input type="date" class="form-input cs-data" style="padding:5px" value="${d.toISOString().split('T')[0]}"></td>
+      <td style="padding:5px"><input type="date" class="form-input cs-venc" style="padding:5px" value="${v.toISOString().split('T')[0]}"></td>
+      <td style="padding:5px"><input type="number" step="0.01" class="form-input cs-valor" style="width:100px;text-align:right;padding:5px" value="${valorBase}"></td>
+      <td style="padding:5px;text-align:center"><button class="btn-delete" onclick="csRemoverLinha(this)" title="Remover este lançamento">✕</button></td>`;
+    tbody.appendChild(tr);
+  }
+  csRenumerar();
+  toast('✅ '+novas+' parcela'+(novas>1?'s':'')+' adicionada'+(novas>1?'s':'')+'. Confira e clique em "Salvar correções".');
+}
+
 function csSalvar(grupoId){
   const linhas=[...document.querySelectorAll('#cs-tbody tr')];
   if(!linhas.length){ toast('O grupo precisa ter ao menos um lançamento.'); return; }
   const total=linhas.length;
   const desps=finLoad(FK.DESP);
+  // Modelo p/ parcelas novas (criadas via "Estender a série"): copia desc/cat/
+  // tipo/fornecedor de qualquer parcela já existente do mesmo grupo.
+  const modelo=desps.find(x=>x.grupoId===grupoId);
   const idsMantidos=new Set();
   linhas.forEach(tr=>{
     const id=parseInt(tr.dataset.id);
     idsMantidos.add(id);
-    const idx=desps.findIndex(x=>x.id===id); if(idx===-1) return;
-    desps[idx]={
-      ...desps[idx],
+    const campos={
       parcelaAtual:parseInt(tr.querySelector('.cs-parcela').value)||1,
-      data:tr.querySelector('.cs-data').value||desps[idx].data,
+      data:tr.querySelector('.cs-data').value,
       vencimento:tr.querySelector('.cs-venc').value||null,
       valor:parseFloat(tr.querySelector('.cs-valor').value)||0,
       totalParcelas:total
     };
+    const idx=desps.findIndex(x=>x.id===id);
+    if(idx!==-1){
+      desps[idx]={...desps[idx], ...campos};
+    } else if(modelo){
+      // Parcela nova (adicionada pelo "Estender a série") — ainda não existe no
+      // sistema, então é criada agora, com pago:false (é uma parcela futura).
+      desps.push({...modelo, ...campos, id, grupoId, pago:false});
+    }
   });
   const restante=desps.filter(x=>x.grupoId!==grupoId||idsMantidos.has(x.id));
   finSave(FK.DESP,restante);
