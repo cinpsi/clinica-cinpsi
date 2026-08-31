@@ -656,7 +656,7 @@ async function initFirebase(){
             new Set([...Object.keys(localPlan),...Object.keys(remotoPlan)]).forEach(mk=>{
               const lm=localPlan[mk]||{}, rm=remotoPlan[mk]||{};
               mesclado[mk]={};
-              ['previsto','realizado'].forEach(tipo=>{
+              ['previsto','orcamento','realizado'].forEach(tipo=>{
                 const lv=lm[tipo], rv=rm[tipo];
                 mesclado[mk][tipo]=(lv&&rv)?(((rv.importadoEm||'')>=(lv.importadoEm||''))?rv:lv):(rv||lv);
               });
