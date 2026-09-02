@@ -6902,6 +6902,7 @@ function finSalvarRepasseReal(terapeuta, mesKey, valor){
   localStorage.setItem('cinpsi_repasses_reais', JSON.stringify(repassesReais));
   _cache['cinpsi_repasses_reais']=repassesReais;
   _fbWrite('cinpsi_repasses_reais', repassesReais);
+      finRenderRepasses();
   toast('✅ Valor real salvo — DRE atualizado!');
 }
 
