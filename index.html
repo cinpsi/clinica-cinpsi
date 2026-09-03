@@ -8567,19 +8567,26 @@ function orcAplicarPuxar(){
 // Repasses do mês: usa a planilha importada se houver, senão calcula pelo sistema
 function orcRepassesMes(mesKey){
   try{
+    // Repasse real ao vivo: sempre prioriza os valores preenchidos na tela
+    // "Valor Pago Real" (o mesmo repasse que o DRE usa). So cai para a
+    // estimativa da planilha fechada, ou do percentual padrao, se ainda nao
+    // houver nenhum valor real lancado para o mes.
+    const reais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
+    const doMes=reais[mesKey]||{};
+    const temRepasseReal=Object.keys(doMes).length>0;
+    const fat=finBuildFatMes(mesKey);
+    if(temRepasseReal){
+      return fat.reduce((s,r)=>s+(doMes[r.terapeuta]!=null?doMes[r.terapeuta]:r.repasse),0);
+    }
     const plan=fatPlanLoad()[mesKey];
     if(plan&&plan.realizado&&plan.realizado.porProf){
       return Object.entries(plan.realizado.porProf)
         .reduce((s,[prof,d])=>s+finCalcRepasse(fatProfKey(prof), d.valor, d.n),0);
     }
-    const reais=JSON.parse(localStorage.getItem('cinpsi_repasses_reais')||'{}');
-    const doMes=reais[mesKey]||{};
-    const fat=finBuildFatMes(mesKey);
-    return fat.reduce((s,r)=>s+(doMes[r.terapeuta]!=null?doMes[r.terapeuta]:r.repasse),0);
+    return fat.reduce((s,r)=>s+r.repasse,0);
   }catch(e){ return 0; }
 }
 
-// Realizado: receita vem da planilha do Doctoralia (se importada), despesas do sistema
 function orcRealizado(mesKey){
   const desps=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
 
