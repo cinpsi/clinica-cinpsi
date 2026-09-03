@@ -8583,15 +8583,11 @@ function orcRepassesMes(mesKey){
 function orcRealizado(mesKey){
   const desps=finLoad(FK.DESP).filter(d=>(d.data||'').startsWith(mesKey));
 
-   // Receita: sempre o valor ao vivo do sistema — o mesmo que o DRE mostra —
+  // Receita: sempre o valor ao vivo do sistema — o mesmo que o DRE mostra —
   // pra nunca ficar desatualizada depois que o mês foi fechado.
   const receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(finReceitaEfetivaData(r)||'').startsWith(mesKey))
     .reduce((s,r)=>s+(r.valor||0),0);
   const receitaOrigem='sistema';
-    receita=finLoad(FK.REC).filter(r=>r.status==='Pago'&&(finReceitaEfetivaData(r)||'').startsWith(mesKey))
-      .reduce((s,r)=>s+(r.valor||0),0);
-    receitaOrigem='sistema';
-  }
 
   // Despesas por categoria + linha de repasses
   const despPorCat={};
