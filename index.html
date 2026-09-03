@@ -8622,14 +8622,14 @@ function orcMetaMes(mesKey){
     recMeta=Object.values(m.receita||{}).reduce((s,v)=>s+v,0);
   }
 
-  // Receita acumulada (ao vivo): vem da planilha semanal de receitas que
-  // você sobe na aba Orçamento ("Atualizar receita da semana"). Cada envio
-  // substitui o anterior — é sempre o acumulado do mês até aquela data. Sem
-  // upload ainda, usa o previsto/meta original como melhor estimativa.
+  // Receita acumulada (ao vivo): sempre o valor real ja lancado no sistema —
+  // o mesmo que o DRE mostra. Antes dependia da planilha semanal, e por isso
+  // podia desatualizar assim que um pagamento novo entrava depois do upload.
+  // Se ainda nao ha nenhum pagamento lancado no mes, usa a meta como estimativa.
+  const recAcumuladaSistema = finLoad(FK.REC).filter(r=>r.status==='Pago'&&(finReceitaEfetivaData(r)||'').startsWith(mesKey))
+    .reduce((s,r)=>s+(r.valor||0),0);
   const porProfAtual = plan?.orcamento?.porProf || plan?.previsto?.porProf || null;
-  const recAcumulada = plan?.orcamento?.porProf
-    ? Object.values(plan.orcamento.porProf).reduce((s,d)=>s+(d.valor||0),0)
-    : recMeta;
+  const recAcumulada = recAcumuladaSistema>0 ? recAcumuladaSistema : recMeta;
 
   // Despesa orçada: todas as despesas já lançadas no mês, mais o repasse
   // recalculado a partir da receita acumulada mais recente — segue a
