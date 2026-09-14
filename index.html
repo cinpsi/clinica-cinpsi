@@ -8835,12 +8835,28 @@ function fluxoSaldoSave(s){
 }
 
 // Saldo em conta acumulado até o fim de uma data-limite (inclusive)
-function fluxoSaldoAte(dataLimite){
+function fluxoUltimoSaldoSantander(dataLimite){
+  // Reconstroi a ordem cronologica real dos lancamentos do Santander pelo
+  // encadeamento dos saldos declarados pelo banco: o extrato pode listar as
+  // linhas mais recentes primeiro, entao nao da pra confiar na ordem de
+  // importacao (id) quando ha mais de um lancamento no mesmo dia.
   const ini=fluxoSaldoLoad();
-  const cand=fluxoLoad()
-    .filter(m=>m.origem==='Santander' && m.saldo!=null && m.data>ini.data && (!dataLimite||m.data<dataLimite))
-    .sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)));
-  if(cand.length) return cand[cand.length-1].saldo;
+  const entries=fluxoLoad().filter(m=>m.origem==='Santander' && m.saldo!=null && m.data>ini.data && (!dataLimite||m.data<dataLimite));
+  if(!entries.length) return null;
+  const beforeSet=new Set();
+  entries.forEach(e=>{
+    const delta=e.tipo==='entrada'?e.valor:-e.valor;
+    beforeSet.add(+(e.saldo-delta).toFixed(2));
+  });
+  const terminais=entries.filter(e=>!beforeSet.has(+e.saldo.toFixed(2)));
+  if(!terminais.length) return null;
+  terminais.sort((a,b)=>a.data.localeCompare(b.data));
+  return terminais[terminais.length-1].saldo;
+}
+function fluxoSaldoAte(dataLimite){
+  const bancario=fluxoUltimoSaldoSantander(dataLimite);
+  if(bancario!=null) return bancario;
+  const ini=fluxoSaldoLoad();
   return fluxoLoad()
     .filter(m=>m.origem==='Santander' && m.data>ini.data && (!dataLimite||m.data<dataLimite))
     .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
@@ -9458,8 +9474,8 @@ function fluxoImprimir(){
   const hoje=new Date().toLocaleDateString('pt-BR');
   const ini=fluxoSaldoLoad();
   // Parte do saldo inicial e acumula os lançamentos anteriores ao período exibido
-  const _saldoHist=fluxoLoad().filter(m=>m.origem==='Santander' && m.saldo!=null && m.data>ini.data && m.data<base[0].data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)));
-  let saldoAcum=_saldoHist.length ? _saldoHist[_saldoHist.length-1].saldo : fluxoLoad().filter(m=>m.origem==='Santander' && m.data>ini.data && m.data<base[0].data).reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
+  let saldoAcum=fluxoUltimoSaldoSantander(base[0].data);
+  if(saldoAcum==null) saldoAcum=fluxoLoad().filter(m=>m.origem==='Santander' && m.data>ini.data && m.data<base[0].data).reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
   const saldoAbertura=saldoAcum;
   const linhas=base.map(m=>{
     if(m.origem==='Santander'){ saldoAcum = (m.saldo!=null) ? m.saldo : saldoAcum+(m.tipo==='entrada'?m.valor:-m.valor); }
