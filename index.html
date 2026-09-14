@@ -8837,8 +8837,12 @@ function fluxoSaldoSave(s){
 // Saldo em conta acumulado até o fim de uma data-limite (inclusive)
 function fluxoSaldoAte(dataLimite){
   const ini=fluxoSaldoLoad();
+  const cand=fluxoLoad()
+    .filter(m=>m.origem==='Santander' && m.saldo!=null && m.data>ini.data && (!dataLimite||m.data<dataLimite))
+    .sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)));
+  if(cand.length) return cand[cand.length-1].saldo;
   return fluxoLoad()
-    .filter(m=>m.origem==='Santander' && m.data>ini.data && (!dataLimite||m.data<=dataLimite))
+    .filter(m=>m.origem==='Santander' && m.data>ini.data && (!dataLimite||m.data<dataLimite))
     .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
 }
 
@@ -8903,7 +8907,7 @@ function finRenderFluxoCaixa(){
   const acum={};
   let run=ini.valor;
   todos.filter(m=>m.origem==='Santander' && m.data>ini.data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)))
-    .forEach(m=>{ run+=(m.tipo==='entrada'?m.valor:-m.valor); acum[m.id]=run; });
+    .forEach(m=>{ if(m.saldo!=null){ run=m.saldo; } else { run+=(m.tipo==='entrada'?m.valor:-m.valor); } acum[m.id]=run; });
 
   // Última data já importada (de qualquer origem) — pra saber a partir de
   // que dia pedir o próximo extrato ao banco.
@@ -9454,11 +9458,11 @@ function fluxoImprimir(){
   const hoje=new Date().toLocaleDateString('pt-BR');
   const ini=fluxoSaldoLoad();
   // Parte do saldo inicial e acumula os lançamentos anteriores ao período exibido
-  let saldoAcum=fluxoLoad().filter(m=>m.origem==='Santander' && m.data>ini.data && m.data<base[0].data)
-    .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
+  const _saldoHist=fluxoLoad().filter(m=>m.origem==='Santander' && m.saldo!=null && m.data>ini.data && m.data<base[0].data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)));
+  let saldoAcum=_saldoHist.length ? _saldoHist[_saldoHist.length-1].saldo : fluxoLoad().filter(m=>m.origem==='Santander' && m.data>ini.data && m.data<base[0].data).reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
   const saldoAbertura=saldoAcum;
   const linhas=base.map(m=>{
-    if(m.origem==='Santander') saldoAcum+=(m.tipo==='entrada'?m.valor:-m.valor);
+    if(m.origem==='Santander'){ saldoAcum = (m.saldo!=null) ? m.saldo : saldoAcum+(m.tipo==='entrada'?m.valor:-m.valor); }
     return `<tr>
       <td>${finFmtDate(m.data)}</td>
       <td>${esc(m.origem||'—')}</td>
