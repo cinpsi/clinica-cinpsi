@@ -8838,7 +8838,7 @@ function fluxoSaldoSave(s){
 function fluxoSaldoAte(dataLimite){
   const ini=fluxoSaldoLoad();
   return fluxoLoad()
-    .filter(m=>m.data>ini.data && (!dataLimite||m.data<=dataLimite))
+    .filter(m=>m.origem==='Santander' && m.data>ini.data && (!dataLimite||m.data<=dataLimite))
     .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
 }
 
@@ -8902,7 +8902,7 @@ function finRenderFluxoCaixa(){
   // Saldo acumulado por lançamento (ordem cronológica)
   const acum={};
   let run=ini.valor;
-  todos.filter(m=>m.data>ini.data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)))
+  todos.filter(m=>m.origem==='Santander' && m.data>ini.data).sort((a,b)=>a.data.localeCompare(b.data)||String(a.id).localeCompare(String(b.id)))
     .forEach(m=>{ run+=(m.tipo==='entrada'?m.valor:-m.valor); acum[m.id]=run; });
 
   // Última data já importada (de qualquer origem) — pra saber a partir de
@@ -9454,11 +9454,11 @@ function fluxoImprimir(){
   const hoje=new Date().toLocaleDateString('pt-BR');
   const ini=fluxoSaldoLoad();
   // Parte do saldo inicial e acumula os lançamentos anteriores ao período exibido
-  let saldoAcum=fluxoLoad().filter(m=>m.data>ini.data && m.data<base[0].data)
+  let saldoAcum=fluxoLoad().filter(m=>m.origem==='Santander' && m.data>ini.data && m.data<base[0].data)
     .reduce((s,m)=>s+(m.tipo==='entrada'?m.valor:-m.valor), ini.valor);
   const saldoAbertura=saldoAcum;
   const linhas=base.map(m=>{
-    saldoAcum+=(m.tipo==='entrada'?m.valor:-m.valor);
+    if(m.origem==='Santander') saldoAcum+=(m.tipo==='entrada'?m.valor:-m.valor);
     return `<tr>
       <td>${finFmtDate(m.data)}</td>
       <td>${esc(m.origem||'—')}</td>
