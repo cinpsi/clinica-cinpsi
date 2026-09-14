@@ -7919,26 +7919,50 @@ async function xlsxEnsureLib(){
   });
 }
 
+function xlsxParseCSVSimples(texto){
+  // Delimitador: a maioria usa vírgula, mas extratos bancários brasileiros
+  // (Santander etc.) costumam vir com ponto e vírgula.
+  const primeiraLinha = texto.split(/\r?\n/, 1)[0] || '';
+  const delim = (primeiraLinha.split(';').length > primeiraLinha.split(',').length) ? ';' : ',';
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<texto.length;i++){
+    const c = texto[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(texto[i+1] === '"'){ field+='"'; i++; }
+        else inQuotes = false;
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === delim){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* ignora */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r.length===1 && r[0]!==''));
+}
+
 async function xlsxLerArquivo(file){
   await xlsxEnsureLib();
   const isCsv=/\.csv$/i.test(file.name);
   const buf=await file.arrayBuffer();
 
   if(isCsv){
-    // CSV é texto puro: decodifica nós mesmos em vez de deixar o SheetJS
-    // adivinhar a codificação/o tipo de cada célula. Tenta UTF-8 estrito
-    // (padrão dos extratos atuais); se não for UTF-8 válido, cai para
-    // Windows-1252 (padrão de CSV exportado pelo Excel no Brasil).
+    // CSV é texto puro: decodifica e faz o parse nós mesmos, sem passar pelo
+    // SheetJS. O SheetJS, mesmo com cellDates:false e raw:false, ainda
+    // reconhece células que parecem data (ex: "2026-09-14") e as reformata
+    // no padrão americano (m/d/aa) antes de devolver o texto — o que troca
+    // dia por mês silenciosamente. Como o CSV já é texto puro, não há
+    // necessidade de nenhuma inferência de tipo: só respeitar aspas e o
+    // delimitador (vírgula ou ponto e vírgula, dependendo do banco).
     let texto;
     try{ texto=new TextDecoder('utf-8',{fatal:true}).decode(buf); }
     catch(e){ texto=new TextDecoder('windows-1252').decode(buf); }
     texto=texto.replace(/^\uFEFF/,'');
-    // raw:false preserva o texto original da célula (ex: "1.234,56").
-    // Com raw:true o SheetJS tenta converter para número sozinho e erra
-    // o formato brasileiro (vírgula decimal), inflando os valores.
-    const wb=XLSX.read(texto,{type:'string', cellDates:false, raw:false});
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
+    return xlsxParseCSVSimples(texto);
   }
 
   // .xlsx/.xls: células numéricas já vêm com o valor real do arquivo binário,
