@@ -7936,7 +7936,7 @@ async function xlsxLerArquivo(file){
     // raw:false preserva o texto original da célula (ex: "1.234,56").
     // Com raw:true o SheetJS tenta converter para número sozinho e erra
     // o formato brasileiro (vírgula decimal), inflando os valores.
-    const wb=XLSX.read(texto,{type:'string', cellDates:true, raw:false});
+    const wb=XLSX.read(texto,{type:'string', cellDates:false, raw:false});
     const ws=wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});
   }
@@ -7969,12 +7969,12 @@ function planData(v){
     return dt.toISOString().slice(0,10);
   }
   const s=String(v||'').trim();
-  let m=/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(s);
+  let m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if(m) return s.slice(0,10);
+  m=/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/.exec(s);
   if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
   m=/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})(?!\d)/.exec(s);
   if(m) return '20'+m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
-  m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);
-  if(m) return s.slice(0,10);
   return '';
 }
 
