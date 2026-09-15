@@ -6949,7 +6949,7 @@ function finImprimirSessoesPorTerapeuta(){
         <td class='r'>${finFmt(r.valor)}</td>
       </tr>`).join('');
     return `<div class='bloco-terapeuta'>
-      <h2>${esc(ter)} <span class='count'>(${sessoes.length} sessão${sessoes.length===1?'':'s'})</span></h2>
+      <h2>${esc(ter)} <span class='count'>(${sessoes.length} ${sessoes.length===1?'sessão':'sessões'})</span></h2>
       <table><thead><tr><th>Data</th><th>Paciente</th><th>Serviço</th><th class='r'>Valor</th></tr></thead>
       <tbody>${linhas}</tbody></table>
     </div>`;
