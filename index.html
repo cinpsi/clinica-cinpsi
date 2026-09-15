@@ -4910,6 +4910,7 @@ function renderFinanceiro(c){
   <div class="fin-panel" id="fin-panel-repasses">
     <div class="fin-section-header">
       <div class="fin-section-title">Repasses por Terapeuta</div>
+      <button class="btn-ghost" style="margin-right:8px" onclick="finImprimirSessoesPorTerapeuta()">🖨️ Sessões por terapeuta</button>
       <button class="btn-primary" onclick="finFecharMes()">📁 Fechar mês</button>
     </div>
 
@@ -6735,7 +6736,8 @@ function finBuildFat(){
   // Agrupa por especialista, calculando repasse item a item
   const porTer = {};
   recDoMes.forEach(r => {
-    const ter = r.especialista.trim();
+    let ter = r.especialista.trim();
+        if(/licen.a\s+clinpsi\s+administrativo/i.test(ter)) ter = 'Leticia';
     if(!porTer[ter]) porTer[ter] = {n_pac:0, n_atend:0, fat_total:0, repasse:0, pacientes:new Set(), temRegra:false};
     porTer[ter].fat_total += r.valor;
     porTer[ter].n_atend += 1;
@@ -6933,7 +6935,8 @@ function finImprimirSessoesPorTerapeuta(){
   if(!recDoMes.length){ toast('Nenhuma sessão encontrada para o mês selecionado.'); return; }
   const porTer = {};
   recDoMes.forEach(r=>{
-    const ter = r.especialista.trim();
+    let ter = r.especialista.trim();
+        if(/licen.a\s+clinpsi\s+administrativo/i.test(ter)) ter = 'Leticia';
     if(!porTer[ter]) porTer[ter] = [];
     porTer[ter].push(r);
   });
