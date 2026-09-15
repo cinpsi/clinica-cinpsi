@@ -4910,7 +4910,7 @@ function renderFinanceiro(c){
   <div class="fin-panel" id="fin-panel-repasses">
     <div class="fin-section-header">
       <div class="fin-section-title">Repasses por Terapeuta</div>
-      <button class="btn-ghost" style="margin-right:8px" onclick="finImprimirSessoesPorTerapeuta()">🖨️ Sessões por terapeuta</button>
+      <button class="btn-ghost" style="margin-right:8px" onclick="finExportarSessoesPorTerapeuta()">📊 Exportar sessões (Excel)</button>
       <button class="btn-primary" onclick="finFecharMes()">📁 Fechar mês</button>
     </div>
 
@@ -6930,54 +6930,46 @@ function finRepUpdateRepasse(terapeuta, val){
   toast('Repasse atualizado!');
 }
 
-function finImprimirSessoesPorTerapeuta(){
+async function finExportarSessoesPorTerapeuta(){
   const recDoMes = finLoad(FK.REC).filter(r=>finInMonth(r.data) && r.especialista && r.valor);
   if(!recDoMes.length){ toast('Nenhuma sessão encontrada para o mês selecionado.'); return; }
+  await xlsxEnsureLib();
   const porTer = {};
   recDoMes.forEach(r=>{
     let ter = r.especialista.trim();
-        if(/licen.a\s+clinpsi\s+administrativo/i.test(ter)) ter = 'Leticia';
+    if(/licen.a\s+clinpsi\s+administrativo/i.test(ter)) ter = 'Leticia';
     if(!porTer[ter]) porTer[ter] = [];
     porTer[ter].push(r);
   });
   const terapeutas = Object.keys(porTer).sort((a,b)=>a.localeCompare(b));
-  const periodo = FIN_MONTHS[_finMonth]+' '+_finYear;
-  const hoje = new Date().toLocaleDateString('pt-BR');
-  const blocos = terapeutas.map(ter=>{
+  const wb = XLSX.utils.book_new();
+  const resumoRows = [['Terapeuta','Sessões','Valor Total']];
+  terapeutas.forEach(ter=>{
+    const sessoes = porTer[ter];
+    resumoRows.push([ter, sessoes.length, sessoes.reduce((s,r)=>s+r.valor,0)]);
+  });
+  const wsResumo = XLSX.utils.aoa_to_sheet(resumoRows);
+  wsResumo['!cols'] = [{wch:35},{wch:10},{wch:14}];
+  XLSX.utils.book_append_sheet(wb, wsResumo, 'Resumo');
+  const usedNames = {};
+  terapeutas.forEach(ter=>{
     const sessoes = porTer[ter].slice().sort((a,b)=>a.data.localeCompare(b.data)||String(a.paciente).localeCompare(String(b.paciente)));
-    const linhas = sessoes.map(r=>`<tr>
-        <td>${finFmtDate(r.data)}</td>
-        <td>${esc(r.paciente)}</td>
-        <td>${esc(r.servico||'—')}</td>
-        <td class='r'>${finFmt(r.valor)}</td>
-      </tr>`).join('');
-    return `<div class='bloco-terapeuta'>
-      <h2>${esc(ter)} <span class='count'>(${sessoes.length} ${sessoes.length===1?'sessão':'sessões'})</span></h2>
-      <table><thead><tr><th>Data</th><th>Paciente</th><th>Serviço</th><th class='r'>Valor</th></tr></thead>
-      <tbody>${linhas}</tbody></table>
-    </div>`;
-  }).join('');
-  const w=window.open('','_blank','width=1000,height=700');
-  w.document.write(`<!DOCTYPE html><html><head><title>Sessões por Terapeuta — CINPSI</title>
-  <style>
-    body{font-family:Arial,sans-serif;padding:28px;color:#1a1a1a;font-size:12px}
-    h1{font-size:18px;margin:0 0 4px}
-    .sub{color:#666;font-size:12px;margin-bottom:18px}
-    .bloco-terapeuta{margin-bottom:24px;page-break-inside:avoid}
-    h2{font-size:14px;margin:0 0 8px;border-bottom:2px solid #1a1a1a;padding-bottom:4px}
-    .count{font-size:11px;color:#6b7280;font-weight:400}
-    table{width:100%;border-collapse:collapse;margin-bottom:4px}
-    th{background:#f3f4f6;padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;color:#6b7280}
-    td{padding:6px 8px;border-bottom:1px solid #f0f0f0;font-size:11px}
-    .r{text-align:right}
-    @media print{ body{padding:0} }
-  </style></head><body>
-  <h1>Sessões realizadas por Terapeuta</h1>
-  <div class='sub'>${periodo} · Gerado em ${hoje} · ${recDoMes.length} sessões no total</div>
-  ${blocos}
-  </body></html>`);
-  w.document.close();
-  w.focus();
+    const header = ['Data','Paciente','Serviço','Valor'];
+    const dataRows = sessoes.map(r=>[finFmtDate(r.data), r.paciente, r.servico||'—', r.valor]);
+    const totalValor = sessoes.reduce((s,r)=>s+r.valor,0);
+    const footer = ['','','Total ('+sessoes.length+' sessões)', totalValor];
+    const aoa = [header, ...dataRows, footer];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:12},{wch:35},{wch:30},{wch:14}];
+    let name = ter.replace(/[:\\\/\?\*\[\]]/g, ' ').trim().slice(0,31);
+    if(!name) name = 'Terapeuta';
+    let uniqueName = name, i = 2;
+    while(usedNames[uniqueName]){ uniqueName = (name.slice(0,28) + ' ' + i); i++; }
+    usedNames[uniqueName] = true;
+    XLSX.utils.book_append_sheet(wb, ws, uniqueName);
+  });
+  const periodo = FIN_MONTHS[_finMonth]+'_'+_finYear;
+  XLSX.writeFile(wb, "Sessoes_por_terapeuta_"+periodo+".xlsx");
 }
 function finFecharMes(){
   const now=new Date();
