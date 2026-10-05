@@ -6710,7 +6710,7 @@ function finGetRegras(){
 function finCalcRepasseItem(rec, regra){
   if(!regra) return null; // sem regra = usa % global
   if(regra.tipo === 'fixo_por_consulta'){
-    return regra.valor_fixo;
+    return /domiciliar/i.test(rec.servico||'') ? 125 : regra.valor_fixo; // domiciliar = R$ 125
   }
   if(regra.tipo === 'percentual'){
     const paciente = (rec.paciente||'').trim();
@@ -6747,6 +6747,7 @@ function finBuildFat(){
     }
     porTer[ter].fat_total += r.valor;
     porTer[ter].n_atend += 1;
+    if(/domiciliar/i.test(r.servico||'')) porTer[ter].n_dom = (porTer[ter].n_dom||0) + 1;
     porTer[ter].pacientes.add(r.paciente);
 
     const regra = regras[ter];
@@ -6798,7 +6799,7 @@ function finBuildFat(){
       if(fixo!==null){
         tipo_regra='fixo_por_consulta';
         pct_repasse=null;
-        repasse=fixo*(d.n_atend||d.n_pac||0);
+        { const nd=d.n_dom||0; repasse=fixo*((d.n_atend||d.n_pac||0)-nd)+125*nd; } // atendimento domiciliar = R$ 125
       } else {
         // Sem regra especial: usa % global
         pct_repasse = pctGlobal[terapeuta] ?? null;
