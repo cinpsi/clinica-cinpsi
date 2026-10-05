@@ -6732,7 +6732,7 @@ function finBuildFat(){
 
   // ── FONTE PRINCIPAL: receitas importadas da Doctoralia (mês selecionado) ──
   const todasRec = finLoad(FK.REC);
-  const recDoMes = todasRec.filter(r => finInMonth(r.data) && r.especialista && r.valor);
+  const recDoMes = todasRec.filter(r => finInMonth(r.data) && r.especialista && (r.valor || r.honorario));
 
   // Agrupa por especialista, calculando repasse item a item
   const porTer = {};
@@ -6740,6 +6740,16 @@ function finBuildFat(){
     let ter = r.especialista.trim();
         if(/licen.a\s+clinpsi\s+administrativo/i.test(ter)) ter = 'Leticia';
     if(!porTer[ter]) porTer[ter] = {n_pac:0, n_atend:0, fat_total:0, repasse:0, pacientes:new Set(), temRegra:false};
+    if(!r.valor){ // sessão sem cobrança mas com honorário do especialista (ex.: reposição)
+      porTer[ter].tem_honor = true;
+      porTer[ter].honor_extra = (porTer[ter].honor_extra||0) + (r.honorario||0);
+      return;
+    }
+    if(r.honorario!=null){
+      porTer[ter].tem_honor = true;
+      porTer[ter].honor_sum = (porTer[ter].honor_sum||0) + r.honorario;
+      porTer[ter].n_com_honor = (porTer[ter].n_com_honor||0) + 1;
+    }
     porTer[ter].fat_total += r.valor;
     porTer[ter].n_atend += 1;
     porTer[ter].pacientes.add(r.paciente);
@@ -6801,10 +6811,17 @@ function finBuildFat(){
       }
     }
 
+    // Repasse fixo por consulta: usa os honorários da Doctoralia quando a planilha os trouxe para todos os atendimentos
+    let fonteDoc = false;
+    if(tipo_regra==='fixo_por_consulta' && d.tem_honor && (d.n_com_honor||0)===d.n_atend){
+      repasse = Math.round(((d.honor_sum||0)+(d.honor_extra||0))*100)/100;
+      fonteDoc = true;
+    }
+
     return {
       terapeuta, n_pac: d.n_pac, fat_previsto: d.fat_total,
       pct_repasse, repasse, liquido: d.fat_total - repasse,
-      tipo_regra, tem_regra_especial: !!regra,
+      tipo_regra, tem_regra_especial: !!regra, fonte_doctoralia: fonteDoc,
     };
   });
 }
@@ -6848,7 +6865,7 @@ function finRenderRepasses(){
     tbody.innerHTML=fat.map(r=>{
       let regraCell='';
       if(r.tipo_regra==='fixo_por_consulta'){
-        regraCell=`<span style="font-size:11px;background:var(--teal-light);color:var(--teal);padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap">R$ fixo/consulta</span>`;
+        regraCell=`<span style="font-size:11px;background:var(--teal-light);color:var(--teal);padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap">${r.fonte_doctoralia?'R$ Doctoralia (honorários)':'R$ fixo/consulta'}</span>`;
       } else if(r.tem_regra_especial){
         regraCell=`<span style="font-size:11px;background:var(--purple-light);color:var(--purple);padding:2px 8px;border-radius:20px;font-weight:500;white-space:nowrap">% com exceção</span>`;
       } else {
@@ -10636,11 +10653,12 @@ function finHandleSubstituir(event){
       // Importa as novas do arquivo
       let imp = 0; const docCand=[];
       rows.forEach((row, i) => {
-        let ds = (row['Data']||'').toString().trim();
+        let ds = (row['Data']||'').toString().trim().split(' ')[0];
         if(ds.includes('/')){ const [d,m,y]=ds.split('/'); ds=y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0'); }
         const val = parseFloat((row['Preço']||'0').toString().replace('R$','').replace(/\s/g,'').replace(/\./g,'').replace(',','.'))||0;
+        const honor=docParseHonorario(row);
         { const _pc=(row['Paciente']||'').toString().trim(), _tr=normTer((row['Especialista']||'').toString().trim()); if(_pc&&_tr&&ds) docCand.push({pac:_pc,ter:_tr,servico:(row['Serviços']||'').toString().trim(),ds}); }
-        if(!val||!ds) return;
+        if(!ds||(!val&&!(honor>0))) return;
         const st = (row['Situação do pagamento']||'').toString().trim().toLowerCase()==='pago'?'Pago':'Pendente';
         let forma = (row['Formas de pagamento']||'').toString().trim();
         if(forma==='Nenhum'||forma==='nan') forma='';
@@ -10652,7 +10670,7 @@ function finHandleSubstituir(event){
           paciente:     (row['Paciente']    ||'').toString().trim(),
           especialista: normTer((row['Especialista']||'').toString().trim()),
           servico:      (row['Serviços']    ||'').toString().trim(),
-          forma, status: st, origem: 'doctoralia'
+          forma, status: (val?st:'Pago'), origem: 'doctoralia', honorario: honor
         });
         imp++;
       });
@@ -10813,6 +10831,16 @@ function docCadastrar(i){
   },250);
 }
 
+function docParseHonorario(row){
+  const k=Object.keys(row).find(x=>/honor[aá]rios?\s+d[oa]s?\s+especialistas?/i.test(x));
+  if(!k) return null;
+  const v=row[k];
+  if(v===''||v==null) return null;
+  if(typeof v==='number') return v;
+  const n=parseFloat(String(v).replace('R$','').replace(/\s/g,'').replace(/\./g,'').replace(',','.'));
+  return isNaN(n)?null:n;
+}
+
 function finHandleImport(event){
   const file=event.target.files[0]; if(!file) return;
   const reader=new FileReader();
@@ -10821,14 +10849,14 @@ function finHandleImport(event){
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
       const recs=finLoad(FK.REC);
-      let imp=0, dup=0, novoPac=0, novoLead=0; const docCand=[];
+      let imp=0, dup=0, novoPac=0, novoLead=0; const docCand=[]; let atual=0;
 
       // Carrega pacientes e convertidos para verificar novos
       const pacs=loadPac();
       const conv=loadConvAntigos();
 
       rows.forEach((row,i)=>{
-        let ds=(row['Data']||'').toString().trim();
+        let ds=(row['Data']||'').toString().trim().split(' ')[0];
         if(ds.includes('/')){const [d,m,y]=ds.split('/');ds=y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0');}
         const val=parseFloat((row['Preço']||'0').toString().replace('R$','').replace(/\s/g,'').replace(/\./g,'').replace(',','.'))||0;
         const st=(row['Situação do pagamento']||'').toString().trim().toLowerCase()==='pago'?'Pago':'Pendente';
@@ -10842,13 +10870,14 @@ function finHandleImport(event){
 
         if(!pac||!ter) return;
 
+        const honor=docParseHonorario(row);
         docCand.push({pac,ter,servico,ds});
 
         // Importa receita apenas se tiver valor e data válidos
-        if(!val||!ds) return;
-        const dupCheck=recs.some(r=>r.data===ds&&r.paciente===pac&&r.valor===val);
-        if(dupCheck){dup++;return;}
-        recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:ter,servico,forma,status:st,origem:'doctoralia'});
+        if(!ds||(!val&&!(honor>0))) return;
+        const dupRec=recs.find(r=>r.data===ds&&r.paciente===pac&&r.valor===val&&(val||r.servico===servico));
+        if(dupRec){ if(honor!=null&&dupRec.honorario==null){ dupRec.honorario=honor; atual++; } dup++; return; }
+        recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:ter,servico,forma,status:(val?st:'Pago'),origem:'doctoralia',honorario:honor});
         imp++;
       });
 
@@ -10862,6 +10891,7 @@ function finHandleImport(event){
       let msg=imp+' consulta'+(imp!==1?'s':'')+' importada'+(imp!==1?'s':'');
       if(dup) msg+=` (${dup} duplicada${dup!==1?'s':''} ignorada${dup!==1?'s':''})`;
       if(novoPac) msg+=` · ${novoPac} paciente${novoPac!==1?'s':''} novo${novoPac!==1?'s':''} adicionado${novoPac!==1?'s':''}`;
+      if(atual) msg+=' · '+atual+' com honorário da Doctoralia atualizado';
       toast(msg+' ✅');
     }catch(err){ toast('Erro ao ler o arquivo. ❌'); console.error(err); }
   };
