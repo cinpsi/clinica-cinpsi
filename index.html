@@ -6732,7 +6732,7 @@ function finBuildFat(){
 
   // ── FONTE PRINCIPAL: receitas importadas da Doctoralia (mês selecionado) ──
   const todasRec = finLoad(FK.REC);
-  const recDoMes = todasRec.filter(r => finInMonth(r.data) && r.especialista && (r.valor || r.honorario));
+  const recDoMes = todasRec.filter(r => finInMonth(r.data) && r.especialista && r.valor);
 
   // Agrupa por especialista, calculando repasse item a item
   const porTer = {};
@@ -6740,11 +6740,6 @@ function finBuildFat(){
     let ter = r.especialista.trim();
         if(/licen.a\s+clinpsi\s+administrativo/i.test(ter)) ter = 'Leticia';
     if(!porTer[ter]) porTer[ter] = {n_pac:0, n_atend:0, fat_total:0, repasse:0, pacientes:new Set(), temRegra:false};
-    if(!r.valor){ // sessão sem cobrança mas com honorário do especialista (ex.: reposição)
-      porTer[ter].tem_honor = true;
-      porTer[ter].honor_extra = (porTer[ter].honor_extra||0) + (r.honorario||0);
-      return;
-    }
     if(r.honorario!=null){
       porTer[ter].tem_honor = true;
       porTer[ter].honor_sum = (porTer[ter].honor_sum||0) + r.honorario;
@@ -6814,7 +6809,7 @@ function finBuildFat(){
     // Repasse fixo por consulta: usa os honorários da Doctoralia quando a planilha os trouxe para todos os atendimentos
     let fonteDoc = false;
     if(tipo_regra==='fixo_por_consulta' && d.tem_honor && (d.n_com_honor||0)===d.n_atend){
-      repasse = Math.round(((d.honor_sum||0)+(d.honor_extra||0))*100)/100;
+      repasse = Math.round((d.honor_sum||0)*100)/100;
       fonteDoc = true;
     }
 
@@ -10658,7 +10653,7 @@ function finHandleSubstituir(event){
         const val = parseFloat((row['Preço']||'0').toString().replace('R$','').replace(/\s/g,'').replace(/\./g,'').replace(',','.'))||0;
         const honor=docParseHonorario(row);
         { const _pc=(row['Paciente']||'').toString().trim(), _tr=normTer((row['Especialista']||'').toString().trim()); if(_pc&&_tr&&ds) docCand.push({pac:_pc,ter:_tr,servico:(row['Serviços']||'').toString().trim(),ds}); }
-        if(!ds||(!val&&!(honor>0))) return;
+        if(!val||!ds) return;
         const st = (row['Situação do pagamento']||'').toString().trim().toLowerCase()==='pago'?'Pago':'Pendente';
         let forma = (row['Formas de pagamento']||'').toString().trim();
         if(forma==='Nenhum'||forma==='nan') forma='';
@@ -10874,7 +10869,7 @@ function finHandleImport(event){
         docCand.push({pac,ter,servico,ds});
 
         // Importa receita apenas se tiver valor e data válidos
-        if(!ds||(!val&&!(honor>0))) return;
+        if(!val||!ds) return;
         const dupRec=recs.find(r=>r.data===ds&&r.paciente===pac&&r.valor===val&&(val||r.servico===servico));
         if(dupRec){ if(honor!=null&&dupRec.honorario==null){ dupRec.honorario=honor; atual++; } dup++; return; }
         recs.push({id:Date.now()+i+Math.random(),data:ds,valor:val,paciente:pac,especialista:ter,servico,forma,status:(val?st:'Pago'),origem:'doctoralia',honorario:honor});
