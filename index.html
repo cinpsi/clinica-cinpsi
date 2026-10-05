@@ -4857,6 +4857,7 @@ function renderFinanceiro(c){
     <div class="fin-section-header">
       <div class="fin-section-title">Receitas</div>
       <div style="display:flex;gap:8px">
+        <button class="btn-ghost" style="font-size:13px" onclick="docRender(true)" title="Pacientes da planilha da Doctoralia ainda não cadastrados">👥 Pacientes novos</button>
         <label for="fin-csv-input" class="btn-ghost" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px">📂 Importar Doctoralia</label>
         <label for="fin-csv-subst" class="btn-primary" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-size:13px;background:var(--amber);border:none" title="Apaga as receitas do mês atual e reimporta do zero">🔄 Substituir mês</label>
         <input type="file" id="fin-csv-input" accept=".csv,.xlsx,.xls" onchange="finHandleImport(event)" style="display:none">
@@ -10633,11 +10634,12 @@ function finHandleSubstituir(event){
       let recs = finLoad(FK.REC).filter(r => !finInMonth(r.data));
 
       // Importa as novas do arquivo
-      let imp = 0;
+      let imp = 0; const docCand=[];
       rows.forEach((row, i) => {
         let ds = (row['Data']||'').toString().trim();
         if(ds.includes('/')){ const [d,m,y]=ds.split('/'); ds=y+'-'+m.padStart(2,'0')+'-'+d.padStart(2,'0'); }
         const val = parseFloat((row['Preço']||'0').toString().replace('R$','').replace(/\s/g,'').replace(/\./g,'').replace(',','.'))||0;
+        { const _pc=(row['Paciente']||'').toString().trim(), _tr=normTer((row['Especialista']||'').toString().trim()); if(_pc&&_tr&&ds) docCand.push({pac:_pc,ter:_tr,servico:(row['Serviços']||'').toString().trim(),ds}); }
         if(!val||!ds) return;
         const st = (row['Situação do pagamento']||'').toString().trim().toLowerCase()==='pago'?'Pago':'Pendente';
         let forma = (row['Formas de pagamento']||'').toString().trim();
@@ -10657,6 +10659,7 @@ function finHandleSubstituir(event){
 
       finSave(FK.REC, recs);
       fin_refresh();
+      docMostrarNovos(docCand);
       toast(mes + ' substituído! ' + imp + ' consulta' + (imp!==1?'s':'') + ' importada' + (imp!==1?'s':'') + ' ✅');
     } catch(err){ toast('Erro ao ler o arquivo. ❌'); console.error(err); }
   };
@@ -10684,6 +10687,132 @@ function nomeSup(nome){
   return sups.some(s=>s.toLowerCase()===(nome||'').toLowerCase().trim())?'Supervisora':nome||'—';
 }
 
+// ── PACIENTES NOVOS NA PLANILHA DA DOCTORALIA ─────────────────────────────
+// Compara os pacientes da planilha com os cadastrados e AVISA os que faltam
+// (não cria ficha automática incompleta). Nomes parecidos são sinalizados.
+const DOC_IGN_KEY='cinpsi_doc_ignorados';
+const DOC_PEND_KEY='cinpsi_doc_pendentes';
+function docNomeTokens(s){
+  const stop=['de','da','do','das','dos','e'];
+  return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase()
+    .replace(/[^a-z\s]/g,' ').split(/\s+/).filter(w=>w&&stop.indexOf(w)<0);
+}
+function docTerKey(s){
+  if(/licen.a\s+clinpsi/i.test(String(s||''))) return 'leticia';
+  return docNomeTokens(s)[0]||'';
+}
+function docChaveNome(s){ return docNomeTokens(s).slice().sort().join(' '); }
+function docLsGet(k){ try{ return JSON.parse(localStorage.getItem(k)||'[]'); }catch(e){ return []; } }
+function docLsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function docBase(){
+  let base=[];
+  try{ base=base.concat(loadPac().map(p=>({nome:p.nome,terapeuta:p.terapeuta}))); }catch(e){}
+  try{ base=base.concat(loadConvAntigos().map(c=>({nome:c.paciente,terapeuta:c.terapeuta}))); }catch(e){}
+  try{ if(typeof getConvertidos==='function') base=base.concat(getConvertidos().map(c=>({nome:c.paciente,terapeuta:c.terapeuta}))); }catch(e){}
+  return base.filter(b=>b.nome);
+}
+function docClassificar(nome, ter, base){
+  const ts=docNomeTokens(nome);
+  if(!ts.length) return {tipo:'existe'};
+  const tset=new Set(ts);
+  let parecido=null;
+  for(const b of base){
+    const qs=docNomeTokens(b.nome);
+    if(!qs.length) continue;
+    const qset=new Set(qs);
+    let inter=0; tset.forEach(w=>{ if(qset.has(w)) inter++; });
+    if(!inter) continue;
+    const igual=inter===tset.size && inter===qset.size;
+    const contido=inter===tset.size || inter===qset.size;
+    const mesmaTer=docTerKey(b.terapeuta)===docTerKey(ter);
+    if(igual) return {tipo:'existe'};
+    if(contido && mesmaTer) return {tipo:'existe'};
+    if((contido || inter>=2) && !parecido) parecido=b;
+  }
+  return parecido?{tipo:'parecido',com:parecido}:{tipo:'novo'};
+}
+function docMostrarNovos(cands){
+  const pend=docLsGet(DOC_PEND_KEY);
+  (cands||[]).forEach(c=>{
+    const k=docChaveNome(c.pac)+'|'+docTerKey(c.ter);
+    let m=pend.find(x=>x.k===k);
+    if(!m){ m={k, paciente:c.pac, terapeuta:c.ter, servico:c.servico, primeira:c.ds, sessoes:0}; pend.push(m); }
+    m.sessoes++;
+    if(c.ds && (!m.primeira || c.ds<m.primeira)) m.primeira=c.ds;
+  });
+  docLsSet(DOC_PEND_KEY,pend);
+  docRender(true);
+}
+function docRender(avisoVazio){
+  const base=docBase(), ign=docLsGet(DOC_IGN_KEY);
+  const lista=[];
+  docLsGet(DOC_PEND_KEY).forEach(m=>{
+    if(ign.indexOf(docChaveNome(m.paciente))>=0) return;
+    const cl=docClassificar(m.paciente,m.terapeuta,base);
+    if(cl.tipo==='existe') return;
+    m.tipo=cl.tipo;
+    m.com=cl.com?(cl.com.nome+(cl.com.terapeuta?' ('+cl.com.terapeuta+')':'')):'';
+    lista.push(m);
+  });
+  docLsSet(DOC_PEND_KEY,lista.map(m=>({k:m.k,paciente:m.paciente,terapeuta:m.terapeuta,servico:m.servico,primeira:m.primeira,sessoes:m.sessoes})));
+  lista.sort((a,b)=>a.paciente.localeCompare(b.paciente));
+  window._docView=lista;
+  const old=document.getElementById('doc-novos-ov'); if(old) old.remove();
+  if(!lista.length){ if(avisoVazio) toast('Nenhum paciente novo pendente de cadastro ✅'); return; }
+  const ov=document.createElement('div');
+  ov.id='doc-novos-ov';
+  ov.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+  const linhas=lista.map((m,i)=>`<tr>
+    <td style="padding:8px 6px"><strong>${esc(m.paciente)}</strong>${m.tipo==='parecido'?`<div style="font-size:11px;color:var(--amber,#b7791f);margin-top:2px">⚠️ Parecido com: ${esc(m.com)}</div>`:''}</td>
+    <td style="padding:8px 6px">${esc(m.terapeuta)}</td>
+    <td style="padding:8px 6px">${esc(m.servico||'—')}</td>
+    <td style="padding:8px 6px;white-space:nowrap">${m.primeira?finFmtDate(m.primeira):'—'}</td>
+    <td style="padding:8px 6px;text-align:center">${m.sessoes}</td>
+    <td style="padding:8px 6px;white-space:nowrap;text-align:right">
+      <button class="btn-primary" style="font-size:12px;padding:5px 10px" onclick="docCadastrar(${i})">Cadastrar</button>
+      <button class="btn-ghost" style="font-size:12px;padding:5px 10px" title="Não é paciente / já cadastrado com outro nome" onclick="docIgnorar(${i})">Ignorar</button>
+    </td></tr>`).join('');
+  ov.innerHTML=`<div style="background:var(--surface,#fff);border-radius:12px;max-width:920px;width:100%;max-height:85vh;overflow:auto;padding:22px 24px;box-shadow:0 10px 40px rgba(0,0,0,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <div style="font-size:18px;font-weight:600">👥 Pacientes novos na planilha (${lista.length})</div>
+      <button class="btn-ghost" onclick="docFechar()">Fechar</button>
+    </div>
+    <div style="font-size:13px;color:var(--text3,#777);margin-bottom:14px">Estes pacientes aparecem na planilha da Doctoralia mas não estão cadastrados. Clique em <strong>Cadastrar</strong> para abrir a ficha já preenchida. Para voltar a esta lista depois, use o botao <strong>👥 Pacientes novos</strong> em Financeiro → Receitas.</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="text-align:left;border-bottom:1px solid var(--border2,#ddd)"><th style="padding:6px">Paciente</th><th style="padding:6px">Terapeuta</th><th style="padding:6px">Serviço</th><th style="padding:6px">1ª sessão</th><th style="padding:6px;text-align:center">Sessões</th><th></th></tr></thead>
+      <tbody>${linhas}</tbody>
+    </table></div>`;
+  document.body.appendChild(ov);
+}
+function docFechar(){ const o=document.getElementById('doc-novos-ov'); if(o) o.remove(); }
+function docIgnorar(i){
+  const m=(window._docView||[])[i]; if(!m) return;
+  const ign=docLsGet(DOC_IGN_KEY); ign.push(docChaveNome(m.paciente)); docLsSet(DOC_IGN_KEY,ign);
+  docRender(false);
+}
+function docCadastrar(i){
+  const m=(window._docView||[])[i]; if(!m) return;
+  docFechar();
+  showView('pacientes');
+  setTimeout(function(){
+    try{
+      if(typeof addPacOpen==='undefined'||!addPacOpen) toggleAddPac();
+      const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value=v||''; };
+      set('np-nome',m.paciente);
+      set('np-inicio',m.primeira);
+      set('np-queixa',m.servico);
+      const sel=document.getElementById('np-ter');
+      if(sel){
+        let opt=[...sel.options].find(o=>o.value===m.terapeuta)||[...sel.options].find(o=>o.value&&docTerKey(o.value)===docTerKey(m.terapeuta));
+        if(!opt){ opt=document.createElement('option'); opt.value=m.terapeuta; opt.textContent=m.terapeuta; sel.appendChild(opt); }
+        sel.value=opt.value;
+      }
+      const wrap=document.getElementById('add-pac-wrap'); if(wrap) wrap.scrollIntoView({behavior:'smooth',block:'center'});
+      toast('Ficha pré-preenchida: complete os dados e salve. Depois use 👥 Pacientes novos para continuar a lista.');
+    }catch(e){ console.error(e); }
+  },250);
+}
+
 function finHandleImport(event){
   const file=event.target.files[0]; if(!file) return;
   const reader=new FileReader();
@@ -10692,7 +10821,7 @@ function finHandleImport(event){
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:false});
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''});
       const recs=finLoad(FK.REC);
-      let imp=0, dup=0, novoPac=0, novoLead=0;
+      let imp=0, dup=0, novoPac=0, novoLead=0; const docCand=[];
 
       // Carrega pacientes e convertidos para verificar novos
       const pacs=loadPac();
@@ -10713,26 +10842,7 @@ function finHandleImport(event){
 
         if(!pac||!ter) return;
 
-        // Cria paciente na supervisão se não existir (independente de valor)
-        if(!pacs.find(p=>p.nome.toLowerCase()===pac.toLowerCase()&&(p.terapeuta||'').toLowerCase()===ter.toLowerCase())){
-          pacs.push({
-            id:'doc_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2),
-            nome:pac, terapeuta:ter, idade:'', inicio:ds,
-            queixa:servico, telefone:'', origem:'Doctoralia', obs:'', fromLead:true
-          });
-          novoPac++;
-        }
-
-        // Cria lead convertido se não existir (independente de valor)
-        if(!conv.find(c=>(c.paciente||'').toLowerCase()===pac.toLowerCase()&&(c.terapeuta||'').toLowerCase()===ter.toLowerCase())){
-          conv.push({
-            id:'ca_doc_'+Date.now()+'_'+i+'_'+Math.random().toString(36).slice(2),
-            paciente:pac, terapeuta:ter, valor:null,
-            origem:'Doctoralia', servico, status:'Fechado',
-            observacao:'Paciente antigo', leadConvertido:false, ativo:true, data:ds
-          });
-          novoLead++;
-        }
+        docCand.push({pac,ter,servico,ds});
 
         // Importa receita apenas se tiver valor e data válidos
         if(!val||!ds) return;
@@ -10746,6 +10856,8 @@ function finHandleImport(event){
       if(novoPac>0) savePac(pacs);
       if(novoLead>0) saveConvAntigos(conv);
       fin_refresh();
+
+      docMostrarNovos(docCand);
 
       let msg=imp+' consulta'+(imp!==1?'s':'')+' importada'+(imp!==1?'s':'');
       if(dup) msg+=` (${dup} duplicada${dup!==1?'s':''} ignorada${dup!==1?'s':''})`;
