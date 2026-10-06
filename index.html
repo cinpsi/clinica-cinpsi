@@ -620,6 +620,77 @@ let _fbReady=false;
 let _cache={};
 let _currentView=null;
 
+// ── ENTRADA AUTOMÁTICA DE LEADS (WhatsApp via Activepieces) ──────────────
+// O Activepieces grava cada contato novo em 'entrada_leads' (Firestore).
+// Aqui o sistema importa para a lista de Leads (sem duplicar telefone) e apaga o registro de entrada.
+function leadsFone(s){ let d=String(s||'').replace(/\D/g,''); if(d.length>11&&d.indexOf('55')===0) d=d.slice(2); return d; }
+function leadsMesmoFone(a,b){
+  const x=leadsFone(a), y=leadsFone(b);
+  if(!x||!y) return false;
+  const n=Math.min(8,x.length,y.length);
+  return n>=8 && x.slice(-n)===y.slice(-n);
+}
+async function leadsEntradaProcessar(docs){
+  if(window._leadsEntradaBusy) return;
+  window._leadsEntradaBusy=true;
+  try{
+    for(const d of docs){
+      // reivindica o registro: apenas um navegador consegue apaga-lo e importa-lo
+      let ganhou=false;
+      try{
+        ganhou=await _db.runTransaction(async tx=>{
+          const s=await tx.get(d.ref);
+          if(!s.exists) return false;
+          tx.delete(d.ref);
+          return true;
+        });
+      }catch(e){ console.warn('entrada_leads:',e); continue; }
+      if(!ganhou) continue;
+      const x=d.data||{};
+      const tel=String(x.telefone||'').trim();
+      const nome=String(x.nome||'').trim();
+      const msg=String(x.mensagem||'').trim().slice(0,500);
+      if(!leadsFone(tel)) continue;
+      const hoje=new Date().toISOString().slice(0,10);
+      const hojeBR=hoje.split('-').reverse().join('/');
+      const leads=loadLeads();
+      const existente=leads.find(l=>leadsMesmoFone(l.telefone,tel));
+      if(existente){
+        if(msg){
+          existente.observacao=((existente.observacao?existente.observacao+'\n':'')+'WhatsApp '+hojeBR+': '+msg).trim();
+          saveLeads(leads);
+        }
+        continue;
+      }
+      let pac=null;
+      try{ pac=loadPac().find(p=>leadsMesmoFone(p.telefone,tel)); }catch(e){}
+      if(pac){ toast('📲 WhatsApp de paciente já cadastrado: '+pac.nome); continue; }
+      leads.push({
+        id:'wa_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+        data:hoje, paciente:null, responsavel:nome||'Contato WhatsApp', telefone:tel,
+        nascimento:null, escola:null, origem:'WhatsApp', servico:null, status:'Novo',
+        prox_contato:hoje, terapeuta:null, valor:null,
+        observacao:'Primeira mensagem (WhatsApp): '+msg
+      });
+      saveLeads(leads);
+      toast('📲 Novo lead do WhatsApp: '+(nome||tel));
+    }
+    if(typeof refreshLeads==='function'){ try{ refreshLeads(); }catch(e){} }
+  } finally { window._leadsEntradaBusy=false; }
+}
+function leadsEntradaIniciar(){
+  if(window._leadsEntradaOn||typeof _db==='undefined'||!_db) return;
+  window._leadsEntradaOn=true;
+  // espera os dados da nuvem chegarem antes de gravar qualquer lead
+  setTimeout(function(){
+    _db.collection('entrada_leads').onSnapshot(function(snap){
+      const docs=[];
+      snap.forEach(d=>docs.push({ref:d.ref,data:d.data()}));
+      if(docs.length) leadsEntradaProcessar(docs);
+    }, function(err){ console.warn('entrada_leads indisponível:', err&&err.code); });
+  }, 6000);
+}
+
 async function initFirebase(){
   try{
     const fbApp=firebase.apps.length?firebase.apps[0]:firebase.initializeApp(FIREBASE_CONFIG);
@@ -5094,6 +5165,7 @@ firebase.auth().onAuthStateChanged(function(user){
     const errEl=document.getElementById('google-gate-error');
     if(errEl) errEl.style.display='none';
     initFirebase();
+    try{ leadsEntradaIniciar(); }catch(e){ console.warn(e); }
     if(!tryAutoLogin()){
       document.getElementById('login-screen').style.display='flex';
     }
