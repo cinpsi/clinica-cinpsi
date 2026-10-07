@@ -72,22 +72,22 @@ button:disabled{opacity:.6;cursor:wait}
       {k:'queixa',l:'Queixa',t:'area',r:1},
       {k:'emergenciaNome',l:'Nome do contato de emergência',t:'text',r:0},
       {k:'emergenciaTel',l:'Telefone do contato de emergência',t:'tel',r:0},
-      {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:0},
+      {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:1},
       {k:'notaFiscal',l:'Deseja nota fiscal do serviço?',t:'select',o:SIMNAO,r:1}
     ],
     infantil:[
       {k:'nome',l:'Nome completo da criança',t:'text',r:1},
       {k:'nascimento',l:'Data de nascimento',t:'date',r:1},
-      {k:'cpf',l:'CPF da criança',t:'cpf',r:0},
+      {k:'cpf',l:'CPF da criança',t:'cpf',r:1},
       {k:'celular',l:'Celular do responsável (com DDD)',t:'tel',r:1,ac:'tel'},
       {k:'cep',l:'CEP',t:'cep',r:1},
       {k:'complemento',l:'Rua, número, complemento (apto/bloco)',t:'text',r:1,ac:'street-address'},
       {k:'atendimento',l:'Atendimento',t:'select',o:ATEND,r:1},
       {k:'queixa',l:'Queixa - por que buscam atendimento',t:'area',r:1},
-      {k:'encaminhamento',l:'Possui encaminhamento por escrito?',t:'select',o:SIMNAO,r:0},
-      {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:0},
-      {k:'pai',l:'Nome completo do pai',t:'text',r:0},
-      {k:'mae',l:'Nome completo da mãe',t:'text',r:0},
+      {k:'encaminhamento',l:'Possui encaminhamento por escrito?',t:'select',o:SIMNAO,r:1},
+      {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:1},
+      {k:'pai',l:'Nome completo do pai',t:'text',r:1},
+      {k:'mae',l:'Nome completo da mãe',t:'text',r:1},
       {k:'cpfResponsavel',l:'CPF do responsável',t:'cpf',r:1},
       {k:'email',l:'E-mail do responsável',t:'email',r:1,ac:'email'},
       {k:'notaFiscal',l:'Deseja nota fiscal do serviço?',t:'select',o:SIMNAO,r:1}
@@ -199,7 +199,7 @@ button:disabled{opacity:.6;cursor:wait}
     var corpo={fields:{
       leadId:{stringValue:leadId},
       tipo:{stringValue:tipo},
-      dados:{stringValue:JSON.stringify(dados)},
+      dados:{stringValue:JSON.stringify(Object.assign({},dados,{enviadoEm:new Date().toISOString()}))},
       token:{stringValue:TOKEN}
     }};
     fetch(FB_URL+'?key='+encodeURIComponent(FB_KEY),{
