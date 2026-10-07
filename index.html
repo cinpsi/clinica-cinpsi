@@ -563,6 +563,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <div class="form-group"><label class="form-label">CPF (paciente adulto / responsável)</label><input class="form-input" id="fl-cpf" placeholder="000.000.000-00"></div>
           <div class="form-group"><label class="form-label">CPF da criança (opcional)</label><input class="form-input" id="fl-cpfpac" placeholder="000.000.000-00"></div>
           <div class="form-group"><label class="form-label">Responsável legal (infantil)</label><input class="form-input" id="fl-resplegal" placeholder="Mãe/pai"></div>
+          <div class="form-group"><label class="form-label">Celular informado no formulário</label><input class="form-input" id="fl-tel2" placeholder="Quando diferente do telefone do lead"></div>
           <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="fl-email" type="email" placeholder="email@exemplo.com"></div>
           <div class="form-group full"><label class="form-label">Endereço com CEP</label><input class="form-input" id="fl-endereco" placeholder="Rua, nº, bairro - CEP"></div>
           <div class="form-group"><label class="form-label">Contato de emergência</label><input class="form-input" id="fl-emerg" placeholder="Nome - telefone"></div>
@@ -591,7 +592,6 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <div class="form-group"><label class="form-label">Próximo contato</label><input class="form-input" id="fl-prox" type="date"></div>
           <div class="form-group"><label class="form-label">Terapeuta</label>
             <select class="form-select" id="fl-terapeuta"><option value="">Selecione...</option></select></div>
-          <div class="form-group"><label class="form-label">Valor da sessão (R$)</label><input class="form-input" id="fl-valor" type="number" placeholder="0"></div>
           <div class="form-group full"><label class="form-label">Observação</label><textarea class="form-textarea" id="fl-obs" placeholder="Observações relevantes..."></textarea></div>
         </div>
       </div>
@@ -883,7 +883,11 @@ function leadFormAplicarObj(l){
   }
   if(d.nascimento) l.nascimento=d.nascimento;
   if(d.email) l.email=d.email;
-  if(d.celular&&!leadsFone(l.telefone)) l.telefone=d.celular;
+  if(d.celular){
+    if(!leadsFone(l.telefone)) l.telefone=d.celular;
+    else if(!leadsMesmoFone(l.telefone,d.celular)) l.telefone2=d.celular;
+  }
+  l.status='Fechado'; l.prox_contato=null;
   if(d.notaFiscal) l.notaFiscal=/^s/i.test(d.notaFiscal)?'sim':'nao';
   if(d.queixa) l.queixa=d.queixa;
   const sv=preCadServico(f.tipo,d.atendimento); if(sv&&!l.servico) l.servico=sv;
@@ -2261,7 +2265,7 @@ function kanbanDrop(e,novoStatus){
 let editLeadId=null;
 
 function populateTerapeutaDropdown(selId, val){
-  const ters=loadUsers().filter(u=>u.role==='terapeuta'||u.role==='supervisora').sort((a,b)=>a.nome.localeCompare(b.nome));
+  const ters=loadUsers().filter(u=>(u.role==='terapeuta'||u.role==='supervisora')&&(!/^(luciana|priscila)\b/i.test(u.nome)||normTer(u.nome)===val||u.nome===val)).sort((a,b)=>a.nome.localeCompare(b.nome));
   const sel=document.getElementById(selId);
   if(!sel) return;
   // Usa normTer para garantir que o valor salvo bate com o nome no dropdown
@@ -2285,12 +2289,12 @@ function openLeadModal(id){
   document.getElementById('fl-servico').value=l?.servico||'';
   document.getElementById('fl-status').value=l?.status||'Novo';
   document.getElementById('fl-prox').value=l?.prox_contato||'';
-  document.getElementById('fl-valor').value=l?.valor||'';
   document.getElementById('fl-obs').value=l?.observacao||'';
   document.getElementById('fl-cpf').value=l?.cpf||'';
   document.getElementById('fl-cpfpac').value=l?.cpfPaciente||'';
   document.getElementById('fl-resplegal').value=l?.responsavelLegal||'';
   document.getElementById('fl-email').value=l?.email||'';
+  document.getElementById('fl-tel2').value=l?.telefone2||'';
   document.getElementById('fl-endereco').value=l?.endereco||'';
   document.getElementById('fl-emerg').value=l?.contatoEmergencia||'';
   document.getElementById('fl-nf').value=l?.notaFiscal||'';
@@ -2323,12 +2327,12 @@ function saveLead(){
     status:document.getElementById('fl-status').value,
     prox_contato:document.getElementById('fl-prox').value||null,
     terapeuta:document.getElementById('fl-terapeuta').value||null,
-    valor:document.getElementById('fl-valor').value?Number(document.getElementById('fl-valor').value):null,
     observacao:document.getElementById('fl-obs').value.trim()||null,
     cpf:document.getElementById('fl-cpf').value.trim()||null,
     cpfPaciente:document.getElementById('fl-cpfpac').value.trim()||null,
     responsavelLegal:document.getElementById('fl-resplegal').value.trim()||null,
     email:document.getElementById('fl-email').value.trim()||null,
+    telefone2:document.getElementById('fl-tel2').value.trim()||null,
     endereco:document.getElementById('fl-endereco').value.trim()||null,
     contatoEmergencia:document.getElementById('fl-emerg').value.trim()||null,
     notaFiscal:document.getElementById('fl-nf').value||null,
