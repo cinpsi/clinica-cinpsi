@@ -606,6 +606,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       </div>
     </div>
     <div class="modal-footer">
+      <button class="btn-ghost" id="fl-excluir" style="color:#b91c1c;margin-right:auto;display:none" onclick="excluirLeadModal()">🗑 Excluir lead</button>
       <button class="btn-ghost" onclick="closeLeadModal()">Cancelar</button>
       <button class="btn-save" onclick="saveLead()">Salvar lead</button>
     </div>
@@ -850,6 +851,7 @@ function renderLeadFormulario(l){
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+
     '<button type="button" class="btn-save" onclick="leadFormCopiar(\''+l.id+'\')">Copiar dados (Doctoralia)</button>'+
     '<button type="button" class="btn-ghost" onclick="leadFormAplicar(\''+l.id+'\')">'+(f.aplicado?'✅ Aplicado ao cadastro - aplicar de novo':'Aplicar ao cadastro do lead')+'</button>'+
+    '<button type="button" class="btn-ghost" onclick="leadFormPDF(\''+l.id+'\')">📄 Comprovante (PDF)</button>'+
     '<button type="button" class="btn-ghost" onclick="leadFormDoctoralia(\''+l.id+'\')">'+(f.doctoralia?'✅ Lançado no Doctoralia':'Marcar como lançado no Doctoralia')+'</button>'+
     '</div></div>';
 }
@@ -893,6 +895,23 @@ function leadFormAplicarObj(l){
   const sv=preCadServico(f.tipo,d.atendimento); if(sv&&!l.servico) l.servico=sv;
   if(!l.origem&&d.origem) l.origem=d.origem;
   f.aplicado=true;
+}
+function leadFormPDF(id){
+  const l=loadLeads().find(x=>x.id===id); if(!l||!l.cadastroForm) return;
+  const f=l.cadastroForm, d=f.dados||{};
+  const fmt=iso=>{const t=new Date(iso); return isNaN(t)?'':t.toLocaleDateString('pt-BR')+' às '+t.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});};
+  const env=fmt(d.enviadoEm)||fmt(f.recebidoEm);
+  const rec=fmt(f.recebidoEm);
+  const linhas=Object.keys(PRECAD_ROTULOS).filter(k=>d[k]).map(k=>'<tr><td class="k">'+esc(PRECAD_ROTULOS[k])+'</td><td>'+esc(k==='nascimento'?preCadFmtData(d[k]):d[k])+'</td></tr>').join('');
+  const w=window.open('','_blank'); if(!w){toast('Permita pop-ups para gerar o PDF.');return;}
+  w.document.write('<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Comprovante de cadastro - '+esc(d.nome||'')+'</title><style>body{font-family:Arial,sans-serif;color:#222;margin:32px;max-width:760px}h1{font-size:20px;margin:0 0 4px}h2{font-size:15px;margin:22px 0 8px;color:#444}table{width:100%;border-collapse:collapse;font-size:14px}td{padding:7px 8px;border-bottom:1px solid #ddd;vertical-align:top}td.k{width:36%;color:#555;font-weight:bold}.meta{font-size:12px;color:#555;margin-top:24px;line-height:1.6;border-top:1px solid #bbb;padding-top:10px}@media print{button{display:none}}</style></head><body>'+
+  '<button onclick="window.print()" style="padding:8px 14px;margin-bottom:14px">Imprimir / Salvar como PDF</button>'+
+  '<h1>CINPSI - Centro Integrado de Neurociências e Psicologia</h1>'+
+  '<div style="font-size:13px;color:#555">Comprovante de cadastro preenchido pelo paciente/responsável ('+(f.tipo==='infantil'?'criança e adolescente':'adulto')+')</div>'+
+  '<h2>Dados informados no formulário</h2><table>'+linhas+'</table>'+
+  '<div class="meta">Formulário enviado em: <b>'+esc(env)+'</b><br>Recebido pelo sistema em: '+esc(rec)+'<br>Identificação do lead: '+esc(l.id)+'<br>Registro gerado automaticamente pelo sistema da CINPSI a partir do envio feito pelo próprio paciente/responsável pelo link de cadastro. Os dados acima são exatamente os que foram digitados no formulário.</div>'+
+  '</body></html>');
+  w.document.close();
 }
 function leadFormDoctoralia(id){
   const leads=loadLeads(); const l=leads.find(x=>x.id===id); if(!l||!l.cadastroForm) return;
@@ -2302,6 +2321,7 @@ function openLeadModal(id){
   populateTerapeutaDropdown('fl-terapeuta', l?.terapeuta||'');
   onLeadStatusChange();
   renderLeadFormulario(l);
+  const _ex=document.getElementById('fl-excluir'); if(_ex) _ex.style.display=l?'inline-block':'none';
   document.getElementById('modal-lead').classList.add('open');
 }
 function closeLeadModal(){document.getElementById('modal-lead').classList.remove('open');}
@@ -2352,9 +2372,32 @@ function saveLead(){
   refreshLeads();
 }
 
+function excluirLeadModal(){
+  const id=editLeadId; if(!id) return;
+  const l=loadLeads().find(x=>x.id===id); if(!l) return;
+  if(!confirm('Excluir DEFINITIVAMENTE este lead ('+(l.paciente||l.responsavel)+')? Essa ação não pode ser desfeita.')) return;
+  saveLeads(loadLeads().filter(x=>x.id!==id));
+  try{ savePac(loadPac().filter(p=>p.id!=='lead_'+id)); }catch(e){}
+  closeLeadModal(); refreshLeads(); toast('Lead excluído.');
+}
+function excluirConvertido(id){
+  const todos=getConvertidos(); const p=todos.find(x=>x.id===id); if(!p) return;
+  if(!confirm('Excluir DEFINITIVAMENTE "'+(p.paciente||p.responsavel||'')+'"? Essa ação não pode ser desfeita.')) return;
+  if(String(id).startsWith('lead_')){
+    const lid=String(id).slice(5);
+    saveLeads(loadLeads().filter(l=>l.id!==lid));
+    try{ savePac(loadPac().filter(x=>x.id!==id)); }catch(e){}
+  } else {
+    saveConvAntigos(loadConvAntigos().filter(x=>x.id!==id));
+    try{ savePac(loadPac().filter(x=>x.id!=='conv_'+id)); }catch(e){}
+  }
+  try{ closeConvModal(); }catch(e){}
+  renderConvertidos(document.getElementById('main-content')); toast('Registro excluído.');
+}
 function deleteLead(id){
   if(!confirm('Excluir este lead?'))return;
   saveLeads(loadLeads().filter(l=>l.id!==id));
+  try{ savePac(loadPac().filter(p=>p.id!=='lead_'+id)); }catch(e){}
   refreshLeads(); toast('Lead excluído.');
 }
 
@@ -2513,7 +2556,7 @@ function refreshConv(){
       ?'<span style="font-size:11px;background:#D1FAE5;color:#065F46;padding:2px 8px;border-radius:20px;font-weight:500">Ativo</span>'
       :'<span style="font-size:11px;background:#FEE2E2;color:#991B1B;padding:2px 8px;border-radius:20px;font-weight:500">Inativo</span>'
     }</td>
-    <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--accent)" onclick="duplicarConvertido('${esc(p.id)}')">➕ Duplicar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--purple)" onclick="openTermoModal('${esc(p.id)}')">📄 Termo</button></td>
+    <td><button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap" onclick="openConvModal('${esc(p.id)}')">Editar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--accent)" onclick="duplicarConvertido('${esc(p.id)}')">➕ Duplicar</button> <button class="btn-ghost" style="font-size:12px;padding:5px 9px;white-space:nowrap;color:var(--purple)" onclick="openTermoModal('${esc(p.id)}')">📄 Termo</button> <button class="btn-delete" style="font-size:12px;padding:5px 9px" onclick="excluirConvertido('${esc(p.id)}')">🗑</button></td>
   </tr>`;}).join('');
 }
 
@@ -2723,6 +2766,7 @@ function openConvModal(id){
         </div>
       </div>
       <div class="modal-footer">
+        <button class="btn-ghost" style="color:#b91c1c;margin-right:auto" onclick="excluirConvertido(editConvId)">🗑 Excluir</button>
         <button class="btn-ghost" onclick="closeConvModal()">Cancelar</button>
         <button class="btn-save" onclick="saveConv()">Salvar alterações</button>
       </div>
