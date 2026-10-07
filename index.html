@@ -2394,6 +2394,7 @@ function getConvertidos(){
     modalidade:l.modalidade, valorMensal:l.valorMensal, valorProporcional:l.valorProporcional,
     diaSemana:l.diaSemana, nascimento:l.nascimento, escola:l.escola,
     notaFiscal:l.notaFiscal,
+    cpf:l.cpf, responsavelLegal:l.responsavelLegal, cpfPaciente:l.cpfPaciente, email:l.email, endereco:l.endereco, contatoEmergencia:l.contatoEmergencia, queixa:l.queixa, telefone2:l.telefone2, pai:l.pai, mae:l.mae,
     ativo:l.ativo!==false,
     fromLead:true, leadConvertido:true
   }));
@@ -2704,6 +2705,13 @@ function openConvModal(id){
               <option value="true">✅ Ativo</option>
               <option value="false">⛔ Inativo</option>
             </select></div>
+          <div class="form-group"><label class="form-label">CPF da criança</label><input class="form-input" id="ec-cpfpac" placeholder="000.000.000-00"></div>
+          <div class="form-group"><label class="form-label">E-mail</label><input class="form-input" id="ec-email" placeholder="email@exemplo.com"></div>
+          <div class="form-group"><label class="form-label">Celular 2 (formulário)</label><input class="form-input" id="ec-tel2"></div>
+          <div class="form-group full"><label class="form-label">Endereço com CEP</label><input class="form-input" id="ec-endereco"></div>
+          <div class="form-group"><label class="form-label">Contato de emergência</label><input class="form-input" id="ec-emerg"></div>
+          <div class="form-group"><label class="form-label">Pai / Mãe</label><input class="form-input" id="ec-paimae" placeholder="Nomes"></div>
+          <div class="form-group full"><label class="form-label">Queixa</label><textarea class="form-textarea" id="ec-queixa"></textarea></div>
           <div class="form-group full"><label class="form-label">Observação</label>
             <textarea class="form-textarea" id="ec-obs"></textarea></div>
           <div class="form-group full">
@@ -2762,6 +2770,13 @@ function openConvModal(id){
   document.getElementById('ec-escola').value=p.escola||'';
   document.getElementById('ec-resp-legal').value=p.responsavelLegal||'';
   document.getElementById('ec-cpf').value=p.cpf||'';
+  document.getElementById('ec-cpfpac').value=p.cpfPaciente||'';
+  document.getElementById('ec-email').value=p.email||'';
+  document.getElementById('ec-tel2').value=p.telefone2||'';
+  document.getElementById('ec-endereco').value=p.endereco||'';
+  document.getElementById('ec-emerg').value=p.contatoEmergencia||'';
+  document.getElementById('ec-paimae').value=[p.pai,p.mae].filter(Boolean).join(' / ');
+  document.getElementById('ec-queixa').value=p.queixa||'';
   document.getElementById('ec-nf').value=p.notaFiscal==='sim'?'sim':'nao';
   // Modalidade
   const mod=p.modalidade||'mensal';
@@ -2826,6 +2841,7 @@ function saveConv(){
       ...prevCampos,
       ativo:ativoVal,
       notaFiscal:document.getElementById('ec-nf').value||'nao',
+      cpfPaciente:document.getElementById('ec-cpfpac').value.trim()||null, email:document.getElementById('ec-email').value.trim()||null, telefone2:document.getElementById('ec-tel2').value.trim()||null, endereco:document.getElementById('ec-endereco').value.trim()||null, contatoEmergencia:document.getElementById('ec-emerg').value.trim()||null, queixa:document.getElementById('ec-queixa').value.trim()||null,
       observacao:document.getElementById('ec-obs').value.trim()||null,
     };
     saveLeads(leadsAll);
@@ -2847,6 +2863,7 @@ function saveConv(){
         ...prevCampos,
         ativo:ativoVal,
         notaFiscal:document.getElementById('ec-nf').value||'nao',
+      cpfPaciente:document.getElementById('ec-cpfpac').value.trim()||null, email:document.getElementById('ec-email').value.trim()||null, telefone2:document.getElementById('ec-tel2').value.trim()||null, endereco:document.getElementById('ec-endereco').value.trim()||null, contatoEmergencia:document.getElementById('ec-emerg').value.trim()||null, queixa:document.getElementById('ec-queixa').value.trim()||null,
         observacao:document.getElementById('ec-obs').value.trim()||null,
       };
       saveConvAntigos(antigos);
