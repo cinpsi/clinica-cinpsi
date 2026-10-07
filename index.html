@@ -581,6 +581,12 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
           <div class="form-group full"><label class="form-label">Observação</label><textarea class="form-textarea" id="fl-obs" placeholder="Observações relevantes..."></textarea></div>
         </div>
       </div>
+      <div id="fl-links" style="display:none;gap:8px;flex-wrap:wrap;margin:6px 0 10px;align-items:center">
+        <span style="font-size:12px;color:var(--text3)">Enviar formulário de cadastro:</span>
+        <button type="button" class="btn-ghost" style="font-size:12px;padding:5px 9px" onclick="leadFormLink(editLeadId,'adulto')">🔗 Link adulto</button>
+        <button type="button" class="btn-ghost" style="font-size:12px;padding:5px 9px" onclick="leadFormLink(editLeadId,'infantil')">🔗 Link infantil</button>
+      </div>
+      <div id="fl-formulario"></div>
       <div id="sync-notice" style="display:none;background:var(--green-light);border:1px solid #bddace;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;color:var(--green);margin-top:4px">
         ✅ <strong>Lead Fechado</strong> — ao salvar, este contato será adicionado automaticamente como paciente no módulo de Supervisão Clínica.
       </div>
@@ -714,7 +720,162 @@ function leadsEntradaIniciar(){
       snap.forEach(d=>docs.push({ref:d.ref,data:d.data()}));
       if(docs.length) leadsEntradaProcessar(docs);
     }, function(err){ console.warn('entrada_leads indisponível:', err&&err.code); });
+    // formulários de cadastro preenchidos pelo paciente
+    _db.collection('pre_cadastros').onSnapshot(function(snap){
+      const docs=[];
+      snap.forEach(d=>docs.push({ref:d.ref,data:d.data()}));
+      if(docs.length) preCadProcessar(docs);
+    }, function(err){ console.warn('pre_cadastros indisponível:', err&&err.code); });
   }, 6000);
+}
+
+// ── FORMULÁRIO DE CADASTRO (cadastro.html) ───────────────────────────────
+// O paciente preenche cadastro.html (link com o id do lead). O registro chega em 'pre_cadastros'
+// e é anexado ao lead existente (por id, telefone ou nome) para revisão e cópia ao Doctoralia.
+const PRECAD_ROTULOS={
+  nome:'Nome completo',nascimento:'Data de nascimento',cpf:'CPF',celular:'Celular',email:'E-mail',
+  endereco:'Endereço com CEP',cep:'CEP',complemento:'Endereço / complemento',atendimento:'Atendimento',queixa:'Queixa',
+  emergenciaNome:'Contato de emergência',emergenciaTel:'Telefone de emergência',origem:'Onde nos conheceu',
+  notaFiscal:'Nota fiscal',encaminhamento:'Encaminhamento por escrito',pai:'Nome do pai',mae:'Nome da mãe',
+  cpfResponsavel:'CPF do responsável'
+};
+function preCadNorm(s){return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
+function preCadFmtData(iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));return m?m[3]+'/'+m[2]+'/'+m[1]:String(iso||'');}
+function preCadServico(tipo,at){
+  const inf=tipo==='infantil';
+  if(/psicoterapia/i.test(at)) return inf?'Psicologia Infantil':'Psicologia Adulto';
+  if(/fonoaudiologia/i.test(at)) return inf?'Fonoaudiologia Infantil':'Fonoaudiologia';
+  if(/psicopedagogia/i.test(at)&&!/avalia/i.test(at)) return 'Psicopedagogia';
+  return '';
+}
+async function preCadProcessar(docs){
+  if(window._preCadBusy) return;
+  window._preCadBusy=true;
+  try{
+    for(const d of docs){
+      let ganhou=false;
+      try{
+        ganhou=await _db.runTransaction(async tx=>{
+          const s=await tx.get(d.ref);
+          if(!s.exists) return false;
+          tx.delete(d.ref);
+          return true;
+        });
+      }catch(e){ console.warn('pre_cadastros transação', e); continue; }
+      if(!ganhou) continue;
+      const x=d.data||{};
+      let dados={};
+      try{ dados=JSON.parse(String(x.dados||'{}'))||{}; }catch(e){}
+      const tipo=x.tipo==='infantil'?'infantil':'adulto';
+      const leadId=String(x.leadId||'').trim();
+      try{
+        const leads=loadLeads();
+        const hoje=new Date().toISOString().slice(0,10);
+        const nomeN=preCadNorm(dados.nome);
+        const respN=[preCadNorm(dados.mae),preCadNorm(dados.pai)].filter(Boolean);
+        let lead=leadId?leads.find(l=>l.id===leadId):null;
+        let como=lead?'id':'';
+        if(!lead&&dados.celular){ lead=leads.find(l=>leadsMesmoFone(l.telefone,dados.celular)); if(lead) como='telefone'; }
+        if(!lead&&nomeN){
+          lead=leads.find(l=>preCadNorm(l.paciente)===nomeN||(tipo==='adulto'&&preCadNorm(l.responsavel)===nomeN)||(respN.length&&respN.includes(preCadNorm(l.responsavel))));
+          if(lead) como='nome';
+        }
+        const form={tipo,recebidoEm:new Date().toISOString(),dados,aplicado:false,doctoralia:false};
+        if(lead){
+          lead.cadastroForm=form;
+          lead.observacao=((lead.observacao?lead.observacao+'\n':'')+'Formulário de cadastro recebido em '+preCadFmtData(hoje)).trim();
+          saveLeads(leads);
+          toast('📋 Formulário recebido: '+(lead.paciente||lead.responsavel)+(como==='id'?'':' (localizado por '+como+')'));
+        } else {
+          const nl={
+            id:'form_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+            data:hoje,paciente:tipo==='infantil'?(dados.nome||null):null,responsavel:(tipo==='infantil'?(dados.mae||dados.pai||dados.nome):dados.nome)||'Sem nome',
+            telefone:dados.celular||null,nascimento:dados.nascimento||null,escola:null,origem:'Site',servico:preCadServico(tipo,dados.atendimento)||null,
+            status:'Novo',prox_contato:hoje,terapeuta:null,valor:null,
+            observacao:'Formulário recebido SEM lead correspondente - conferir se já existe cadastro com outro nome/telefone.',
+            cadastroForm:form
+          };
+          leads.push(nl); saveLeads(leads);
+          toast('📋 Formulário recebido sem lead correspondente: criado novo lead ('+nl.responsavel+')');
+        }
+        if(typeof refreshLeads==='function'){ try{ refreshLeads(); }catch(e){} }
+      }catch(e){
+        console.error('Falha ao importar formulário', e);
+        try{ localStorage.setItem('precad_falha_'+Date.now(), JSON.stringify(x)); }catch(_){}
+        toast('⚠️ Um formulário chegou mas houve erro ao importar. Avise o suporte.');
+      }
+    }
+  } finally { window._preCadBusy=false; }
+}
+function leadFormLink(id,tipo){
+  const l=loadLeads().find(x=>x.id===id); if(!l){toast('Salve o lead antes de gerar o link.');return;}
+  const base=location.origin+location.pathname.replace(/[^/]*$/,'')+'cadastro.html';
+  const url=base+'?t='+tipo+'&l='+encodeURIComponent(id);
+  const nome=(l.responsavel||'').split(' ')[0];
+  const msg='Olá'+(nome?', '+nome:'')+'! Para concluirmos o seu agendamento na CINPSI, por favor preencha o cadastro neste link (leva cerca de 2 minutos): '+url;
+  const ok=()=>toast('🔗 Mensagem com o link copiada. É só colar no WhatsApp.');
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(msg).then(ok,()=>prompt('Copie a mensagem:',msg)); }
+  else prompt('Copie a mensagem:',msg);
+}
+function leadFormTexto(l){
+  const f=l.cadastroForm; if(!f) return '';
+  const d=f.dados||{};
+  return Object.keys(PRECAD_ROTULOS).filter(k=>d[k]).map(k=>PRECAD_ROTULOS[k]+': '+(k==='nascimento'?preCadFmtData(d[k]):d[k])).join('\n');
+}
+function renderLeadFormulario(l){
+  const el=document.getElementById('fl-formulario'); if(!el) return;
+  const bt=document.getElementById('fl-links');
+  if(bt) bt.style.display=l?'flex':'none';
+  if(!l||!l.cadastroForm){ el.innerHTML=''; return; }
+  const f=l.cadastroForm, d=f.dados||{};
+  const linhas=Object.keys(PRECAD_ROTULOS).filter(k=>d[k]).map(k=>
+    '<div style="display:flex;gap:8px;font-size:13px;padding:3px 0;border-bottom:1px solid #eee"><span style="min-width:150px;color:var(--text3)">'+esc(PRECAD_ROTULOS[k])+'</span><span style="flex:1;word-break:break-word">'+esc(k==='nascimento'?preCadFmtData(d[k]):d[k])+'</span></div>').join('');
+  el.innerHTML='<div class="form-section"><div class="section-title">📋 Formulário de cadastro ('+(f.tipo==='infantil'?'infantil':'adulto')+') - recebido em '+esc(preCadFmtData(String(f.recebidoEm||'').slice(0,10)))+'</div>'+linhas+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+
+    '<button type="button" class="btn-save" onclick="leadFormCopiar(\''+l.id+'\')">Copiar dados (Doctoralia)</button>'+
+    '<button type="button" class="btn-ghost" onclick="leadFormAplicar(\''+l.id+'\')">'+(f.aplicado?'✅ Aplicado ao cadastro - aplicar de novo':'Aplicar ao cadastro do lead')+'</button>'+
+    '<button type="button" class="btn-ghost" onclick="leadFormDoctoralia(\''+l.id+'\')">'+(f.doctoralia?'✅ Lançado no Doctoralia':'Marcar como lançado no Doctoralia')+'</button>'+
+    '</div></div>';
+}
+function leadFormCopiar(id){
+  const l=loadLeads().find(x=>x.id===id); if(!l||!l.cadastroForm) return;
+  const t=leadFormTexto(l);
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast('📋 Dados copiados.'),()=>prompt('Copie os dados:',t));
+  else prompt('Copie os dados:',t);
+}
+function leadFormAplicar(id){
+  const leads=loadLeads(); const l=leads.find(x=>x.id===id); if(!l||!l.cadastroForm) return;
+  const f=l.cadastroForm, d=f.dados||{}, inf=f.tipo==='infantil';
+  if(inf){
+    if(d.nome) l.paciente=d.nome;
+    if(!l.responsavel||l.responsavel===l.telefone) l.responsavel=d.mae||d.pai||l.responsavel;
+    l.responsavelLegal=d.mae||d.pai||l.responsavelLegal||'';
+    if(d.cpfResponsavel) l.cpf=d.cpfResponsavel;
+    if(d.cpf) l.cpfPaciente=d.cpf;
+    l.endereco=[d.complemento,d.cep].filter(Boolean).join(' - CEP ');
+  } else {
+    if(d.nome){ l.paciente=d.nome; if(!l.responsavel||l.responsavel===l.telefone) l.responsavel=d.nome; }
+    if(d.cpf) l.cpf=d.cpf;
+    if(d.endereco) l.endereco=d.endereco;
+    if(d.emergenciaNome||d.emergenciaTel) l.contatoEmergencia=[d.emergenciaNome,d.emergenciaTel].filter(Boolean).join(' - ');
+  }
+  if(d.nascimento) l.nascimento=d.nascimento;
+  if(d.email) l.email=d.email;
+  if(d.celular&&!leadsFone(l.telefone)) l.telefone=d.celular;
+  if(d.notaFiscal) l.notaFiscal=/^s/i.test(d.notaFiscal)?'sim':'nao';
+  if(d.queixa) l.queixa=d.queixa;
+  const sv=preCadServico(f.tipo,d.atendimento); if(sv&&!l.servico) l.servico=sv;
+  if(!l.origem&&d.origem) l.origem=d.origem;
+  f.aplicado=true;
+  saveLeads(leads);
+  toast('✅ Dados do formulário aplicados ao lead.');
+  openLeadModal(id); refreshLeads();
+}
+function leadFormDoctoralia(id){
+  const leads=loadLeads(); const l=leads.find(x=>x.id===id); if(!l||!l.cadastroForm) return;
+  l.cadastroForm.doctoralia=!l.cadastroForm.doctoralia;
+  saveLeads(leads);
+  renderLeadFormulario(l); refreshLeads();
 }
 
 async function initFirebase(){
@@ -1992,7 +2153,7 @@ function refreshLeads(){
     body.innerHTML=`<div class="data-table"><table>
       <thead><tr><th>Responsável</th><th>Paciente</th><th>Serviço</th><th>Origem</th><th>Status</th><th>Próx. contato</th><th>Terapeuta</th><th></th></tr></thead>
       <tbody>${fl.map(l=>`<tr>
-        <td><strong>${esc(l.responsavel)}</strong><br><span style="font-size:11px;color:var(--text3)">${esc(l.telefone||'')}</span></td>
+        <td><strong>${esc(l.responsavel)}</strong><br><span style="font-size:11px;color:var(--text3)">${esc(l.telefone||'')}</span>${l.cadastroForm?`<br><span style="font-size:10px;background:#e7f3ec;color:#1f6b45;border-radius:8px;padding:1px 6px">📋 ${l.cadastroForm.doctoralia?'Lançado no Doctoralia':'Formulário recebido'}</span>`:''}</td>
         <td>${esc(l.paciente||'—')}</td><td>${esc(l.servico||'—')}</td><td>${esc(l.origem||'—')}</td><td>${esc(l.escola||'—')}</td>
         <td><span class="status-pill ${sClass(l.status)}">${esc(l.status||'')}</span></td>
         <td>${fmtDate(l.prox_contato)}</td><td>${esc(l.terapeuta||'—')}</td>
@@ -2023,7 +2184,7 @@ function refreshLeads(){
             ondragend="kanbanDragEnd(event)"
             onclick="openLeadModal('${l.id}')">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:4px">
-              <div class="kc-name">${esc(l.responsavel)}</div>
+              <div class="kc-name">${esc(l.responsavel)}${l.cadastroForm?` <span title="Formulário de cadastro recebido" style="font-size:11px">📋</span>`:''}</div>
               <span style="font-size:10px;color:var(--text3);cursor:grab;flex-shrink:0;margin-top:2px" title="Arraste para mover">⠿</span>
             </div>
             <div class="kc-service">${esc(l.servico||'—')}</div>
@@ -2109,6 +2270,7 @@ function openLeadModal(id){
   document.getElementById('fl-obs').value=l?.observacao||'';
   populateTerapeutaDropdown('fl-terapeuta', l?.terapeuta||'');
   onLeadStatusChange();
+  renderLeadFormulario(l);
   document.getElementById('modal-lead').classList.add('open');
 }
 function closeLeadModal(){document.getElementById('modal-lead').classList.remove('open');}
@@ -2137,7 +2299,7 @@ function saveLead(){
     valor:document.getElementById('fl-valor').value?Number(document.getElementById('fl-valor').value):null,
     observacao:document.getElementById('fl-obs').value.trim()||null,
   };
-  if(editLeadId){const i=leads.findIndex(l=>l.id===editLeadId);leads[i]=rec;}
+  if(editLeadId){const i=leads.findIndex(l=>l.id===editLeadId);leads[i]=Object.assign({},leads[i],rec);}
   else leads.push(rec);
   saveLeads(leads);
   // SYNC: se Fechado, adiciona como paciente

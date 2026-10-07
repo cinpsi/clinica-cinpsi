@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Cadastro do paciente - CINPSI</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:#f4f1ec;color:#222;line-height:1.45}
+.wrap{max-width:640px;margin:0 auto;padding:18px 16px 40px}
+header{text-align:center;padding:10px 0 4px}
+header img{max-height:64px;max-width:70%}
+h1{font-size:22px;margin:10px 0 4px}
+.sub{color:#555;font-size:14px;margin:0 0 16px}
+.card{background:#fff;border-radius:12px;padding:18px 16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+label{display:block;font-size:13px;font-weight:bold;margin:14px 0 5px;color:#333}
+label .opt{font-weight:normal;color:#888}
+input,select,textarea{width:100%;font-size:16px;padding:11px 12px;border:1px solid #c9c4ba;border-radius:8px;background:#fff;font-family:inherit}
+textarea{min-height:90px;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid #2f6f6a;border-color:#2f6f6a}
+.err{color:#b3261e;font-size:12px;margin-top:4px;display:none}
+.invalid input,.invalid select,.invalid textarea{border-color:#b3261e}
+.invalid .err{display:block}
+.chk{display:flex;gap:10px;align-items:flex-start;margin-top:18px;font-size:13px;font-weight:normal}
+.chk input{width:auto;margin-top:3px}
+button{width:100%;margin-top:20px;padding:14px;font-size:16px;font-weight:bold;color:#fff;background:#2f6f6a;border:0;border-radius:10px;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+.choose{display:flex;flex-direction:column;gap:12px;margin-top:8px}
+.choose a{display:block;text-align:center;padding:16px;border-radius:10px;background:#2f6f6a;color:#fff;text-decoration:none;font-weight:bold}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.ok{text-align:center;padding:24px 8px}
+.ok .ic{font-size:44px}
+.small{font-size:12px;color:#666;margin-top:14px}
+.small a{color:#2f6f6a}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png" alt="CINPSI">
+    <h1 id="titulo">Cadastro do paciente</h1>
+    <p class="sub" id="sub">Preencha os dados abaixo para concluir o seu agendamento.</p>
+  </header>
+  <div class="card" id="box"></div>
+  <p class="small" style="text-align:center">CINPSI - Centro Integrado de Neurociências e Psicologia · Guarulhos/SP</p>
+</div>
+
+<script>
+(function(){
+  var FB_KEY='AIzaSyBX5voXFH6oURfXUdSa_PxsNNFYldhmFKo';
+  var FB_URL='https://firestore.googleapis.com/v1/projects/clinica-gestao/databases/(default)/documents/pre_cadastros';
+  var TOKEN='8d5uC0LDA0pPqRH6KoYf8nOe';
+
+  var q=new URLSearchParams(location.search);
+  var leadId=String(q.get('l')||'').replace(/[^\w-]/g,'').slice(0,60);
+  var tipo=q.get('t')==='infantil'?'infantil':(q.get('t')==='adulto'?'adulto':'');
+
+  var ATEND=['Psicoterapia Online','Psicoterapia Presencial','Consulta Psiquiatra','Fonoaudiologia','Psicopedagogia','Avaliação Neuropsicológica','Avaliação Neuropsicopedagógica'];
+  var ORIG=['Google','Instagram','Indicação','Doctoralia','Outros'];
+  var SIMNAO=['Sim','Não'];
+
+  var CAMPOS={
+    adulto:[
+      {k:'nome',l:'Nome completo',t:'text',r:1,ac:'name'},
+      {k:'nascimento',l:'Data de nascimento',t:'date',r:1,ac:'bday'},
+      {k:'cpf',l:'CPF',t:'cpf',r:1},
+      {k:'celular',l:'Celular (com DDD)',t:'tel',r:1,ac:'tel'},
+      {k:'email',l:'E-mail',t:'email',r:1,ac:'email'},
+      {k:'endereco',l:'Endereço com CEP',t:'text',r:1,ac:'street-address'},
+      {k:'atendimento',l:'Atendimento',t:'select',o:ATEND,r:1},
+      {k:'queixa',l:'Queixa',t:'area',r:1},
+      {k:'emergenciaNome',l:'Nome do contato de emergência',t:'text',r:0},
+      {k:'emergenciaTel',l:'Telefone do contato de emergência',t:'tel',r:0},
+      {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:0},
+      {k:'notaFiscal',l:'Deseja nota fiscal do serviço?',t:'select',o:SIMNAO,r:1}
+    ],
+    infantil:[
+      {k:'nome',l:'Nome completo da criança',t:'text',r:1},
+      {k:'nascimento',l:'Data de nascimento',t:'date',r:1},
+      {k:'cpf',l:'CPF da criança',t:'cpf',r:0},
+      {k:'celular',l:'Celular do responsável (com DDD)',t:'tel',r:1,ac:'tel'},
+      {k:'cep',l:'CEP',t:'cep',r:1},
+      {k:'complemento',l:'Rua, número, complemento (apto/bloco)',t:'text',r:1,ac:'street-address'},
+      {k:'atendimento',l:'Atendimento',t:'select',o:ATEND,r:1},
+      {k:'queixa',l:'Queixa - por que buscam atendimento',t:'area',r:1},
+      {k:'encaminhamento',l:'Possui encaminhamento por escrito?',t:'select',o:SIMNAO,r:0},
+      {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:0},
+      {k:'pai',l:'Nome completo do pai',t:'text',r:0},
+      {k:'mae',l:'Nome completo da mãe',t:'text',r:0},
+      {k:'cpfResponsavel',l:'CPF do responsável',t:'cpf',r:1},
+      {k:'email',l:'E-mail do responsável',t:'email',r:1,ac:'email'},
+      {k:'notaFiscal',l:'Deseja nota fiscal do serviço?',t:'select',o:SIMNAO,r:1}
+    ]
+  };
+
+  var box=document.getElementById('box');
+  function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+  function cpfValido(v){
+    var s=String(v).replace(/\D/g,'');
+    if(s.length!==11||/^(\d)\1{10}$/.test(s)) return false;
+    for(var t=9;t<11;t++){
+      var d=0; for(var c=0;c<t;c++) d+=Number(s[c])*((t+1)-c);
+      d=((10*d)%11)%10; if(d!==Number(s[t])) return false;
+    }
+    return true;
+  }
+  function maskCpf(v){
+    var s=v.replace(/\D/g,'').slice(0,11);
+    return s.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2');
+  }
+
+  if(!tipo){
+    document.getElementById('titulo').textContent='Cadastro do paciente';
+    box.innerHTML='<p style="margin-top:0">Escolha o tipo de cadastro:</p><div class="choose">'+
+      '<a href="?t=adulto'+(leadId?'&l='+encodeURIComponent(leadId):'')+'">Paciente adulto</a>'+
+      '<a href="?t=infantil'+(leadId?'&l='+encodeURIComponent(leadId):'')+'">Criança ou adolescente</a></div>';
+    return;
+  }
+
+  document.getElementById('titulo').textContent=tipo==='infantil'?'Cadastro - Criança e adolescente':'Cadastro - Adulto';
+
+  var html='<form id="f" novalidate autocomplete="on">';
+  CAMPOS[tipo].forEach(function(c){
+    html+='<div class="g" id="g_'+c.k+'"><label for="i_'+c.k+'">'+esc(c.l)+(c.r?' *':' <span class="opt">(opcional)</span>')+'</label>';
+    if(c.t==='select'){
+      html+='<select id="i_'+c.k+'"><option value="">Selecione...</option>'+c.o.map(function(o){return '<option>'+esc(o)+'</option>';}).join('')+'</select>';
+    }else if(c.t==='area'){
+      html+='<textarea id="i_'+c.k+'" maxlength="1500"></textarea>';
+    }else{
+      var type=c.t==='cpf'||c.t==='cep'?'text':c.t;
+      var im=c.t==='cpf'||c.t==='cep'?' inputmode="numeric"':'';
+      var ph=c.t==='cpf'?' placeholder="000.000.000-00"':(c.t==='cep'?' placeholder="00000-000"':'');
+      html+='<input id="i_'+c.k+'" type="'+type+'"'+im+ph+(c.ac?' autocomplete="'+c.ac+'"':'')+' maxlength="200">';
+    }
+    html+='<div class="err" id="e_'+c.k+'">Confira este campo.</div></div>';
+  });
+  html+='<div class="hp"><label>Não preencha<input id="i_site" type="text" tabindex="-1" autocomplete="off"></label></div>';
+  html+='<label class="chk" id="g_lgpd"><input type="checkbox" id="i_lgpd"><span>Li e concordo com o uso dos meus dados para o agendamento e atendimento, conforme a <a href="privacidade.html" target="_blank" rel="noopener">Política de Privacidade</a>.</span></label>';
+  html+='<div class="err" id="e_lgpd">É necessário concordar para enviar.</div>';
+  html+='<button type="submit" id="btn">Enviar cadastro</button><div class="err" id="e_envio" style="text-align:center;margin-top:10px"></div></form>';
+  box.innerHTML=html;
+
+  CAMPOS[tipo].forEach(function(c){
+    var el=document.getElementById('i_'+c.k);
+    if(c.t==='cpf') el.addEventListener('input',function(){el.value=maskCpf(el.value);});
+    if(c.t==='cep'){
+      el.addEventListener('input',function(){
+        var s=el.value.replace(/\D/g,'').slice(0,8);
+        el.value=s.length>5?s.slice(0,5)+'-'+s.slice(5):s;
+      });
+      el.addEventListener('blur',function(){
+        var s=el.value.replace(/\D/g,'');
+        var alvo=document.getElementById('i_complemento');
+        if(s.length===8&&alvo&&!alvo.value){
+          fetch('https://viacep.com.br/ws/'+s+'/json/').then(function(r){return r.json();}).then(function(j){
+            if(j&&!j.erro&&!alvo.value) alvo.value=[j.logradouro,j.bairro,j.localidade&&(j.localidade+'/'+j.uf)].filter(Boolean).join(', ')+', nº ';
+          }).catch(function(){});
+        }
+      });
+    }
+  });
+
+  function marcar(k,bad){
+    var g=document.getElementById('g_'+k); if(!g) return;
+    g.classList.toggle('invalid',!!bad);
+  }
+
+  document.getElementById('f').addEventListener('submit',function(ev){
+    ev.preventDefault();
+    var ok=true, dados={};
+    CAMPOS[tipo].forEach(function(c){
+      var v=String(document.getElementById('i_'+c.k).value||'').trim();
+      var bad=false;
+      if(c.r&&!v) bad=true;
+      if(v&&c.t==='cpf'&&!cpfValido(v)) bad=true;
+      if(v&&c.t==='email'&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) bad=true;
+      if(v&&c.t==='tel'&&v.replace(/\D/g,'').length<10) bad=true;
+      if(v&&c.t==='cep'&&v.replace(/\D/g,'').length!==8) bad=true;
+      marcar(c.k,bad);
+      if(bad) ok=false;
+      dados[c.k]=v;
+    });
+    if(tipo==='infantil'&&!dados.pai&&!dados.mae){marcar('mae',true);document.getElementById('e_mae').textContent='Informe o nome do pai ou da mãe.';ok=false;}
+    var lg=document.getElementById('i_lgpd').checked;
+    document.getElementById('g_lgpd').classList.toggle('invalid',!lg);
+    document.getElementById('e_lgpd').style.display=lg?'none':'block';
+    if(!lg) ok=false;
+    if(!ok){
+      var p=document.querySelector('.invalid'); if(p) p.scrollIntoView({behavior:'smooth',block:'center'});
+      return;
+    }
+    // honeypot: robos preenchem o campo escondido
+    if(document.getElementById('i_site').value){ mostrarOk(); return; }
+
+    var btn=document.getElementById('btn'), er=document.getElementById('e_envio');
+    er.style.display='none'; btn.disabled=true; btn.textContent='Enviando...';
+    var corpo={fields:{
+      leadId:{stringValue:leadId},
+      tipo:{stringValue:tipo},
+      dados:{stringValue:JSON.stringify(dados)},
+      token:{stringValue:TOKEN}
+    }};
+    fetch(FB_URL+'?key='+encodeURIComponent(FB_KEY),{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(corpo)
+    }).then(function(r){
+      if(!r.ok) throw new Error('http '+r.status);
+      mostrarOk();
+    }).catch(function(){
+      btn.disabled=false; btn.textContent='Enviar cadastro';
+      er.textContent='Não foi possível enviar agora. Tente novamente em instantes ou avise a clínica pelo WhatsApp.';
+      er.style.display='block';
+    });
+  });
+
+  function mostrarOk(){
+    document.getElementById('sub').style.display='none';
+    box.innerHTML='<div class="ok"><div class="ic">✅</div><h2>Cadastro enviado!</h2><p>Recebemos os seus dados. Em breve a equipe da CINPSI entra em contato para confirmar o agendamento.</p></div>';
+    window.scrollTo(0,0);
+  }
+})();
+</script>
+</body>
+</html>
