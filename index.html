@@ -671,33 +671,7 @@ async function leadsEntradaProcessar(docs){
       const tel=String(x.telefone||'').trim();
       const nome=String(x.nome||'').trim();
       const msg=String(x.mensagem||'').trim().slice(0,500);
-      if(!leadsFone(tel)){
-        // sem telefone visivel (contato salvo ou perfil empresarial): cria lead "a confirmar" pelo nome
-        const nm=(nome||tel).trim();
-        if(!nm||/mensage[mn]s?/i.test(nm)||/whatsapp/i.test(nm)) continue;
-        const nl=nm.toLowerCase();
-        const hojeS=new Date().toISOString().slice(0,10);
-        const hojeB=hojeS.split('-').reverse().join('/');
-        let pacN=null;
-        try{ pacN=loadPac().find(p=>String(p.nome||'').trim().toLowerCase()===nl||String(p.responsavel||'').trim().toLowerCase()===nl); }catch(e){}
-        if(pacN) continue;
-        const ls=loadLeads();
-        const ex=ls.find(l=>String(l.responsavel||'').trim().toLowerCase()===nl||String(l.paciente||'').trim().toLowerCase()===nl);
-        if(ex){
-          if(msg){ ex.observacao=((ex.observacao?ex.observacao+'\n':'')+'WhatsApp '+hojeB+': '+msg).trim(); saveLeads(ls); }
-          continue;
-        }
-        ls.push({
-          id:'wa_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
-          data:hojeS, paciente:null, responsavel:nm, telefone:'',
-          nascimento:null, escola:null, origem:'WhatsApp', servico:null, status:'Novo',
-          prox_contato:hojeS, terapeuta:null, valor:null,
-          observacao:'TELEFONE A CONFIRMAR (a notificacao nao mostrou o numero). Primeira mensagem (WhatsApp): '+msg
-        });
-        saveLeads(ls);
-        toast('Novo lead WhatsApp (confirmar telefone): '+nm);
-        continue;
-      }
+      if(!leadsFone(tel)) continue; // notificacao sem numero (contato salvo/grupo): ignora
       const hoje=new Date().toISOString().slice(0,10);
       const hojeBR=hoje.split('-').reverse().join('/');
       const leads=loadLeads();
