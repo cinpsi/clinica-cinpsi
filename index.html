@@ -2986,7 +2986,6 @@ function trAlertas(){
       else if(ses.inicio&&trDias(ses.inicio,hoje)>=14)out.push({t,sev:1,msg:`Escola ainda sem data (sessões começaram em ${trFmt(ses.inicio)})`});
     }
     if(ses.inicio&&trDias(ses.inicio,hoje)>=28&&dev.status==='a_agendar')out.push({t,sev:2,msg:`4 semanas de sessões e devolutiva sem agendar`});
-    if(!t.check.doctoralia&&idade>=2)out.push({t,sev:1,msg:'Paciente ainda não cadastrado no Doctoralia'});
     if(!t.check.termo&&idade>=7)out.push({t,sev:1,msg:'Termo de adesão não confirmado'});
   });
   return out.sort((a,b)=>b.sev-a.sev);
@@ -3080,13 +3079,15 @@ function trAbrir(id){
         <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="tr-resp" value="${esc(t.resp||'')}"></div>
         <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="tr-tel" value="${esc(t.tel||'')}"></div>
       </div>
-      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px">${chk('doctoralia','Cadastrado no Doctoralia')}${chk('termo','Termo de adesão assinado')}${chk('forms','Formulários/testes entregues aos pais')}${chk('quest','Questionário da escola enviado')}</div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px">${chk('termo','Termo de adesão assinado')}${chk('forms','Testes entregues aos pais')}${chk('quest','Questionário da escola enviado')}</div>
+      ${trTestesHtml(t)}
       <div style="margin-top:10px;font-size:13px">🧪 Testes${idade===null?'':' ('+idade+' anos)'}: ${faixa?`<a href="${esc(faixa.link)}" target="_blank" rel="noopener">${esc(faixa.label||'abrir pasta')}</a>`:'<span style="color:var(--text3)">configure em ⚙️ Testes por idade</span>'}</div>
       ${etHtml}
       <div class="form-group full" style="margin-top:12px"><label class="form-label">Observações</label><textarea class="form-textarea" id="tr-obs">${esc(t.obs||'')}</textarea></div>
     </div>
     <div class="modal-footer">
       <button class="btn-ghost" style="color:#b91c1c;margin-right:auto" onclick="trEncerrar()">Encerrar trilha</button>
+      <button class="btn-ghost" onclick="trTermo()">🖨️ Termo de adesão</button>
       <button class="btn-ghost" onclick="trCopiarFicha()">📋 Copiar ficha p/ Doctoralia</button>
       <button class="btn-ghost" onclick="trCsv()">⬇️ Planilha</button>
       <button class="btn-ghost" onclick="trWhats()">💬 Lembrete WhatsApp</button>
@@ -3095,6 +3096,26 @@ function trAbrir(id){
   TR_ETAPAS.forEach(x=>{if(t.tipo==='adulto'&&x.k==='escola')return;populateTerapeutaDropdown('tr-'+x.k+'-ter',t.etapas[x.k].ter||'');});
   mo.classList.add('open');
   trPrev();
+}
+function trTestesHtml(t){
+  const L=t.testes||[];
+  if(!L.length) return '<div style="margin-top:8px;font-size:12px;color:var(--text3)">Testes para imprimir: ainda não definidos (peça ao Claude: "monte os testes do '+esc(t.nome)+'").</div>';
+  return '<div style="margin-top:10px;font-size:13px"><strong>🧪 Testes para imprimir</strong> <button class="btn-ghost" style="padding:2px 8px;font-size:12px" onclick="trAbrirTestes()">Abrir todos</button><div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">'+L.map(x=>'<a href="'+esc(x.url)+'" target="_blank" rel="noopener">📄 '+esc(x.nome)+'</a>').join('')+'</div></div>';
+}
+function trAbrirTestes(){
+  const t=loadTrilha().find(x=>x.id===trEditId); if(!t||!(t.testes||[]).length) return;
+  t.testes.forEach(x=>window.open(x.url,'_blank','noopener'));
+}
+function trTermo(){
+  const t=loadTrilha().find(x=>x.id===trEditId);
+  if(!t||!t.convId){toast('Paciente sem cadastro vinculado.');return;}
+  openTermoModal(t.convId);
+  const m=document.getElementById('modal-termo'); if(m) document.body.appendChild(m);
+  const s=(t.etapas&&t.etapas.sessoes)||{};
+  const set=(id,v)=>{const el=document.getElementById(id); if(el&&v!==undefined&&v!==null&&v!=='') el.value=v;};
+  set('tm-vencimento',t.vencimento||'');
+  if(s.modal==='mensal'){ tmSetModalidade('mensal'); set('tm-valor-mensal',s.valorMensal); }
+  else if(s.modal){ tmSetModalidade('sessao'); set('tm-valor-sessao',s.valorSessao); }
 }
 function trFechar(){document.getElementById('modal-trilha')?.classList.remove('open');trEditId=null;}
 function trLerForm(t){
@@ -3136,7 +3157,7 @@ function trFichaTexto(t){
   const L=[];
   L.push('FICHA DE AGENDAMENTO — CINPSI');
   L.push(`Paciente: ${t.nome} | ${t.tipo==='infantil'?'Infantil':'Adulto'} | Nasc.: ${trFmt(t.nasc)} | Resp.: ${t.resp||'—'} | Tel.: ${t.tel||'—'}`);
-  L.push(`Cadastrar no Doctoralia: ${t.check.doctoralia?'JÁ CADASTRADO':'SIM (usar dados do cadastro)'}`);
+  L.push('Paciente no Doctoralia: conferir se já existe; se não existir, cadastrar com os dados do cadastro');
   TR_ETAPAS.forEach(x=>{
     if(t.tipo==='adulto'&&x.k==='escola')return;
     const e=t.etapas[x.k];
