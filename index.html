@@ -2723,7 +2723,7 @@ function openConvModal(id){
           </div>
         </div>
         <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:16px">
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:12px">📅 Previsão de Receita</div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:12px">💳 Cobrança (valor lançado no Doctoralia)</div>
           <div class="form-grid">
             <div class="form-group full"><label class="form-label">Modalidade de cobrança</label>
               <div style="display:flex;gap:8px;margin-top:4px">
@@ -2733,8 +2733,9 @@ function openConvModal(id){
               </div>
             </div>
             <div class="form-group" id="ec-bloco-mensal"><label class="form-label">Valor mensal (R$)</label>
-              <input class="form-input" id="ec-valor-mensal" type="number" placeholder="0,00" step="0.01"></div>
-            <div class="form-group" id="ec-bloco-proporcional"><label class="form-label">💡 Valor proporcional 1º mês (R$)</label>
+              <input class="form-input" id="ec-valor-mensal" type="number" placeholder="0,00" step="0.01" oninput="ecCalcSessao()">
+              <small id="ec-info-sessao" style="color:var(--text3);font-size:11px;margin-top:4px;display:block"></small></div>
+            <div class="form-group" id="ec-bloco-proporcional" style="display:none"><label class="form-label">💡 Valor proporcional 1º mês (R$)</label>
               <input class="form-input" id="ec-valor-proporcional" type="number" placeholder="Deixe em branco se não houver" step="0.01">
               <small style="color:var(--text3);font-size:11px;margin-top:4px;display:block">Usado apenas no mês de entrada. A partir do mês seguinte usa o valor mensal cheio.</small></div>
             <div class="form-group" id="ec-bloco-sessao" style="display:none"><label class="form-label">Valor por sessão (R$)</label>
@@ -2792,7 +2793,17 @@ function ecSetModalidade(tipo){
   });
   document.getElementById('ec-bloco-mensal').style.display=tipo==='mensal'?'block':'none';
   document.getElementById('ec-bloco-sessao').style.display=(tipo==='avulso'||tipo==='unica')?'block':'none';
-  document.getElementById('ec-bloco-dia').style.display=tipo==='avulso'?'block':'none';
+  document.getElementById('ec-bloco-dia').style.display=(tipo==='avulso'||tipo==='mensal')?'block':'none';
+  ecCalcSessao();
+}
+
+// Plano mensal = sempre 4 sessões. Valor por sessão = mensal ÷ 4.
+// 5ª ocorrência do dia da semana no mês: lançada zerada no Doctoralia.
+// 1º mês: sessões restantes × valor por sessão (calculado na ficha de agendamento).
+function ecCalcSessao(){
+  const el=document.getElementById('ec-info-sessao'); if(!el) return;
+  const v=Number(document.getElementById('ec-valor-mensal')?.value||0);
+  el.textContent=v>0?('Plano de 4 sessões: R$ '+(v/4).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})+' por sessão. A 5ª sessão do mês é lançada zerada; no 1º mês cobra-se só as sessões restantes.'):'Plano de 4 sessões: valor por sessão = valor mensal ÷ 4.';
 }
 
 function closeConvModal(){
