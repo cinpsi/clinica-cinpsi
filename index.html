@@ -726,7 +726,7 @@ const PRECAD_ROTULOS={
   endereco:'Endereço com CEP',cep:'CEP',complemento:'Endereço / complemento',atendimento:'Atendimento',queixa:'Queixa',
   emergenciaNome:'Contato de emergência',emergenciaTel:'Telefone de emergência',origem:'Onde nos conheceu',
   notaFiscal:'Nota fiscal',encaminhamento:'Encaminhamento por escrito',pai:'Nome do pai',mae:'Nome da mãe',
-  cpfResponsavel:'CPF do responsável'
+  cpfResponsavel:'CPF do responsável',campanhas:'Aceita campanhas e avisos'
 };
 function preCadNorm(s){return String(s||'').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ');}
 function preCadFmtData(iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));return m?m[3]+'/'+m[2]+'/'+m[1]:String(iso||'');}
