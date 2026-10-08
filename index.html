@@ -901,7 +901,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -1683,6 +1683,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('dash-leads')" id="nav-dash-leads"><span class="nav-icon">📊</span> Dashboard</button>
       <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads</button>
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Pacientes</button>
+      <button class="nav-item" onclick="showView('trilha')" id="nav-trilha"><span class="nav-icon">🧭</span> Trilha de avaliação</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('reunioes')" id="nav-reunioes"><span class="nav-icon">📝</span> Reuniões</button>
       <div class="nav-section">Configurações</div>
@@ -1706,6 +1707,7 @@ const VM={
   'dash-leads':{title:'Dashboard de Leads',sub:'Visão geral e funil de conversão',role:'admin'},
   'leads':{title:'Leads',sub:'Gerencie e acompanhe seus leads',role:'admin'},
   'convertidos':{title:'Pacientes',sub:'Pacientes ativos e histórico',role:'admin'},
+  'trilha':{title:'Trilha de avaliação',sub:'Etapas de entrada do paciente novo',role:'admin'},
   'registros':{title:'Registros de Supervisão',sub:'Histórico de supervisões'},
   'novo-registro':{title:'Novo Registro',sub:'Preencha os dados da supervisão'},
   'detalhe':{title:'Detalhe',sub:''},
@@ -1766,6 +1768,7 @@ function showView(name){
   if(name==='dash-leads') renderDashLeads(c);
   else if(name==='leads') renderLeadsView(c);
   else if(name==='convertidos') renderConvertidos(c);
+  else if(name==='trilha'&&CU.role==='admin') renderTrilha(c);
   else if(name==='faturamento') renderFaturamento(c);
   else if(name==='registros') renderRegistros(c);
   else if(name==='novo-registro') renderNovoRegistro(c);
@@ -2902,6 +2905,288 @@ function saveConv(){
   closeConvModal();
   renderConvertidos(document.getElementById('main-content'));
   toast('Convertido atualizado! ✅');
+}
+
+// ════════════════════════════════════════════════════════════
+// TRILHA DE AVALIAÇÃO — jornada de entrada do paciente (só admin)
+// Dados em 'cl_trilha' (lista) e 'cl_trilha_cfg' (links de testes por idade).
+// O agendamento em si é feito no Doctoralia; aqui fica o controle das etapas.
+// ════════════════════════════════════════════════════════════
+const TR_KEY='cl_trilha', TR_CFG='cl_trilha_cfg';
+const loadTrilha=()=>load(TR_KEY)||[];
+const saveTrilha=d=>store(TR_KEY,d);
+const loadTrCfg=()=>load(TR_CFG)||{faixas:[]};
+const saveTrCfg=d=>store(TR_CFG,d);
+const TR_ETAPAS=[
+  {k:'anamnese',nome:'Anamnese com os pais',serv:'Anamnese psicológica',ico:'👪'},
+  {k:'escola',nome:'Escola',serv:'Orientação aos pais',ico:'🏫'},
+  {k:'sessoes',nome:'Sessões com a criança',serv:'Psicoterapia Criança',ico:'🧸'},
+  {k:'devolutiva',nome:'Devolutiva com os pais',serv:'Orientação aos pais',ico:'📋'}
+];
+const TR_ST={a_agendar:'A agendar',agendado:'Agendado',realizado:'Realizado',cancelado:'Cancelado'};
+const TR_COR={a_agendar:'#b45309',agendado:'#1d4ed8',realizado:'#15803d',cancelado:'#6b7280'};
+let trEditId=null;
+
+const trHoje=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const trDias=(a,b)=>Math.round((new Date(b+'T12:00:00')-new Date(a+'T12:00:00'))/86400000);
+const trAddDias=(iso,n)=>{const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const trFmt=iso=>iso?iso.split('-').reverse().join('/'):'—';
+const trIdade=nasc=>{if(!nasc)return null;const n=new Date(nasc+'T12:00:00'),h=new Date();let a=h.getFullYear()-n.getFullYear();const m=h.getMonth()-n.getMonth();if(m<0||(m===0&&h.getDate()<n.getDate()))a--;return a;};
+const trMoeda=v=>(Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+function trEtapaVazia(k){const e=TR_ETAPAS.find(x=>x.k===k);return {status:'a_agendar',data:'',hora:'',ter:'',servico:e.serv,valor:''};}
+function trNova(p){
+  const idade=trIdade(p.nascimento);
+  const infantil=idade!==null?idade<18:/infantil|crian|adolesc/i.test(p.servico||'');
+  const et={};TR_ETAPAS.forEach(e=>et[e.k]=trEtapaVazia(e.k));
+  et.sessoes={...et.sessoes,inicio:'',fim:'',dia:'',freq:p.frequencia==='quinzenal'?'quinzenal':'semanal',modal:p.modalidade||'mensal',valorMensal:p.valorMensal||'',valorSessao:p.modalidade==='mensal'?'':(p.valor||'')};
+  return {id:'tr_'+Date.now()+'_'+Math.floor(Math.random()*1000),nome:p.paciente||p.responsavel||'',tipo:infantil?'infantil':'adulto',
+    nasc:p.nascimento||'',resp:p.responsavelLegal||p.responsavel||'',tel:p.telefone||'',email:p.email||'',convId:p.id||'',
+    criado:trHoje(),encerrada:false,etapas:et,check:{doctoralia:false,termo:false,forms:false,quest:false},obs:''};
+}
+// Etapa mostrada: agendado com data já passada vale como realizado (presumido)
+function trStatusVis(e){return(e.status==='agendado'&&e.data&&e.data<trHoje())?'realizado':e.status;}
+
+// ── Cálculo das datas e valores da recorrência (regra de cobrança) ──
+// Mensal: valor por sessão = mensal ÷ 4; a 5ª ocorrência do dia no mês fica zerada;
+//   1º mês = só as sessões que restam × valor por sessão.
+// Por sessão: valor combinado; quinzenal = a cada 14 dias (mês pode ter 3).
+// Única: só a data de início.
+function trSessoesCalc(s){
+  if(!s||!s.inicio) return [];
+  const fim=s.fim||(s.inicio.slice(0,4)+'-12-31');
+  const passo=s.freq==='quinzenal'?14:7;
+  const out=[];let d=s.inicio,n=0;
+  const vSess=s.modal==='mensal'?(Number(s.valorMensal)||0)/4:(Number(s.valorSessao)||0);
+  while(d<=fim&&n<80){
+    const dia=new Date(d+'T12:00:00').getDate();
+    let v=vSess;
+    if(s.modal==='mensal'&&Math.ceil(dia/7)>=5) v=0;
+    out.push({data:d,v});
+    n++;
+    if(s.modal==='unica') break;
+    d=trAddDias(d,passo);
+  }
+  return out;
+}
+
+// ── Alertas (só para o admin cobrar) ──
+function trAlertas(){
+  const hoje=trHoje(),out=[];
+  loadTrilha().filter(t=>!t.encerrada).forEach(t=>{
+    const E=t.etapas,idade=trDias(t.criado,hoje);
+    const dev=E.devolutiva,esc=E.escola,ses=E.sessoes;
+    TR_ETAPAS.forEach(x=>{
+      if(t.tipo==='adulto'&&(x.k==='escola'))return;
+      const e=E[x.k];
+      if(e.status==='a_agendar'&&idade>=3&&!(x.k==='escola'))out.push({t,sev:idade>=7?2:1,msg:`${x.nome}: sem agendamento há ${idade} dias`});
+    });
+    if(t.tipo==='infantil'&&esc.status==='a_agendar'){
+      if(dev.data&&dev.status!=='realizado'&&trDias(hoje,dev.data)<=14&&trDias(hoje,dev.data)>=0)out.push({t,sev:2,msg:`Escola sem data e devolutiva em ${trDias(hoje,dev.data)} dias`});
+      else if(ses.inicio&&trDias(ses.inicio,hoje)>=14)out.push({t,sev:1,msg:`Escola ainda sem data (sessões começaram em ${trFmt(ses.inicio)})`});
+    }
+    if(ses.inicio&&trDias(ses.inicio,hoje)>=28&&dev.status==='a_agendar')out.push({t,sev:2,msg:`4 semanas de sessões e devolutiva sem agendar`});
+    if(!t.check.doctoralia&&idade>=2)out.push({t,sev:1,msg:'Paciente ainda não cadastrado no Doctoralia'});
+    if(!t.check.termo&&idade>=7)out.push({t,sev:1,msg:'Termo de adesão não confirmado'});
+  });
+  return out.sort((a,b)=>b.sev-a.sev);
+}
+function trProxima(t){
+  const hoje=trHoje();
+  for(const x of TR_ETAPAS){
+    if(t.tipo==='adulto'&&x.k==='escola')continue;
+    const e=t.etapas[x.k],st=trStatusVis(e);
+    if(st==='agendado'&&e.data>=hoje)return x.ico+' '+x.nome+' — '+trFmt(e.data)+(e.hora?' '+e.hora:'');
+    if(st==='a_agendar')return '⚠️ Agendar: '+x.nome;
+  }
+  return '✅ Trilha concluída';
+}
+
+// ── Tela principal ──
+function renderTrilha(c){
+  const lista=loadTrilha();
+  const emAnd=lista.filter(t=>!t.encerrada);
+  const nomes=new Set(lista.map(t=>(t.nome||'').toLowerCase()));
+  const lim=trAddDias(trHoje(),-90);
+  const cand=getConvertidos().filter(p=>p.ativo!==false&&p.fromLead&&p.status==='Fechado'&&(p.data||'')>=lim&&!nomes.has((p.paciente||p.responsavel||'').toLowerCase()));
+  const al=trAlertas();
+  c.innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
+    <div class="stat-card"><div class="stat-label">Em andamento</div><div class="stat-value">${emAnd.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Alertas para cobrar</div><div class="stat-value" style="color:${al.length?'#b91c1c':'inherit'}">${al.length}</div></div>
+    <div class="stat-card"><div class="stat-label">Fechados sem trilha</div><div class="stat-value">${cand.length}</div></div>
+  </div>
+  ${al.length?`<div class="data-table" style="margin-bottom:18px;padding:14px 16px"><div class="section-title">🔔 Para cobrar / agir</div>${al.map(a=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;align-items:center"><span>${a.sev>1?'🔴':'🟡'}</span><strong style="min-width:180px">${esc(a.t.nome)}</strong><span style="flex:1;color:var(--text2)">${esc(a.msg)}</span><button class="btn-ghost" onclick="trAbrir('${a.t.id}')">Abrir</button></div>`).join('')}</div>`:''}
+  ${cand.length?`<div class="data-table" style="margin-bottom:18px;padding:14px 16px"><div class="section-title">🆕 Fechados sem trilha (últimos 90 dias)</div>${cand.map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;align-items:center"><strong style="min-width:220px">${esc(p.paciente||p.responsavel)}</strong><span style="flex:1;color:var(--text2)">${esc(p.servico||'')} · ${esc(p.terapeuta||'sem terapeuta')} · fechado em ${trFmt(p.data)}</span><button class="btn-primary" onclick="trIniciar('${esc(p.id)}')">Iniciar trilha</button></div>`).join('')}</div>`:''}
+  <div class="data-table"><table>
+    <thead><tr><th>Paciente</th><th>Idade</th><th>Anamnese</th><th>Escola</th><th>Sessões</th><th>Devolutiva</th><th>Próxima ação</th><th></th></tr></thead>
+    <tbody>${emAnd.map(t=>{const id=trIdade(t.nasc);return`<tr><td><strong>${esc(t.nome)}</strong><br><small style="color:var(--text3)">${t.tipo==='infantil'?'Infantil':'Adulto'}</small></td><td>${id===null?'—':id+' anos'}</td>${TR_ETAPAS.map(x=>{if(t.tipo==='adulto'&&x.k==='escola')return'<td>—</td>';const e=t.etapas[x.k],st=trStatusVis(e);return`<td><span style="font-size:11px;font-weight:600;color:${TR_COR[st]}">${TR_ST[st]}</span>${(e.data||e.inicio)?`<br><small>${trFmt(e.data||e.inicio)}</small>`:''}</td>`;}).join('')}<td style="font-size:12px">${esc(trProxima(t))}</td><td><button class="btn-ghost" onclick="trAbrir('${t.id}')">Abrir</button></td></tr>`;}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Nenhuma trilha em andamento. Use "Fechados sem trilha" acima ou o botão + Nova trilha.</td></tr>'}</tbody>
+  </table></div>
+  ${lista.some(t=>t.encerrada)?`<p style="color:var(--text3);font-size:12px;margin-top:10px">${lista.filter(t=>t.encerrada).length} trilha(s) encerrada(s) não exibida(s).</p>`:''}`;
+  const acts=document.getElementById('topbar-actions');
+  if(acts)acts.innerHTML=`<button class="btn-ghost" onclick="trCfgAbrir()" style="margin-right:8px">⚙️ Testes por idade</button><button class="btn-primary" onclick="trNovaManual()">+ Nova trilha</button>`;
+}
+function trIniciar(convId){
+  const p=getConvertidos().find(x=>String(x.id)===String(convId));if(!p)return;
+  const lista=loadTrilha();const t=trNova(p);lista.push(t);saveTrilha(lista);
+  renderTrilha(document.getElementById('main-content'));trAbrir(t.id);
+}
+function trNovaManual(){
+  const nome=prompt('Nome do paciente:');if(!nome)return;
+  const p=getConvertidos().find(x=>(x.paciente||'').toLowerCase()===nome.trim().toLowerCase())||{paciente:nome.trim()};
+  const lista=loadTrilha();const t=trNova(p);lista.push(t);saveTrilha(lista);
+  renderTrilha(document.getElementById('main-content'));trAbrir(t.id);
+}
+
+// ── Ficha de agendamento (modal) ──
+function trAbrir(id){
+  trEditId=id;
+  const t=loadTrilha().find(x=>x.id===id);if(!t)return;
+  let mo=document.getElementById('modal-trilha');
+  if(!mo){mo=document.createElement('div');mo.className='modal-overlay';mo.id='modal-trilha';mo.onclick=e=>{if(e.target===mo)trFechar();};document.body.appendChild(mo);}
+  const idade=trIdade(t.nasc);
+  const etHtml=TR_ETAPAS.filter(x=>!(t.tipo==='adulto'&&x.k==='escola')).map(x=>{
+    const e=t.etapas[x.k],p='tr-'+x.k+'-';
+    const stOpts=Object.keys(TR_ST).map(s=>`<option value="${s}"${e.status===s?' selected':''}>${TR_ST[s]}</option>`).join('');
+    let campos;
+    if(x.k==='sessoes'){
+      campos=`<div class="form-group"><label class="form-label">Início (1ª sessão)</label><input class="form-input" type="date" id="${p}inicio" value="${esc(e.inicio||'')}" onchange="trPrev()"></div>
+      <div class="form-group"><label class="form-label">Hora</label><input class="form-input" type="time" id="${p}hora" value="${esc(e.hora||'')}"></div>
+      <div class="form-group"><label class="form-label">Terapeuta</label><select class="form-select" id="${p}ter"></select></div>
+      <div class="form-group"><label class="form-label">Serviço no Doctoralia</label><input class="form-input" id="${p}servico" value="${esc(e.servico||'')}"></div>
+      <div class="form-group"><label class="form-label">Cobrança</label><select class="form-select" id="${p}modal" onchange="trPrev()"><option value="mensal"${e.modal==='mensal'?' selected':''}>Mensal (4 sessões)</option><option value="avulso"${e.modal==='avulso'?' selected':''}>Por sessão</option><option value="unica"${e.modal==='unica'?' selected':''}>Sessão única</option></select></div>
+      <div class="form-group"><label class="form-label">Frequência</label><select class="form-select" id="${p}freq" onchange="trPrev()"><option value="semanal"${e.freq==='semanal'?' selected':''}>Semanal</option><option value="quinzenal"${e.freq==='quinzenal'?' selected':''}>Quinzenal</option></select></div>
+      <div class="form-group"><label class="form-label">Valor mensal (R$)</label><input class="form-input" type="number" step="0.01" id="${p}vmensal" value="${esc(e.valorMensal||'')}" oninput="trPrev()"></div>
+      <div class="form-group"><label class="form-label">Valor por sessão (R$)</label><input class="form-input" type="number" step="0.01" id="${p}vsessao" value="${esc(e.valorSessao||'')}" oninput="trPrev()"></div>
+      <div class="form-group"><label class="form-label">Repetir até</label><input class="form-input" type="date" id="${p}fim" value="${esc(e.fim||'')}" onchange="trPrev()"></div>
+      <div class="form-group full"><div id="tr-prev" style="font-size:12px;color:var(--text2);background:var(--surface2);border-radius:8px;padding:10px"></div></div>`;
+    } else {
+      campos=`<div class="form-group"><label class="form-label">Data</label><input class="form-input" type="date" id="${p}data" value="${esc(e.data||'')}"></div>
+      <div class="form-group"><label class="form-label">Hora</label><input class="form-input" type="time" id="${p}hora" value="${esc(e.hora||'')}"></div>
+      <div class="form-group"><label class="form-label">Terapeuta</label><select class="form-select" id="${p}ter"></select></div>
+      <div class="form-group"><label class="form-label">Serviço no Doctoralia</label><input class="form-input" id="${p}servico" value="${esc(e.servico||'')}"></div>
+      <div class="form-group"><label class="form-label">Valor (R$)</label><input class="form-input" type="number" step="0.01" id="${p}valor" value="${esc(e.valor||'')}"></div>`;
+    }
+    return`<div style="border-top:1px solid var(--border);margin-top:14px;padding-top:12px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><strong>${x.ico} ${x.nome}</strong><select class="form-select" style="width:150px" id="${p}status">${stOpts}</select></div><div class="form-grid">${campos}</div></div>`;
+  }).join('');
+  const chk=(k,l)=>`<label style="display:flex;gap:8px;align-items:center;font-size:13px"><input type="checkbox" id="tr-chk-${k}"${t.check[k]?' checked':''}> ${l}</label>`;
+  const faixa=trFaixa(idade);
+  mo.innerHTML=`<div class="modal" style="max-width:760px">
+    <div class="modal-header"><div class="modal-title">🧭 ${esc(t.nome)} <small style="font-size:12px;color:var(--text3)">${idade===null?'':idade+' anos · '}${t.tipo==='infantil'?'Infantil':'Adulto'}</small></div><button class="modal-close" onclick="trFechar()">×</button></div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group"><label class="form-label">Tipo</label><select class="form-select" id="tr-tipo" onchange="trSalvar(true)"><option value="infantil"${t.tipo==='infantil'?' selected':''}>Infantil</option><option value="adulto"${t.tipo==='adulto'?' selected':''}>Adulto</option></select></div>
+        <div class="form-group"><label class="form-label">Nascimento</label><input class="form-input" type="date" id="tr-nasc" value="${esc(t.nasc||'')}"></div>
+        <div class="form-group"><label class="form-label">Responsável</label><input class="form-input" id="tr-resp" value="${esc(t.resp||'')}"></div>
+        <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="tr-tel" value="${esc(t.tel||'')}"></div>
+      </div>
+      <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px">${chk('doctoralia','Cadastrado no Doctoralia')}${chk('termo','Termo de adesão assinado')}${chk('forms','Formulários/testes entregues aos pais')}${chk('quest','Questionário da escola enviado')}</div>
+      <div style="margin-top:10px;font-size:13px">🧪 Testes${idade===null?'':' ('+idade+' anos)'}: ${faixa?`<a href="${esc(faixa.link)}" target="_blank" rel="noopener">${esc(faixa.label||'abrir pasta')}</a>`:'<span style="color:var(--text3)">configure em ⚙️ Testes por idade</span>'}</div>
+      ${etHtml}
+      <div class="form-group full" style="margin-top:12px"><label class="form-label">Observações</label><textarea class="form-textarea" id="tr-obs">${esc(t.obs||'')}</textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" style="color:#b91c1c;margin-right:auto" onclick="trEncerrar()">Encerrar trilha</button>
+      <button class="btn-ghost" onclick="trCopiarFicha()">📋 Copiar ficha p/ Doctoralia</button>
+      <button class="btn-ghost" onclick="trCsv()">⬇️ Planilha</button>
+      <button class="btn-ghost" onclick="trWhats()">💬 Lembrete WhatsApp</button>
+      <button class="btn-save" onclick="trSalvar()">Salvar</button>
+    </div></div>`;
+  TR_ETAPAS.forEach(x=>{if(t.tipo==='adulto'&&x.k==='escola')return;populateTerapeutaDropdown('tr-'+x.k+'-ter',t.etapas[x.k].ter||'');});
+  mo.classList.add('open');
+  trPrev();
+}
+function trFechar(){document.getElementById('modal-trilha')?.classList.remove('open');trEditId=null;}
+function trLerForm(t){
+  const g=id=>document.getElementById(id)?.value||'';
+  t.tipo=g('tr-tipo')||t.tipo;t.nasc=g('tr-nasc');t.resp=g('tr-resp');t.tel=g('tr-tel');t.obs=g('tr-obs');
+  ['doctoralia','termo','forms','quest'].forEach(k=>t.check[k]=!!document.getElementById('tr-chk-'+k)?.checked);
+  TR_ETAPAS.forEach(x=>{
+    if(!document.getElementById('tr-'+x.k+'-status'))return;
+    const p='tr-'+x.k+'-',e=t.etapas[x.k];
+    e.status=g(p+'status');e.hora=g(p+'hora');e.ter=g(p+'ter');e.servico=g(p+'servico');
+    if(x.k==='sessoes'){e.inicio=g(p+'inicio');e.fim=g(p+'fim');e.modal=g(p+'modal');e.freq=g(p+'freq');e.valorMensal=g(p+'vmensal');e.valorSessao=g(p+'vsessao');e.data=e.inicio;}
+    else{e.data=g(p+'data');e.valor=g(p+'valor');}
+  });
+}
+function trSalvar(manter){
+  const lista=loadTrilha(),t=lista.find(x=>x.id===trEditId);if(!t)return;
+  trLerForm(t);saveTrilha(lista);
+  if(manter){trAbrir(t.id);return;}
+  trFechar();renderTrilha(document.getElementById('main-content'));toast('Trilha salva ✅');
+}
+function trEncerrar(){
+  if(!confirm('Encerrar esta trilha? Ela some da lista de andamento.'))return;
+  const lista=loadTrilha(),t=lista.find(x=>x.id===trEditId);if(!t)return;
+  t.encerrada=true;saveTrilha(lista);trFechar();renderTrilha(document.getElementById('main-content'));
+}
+function trPrev(){
+  const el=document.getElementById('tr-prev');if(!el)return;
+  const g=id=>document.getElementById(id)?.value||'';
+  const s={inicio:g('tr-sessoes-inicio'),fim:g('tr-sessoes-fim'),modal:g('tr-sessoes-modal'),freq:g('tr-sessoes-freq'),valorMensal:g('tr-sessoes-vmensal'),valorSessao:g('tr-sessoes-vsessao')};
+  const L=trSessoesCalc(s);
+  if(!L.length){el.textContent='Informe a data de início para ver as datas e valores que serão lançados no Doctoralia.';return;}
+  const dn=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const total=L.reduce((a,x)=>a+x.v,0);
+  el.innerHTML=`<strong>${L.length} sessões · total R$ ${trMoeda(total)}</strong> ${s.modal==='mensal'?'(mensal ÷ 4 = R$ '+trMoeda((Number(s.valorMensal)||0)/4)+' por sessão; 5ª do mês zerada)':''}<br>`+L.map(x=>`${dn[new Date(x.data+'T12:00:00').getDay()]} ${trFmt(x.data).slice(0,5)}: ${x.v===0?'<span style="color:#b91c1c">R$ 0 (zerada)</span>':'R$ '+trMoeda(x.v)}`).join(' · ');
+}
+
+// ── Saídas: ficha de agendamento, planilha, WhatsApp ──
+function trFichaTexto(t){
+  const L=[];
+  L.push('FICHA DE AGENDAMENTO — CINPSI');
+  L.push(`Paciente: ${t.nome} | ${t.tipo==='infantil'?'Infantil':'Adulto'} | Nasc.: ${trFmt(t.nasc)} | Resp.: ${t.resp||'—'} | Tel.: ${t.tel||'—'}`);
+  L.push(`Cadastrar no Doctoralia: ${t.check.doctoralia?'JÁ CADASTRADO':'SIM (usar dados do cadastro)'}`);
+  TR_ETAPAS.forEach(x=>{
+    if(t.tipo==='adulto'&&x.k==='escola')return;
+    const e=t.etapas[x.k];
+    if(x.k==='sessoes'){
+      L.push(`\n${x.nome}: início ${trFmt(e.inicio)} ${e.hora||''} | Terapeuta: ${e.ter||'—'} | Serviço: ${e.servico} | ${e.freq==='quinzenal'?'a cada 2 semanas':'semanal'} | cobrança ${e.modal}`);
+      trSessoesCalc(e).forEach(s=>L.push(`   ${trFmt(s.data)} — R$ ${trMoeda(s.v)}${s.v===0?' (ZERADA)':''}`));
+    } else L.push(`\n${x.nome}: ${e.data?trFmt(e.data)+' '+(e.hora||''):'a definir'} | Terapeuta: ${e.ter||'—'} | Serviço: ${e.servico} | R$ ${trMoeda(e.valor)}`);
+  });
+  return L.join('\n');
+}
+function trAtual(){const lista=loadTrilha(),t=lista.find(x=>x.id===trEditId);if(t)trLerForm(t);return t;}
+function trCopiarFicha(){
+  const t=trAtual();if(!t)return;
+  const txt=trFichaTexto(t);
+  (navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Ficha copiada — cole no chat com o Claude ✅')).catch(()=>{prompt('Copie a ficha:',txt);});
+}
+function trCsv(){
+  const t=trAtual();if(!t)return;
+  const rows=[['Paciente','Tipo','Nascimento','Responsável','Telefone','Etapa','Data','Hora','Terapeuta','Serviço','Valor']];
+  TR_ETAPAS.forEach(x=>{
+    if(t.tipo==='adulto'&&x.k==='escola')return;const e=t.etapas[x.k];
+    if(x.k==='sessoes'){const L=trSessoesCalc(e);if(!L.length)rows.push([t.nome,t.tipo,t.nasc,t.resp,t.tel,x.nome,'','',e.ter,e.servico,'']);L.forEach(s=>rows.push([t.nome,t.tipo,t.nasc,t.resp,t.tel,x.nome,s.data,e.hora,e.ter,e.servico,s.v.toFixed(2)]));}
+    else rows.push([t.nome,t.tipo,t.nasc,t.resp,t.tel,x.nome,e.data,e.hora,e.ter,e.servico,e.valor]);
+  });
+  const csv='﻿'+rows.map(r=>r.map(v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"').join(';')).join('\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='ficha_'+(t.nome||'paciente').replace(/\s+/g,'_')+'.csv';a.click();
+}
+function trWhats(){
+  const t=trAtual();if(!t)return;
+  const hoje=trHoje();let alvo=null;
+  for(const x of TR_ETAPAS){if(t.tipo==='adulto'&&x.k==='escola')continue;const e=t.etapas[x.k];if(e.status==='agendado'&&e.data>=hoje){alvo={x,e};break;}}
+  const nome=(t.resp||t.nome).split(' ')[0];
+  const msg=alvo?`Olá, ${nome}! Passando para lembrar da ${alvo.x.nome.toLowerCase()} de ${t.nome.split(' ')[0]} no CINPSI: ${trFmt(alvo.e.data)}${alvo.e.hora?' às '+alvo.e.hora:''}. Qualquer imprevisto, é só nos avisar. 💙`:`Olá, ${nome}! Aqui é do CINPSI. Vamos combinar os próximos passos da avaliação de ${t.nome.split(' ')[0]}?`;
+  const fone=String(t.tel||'').replace(/\D/g,'');
+  if(!fone){prompt('Telefone não informado. Copie a mensagem:',msg);return;}
+  window.open('https://wa.me/'+(fone.length<=11?'55'+fone:fone)+'?text='+encodeURIComponent(msg),'_blank','noopener');
+}
+
+// ── Testes por idade: link da pasta do Drive para cada faixa ──
+function trFaixa(idade){
+  if(idade===null)return null;
+  return (loadTrCfg().faixas||[]).find(f=>idade>=Number(f.min)&&idade<=Number(f.max))||null;
+}
+function trCfgAbrir(){
+  const f=loadTrCfg().faixas||[];
+  const txt=f.map(x=>`${x.min}-${x.max} | ${x.label||''} | ${x.link}`).join('\n');
+  const novo=prompt('Uma faixa por linha, no formato:\nidadeMin-idadeMax | descrição | link da pasta no Drive\nEx.: 4-6 | Testes 4 a 6 anos | https://drive.google.com/...',txt);
+  if(novo===null)return;
+  const faixas=novo.split('\n').map(l=>l.split('|').map(s=>s.trim())).filter(p=>p.length>=3&&/^\d+-\d+$/.test(p[0])).map(p=>{const[a,b]=p[0].split('-');return{min:+a,max:+b,label:p[1],link:p.slice(2).join('|').trim()};});
+  saveTrCfg({faixas});toast('Faixas salvas ✅');
 }
 
 // ════════════════════════════════════════════════════════════
