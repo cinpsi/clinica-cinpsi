@@ -2392,7 +2392,7 @@ function getConvertidos(){
     telefone:l.telefone, origem:l.origem, servico:l.servico, status:'Fechado',
     terapeuta:l.terapeuta, valor:l.valor, observacao:l.observacao, data:l.data,
     modalidade:l.modalidade, valorMensal:l.valorMensal, valorProporcional:l.valorProporcional,
-    diaSemana:l.diaSemana, nascimento:l.nascimento, escola:l.escola,
+    diaSemana:l.diaSemana, frequencia:l.frequencia, nascimento:l.nascimento, escola:l.escola,
     notaFiscal:l.notaFiscal,
     cpf:l.cpf, responsavelLegal:l.responsavelLegal, cpfPaciente:l.cpfPaciente, email:l.email, endereco:l.endereco, contatoEmergencia:l.contatoEmergencia, queixa:l.queixa, telefone2:l.telefone2, pai:l.pai, mae:l.mae,
     ativo:l.ativo!==false,
@@ -2745,6 +2745,12 @@ function openConvModal(id){
                 <option value="">Selecione...</option>
                 ${DIAS_SEMANA.map((d,i)=>`<option value="${i}">${d}</option>`).join('')}
               </select></div>
+            <div class="form-group" id="ec-bloco-freq" style="display:none"><label class="form-label">Frequência</label>
+              <select class="form-select" id="ec-frequencia">
+                <option value="semanal">Semanal (toda semana)</option>
+                <option value="quinzenal">Quinzenal (semana sim, semana não)</option>
+              </select>
+              <small style="color:var(--text3);font-size:11px;margin-top:4px;display:block">Quinzenal é sempre cobrado por sessão; o mês pode ter 2 ou 3 sessões.</small></div>
           </div>
         </div>
       </div>
@@ -2783,6 +2789,7 @@ function openConvModal(id){
   const mod=p.modalidade||'mensal';
   ecSetModalidade(mod);
   if(p.diaSemana!=null) document.getElementById('ec-dia-semana').value=p.diaSemana;
+  document.getElementById('ec-frequencia').value=p.frequencia==='quinzenal'?'quinzenal':'semanal';
   populateTerapeutaDropdown('ec-terapeuta', p.terapeuta||'');
   mo.classList.add('open');
 }
@@ -2794,6 +2801,7 @@ function ecSetModalidade(tipo){
   document.getElementById('ec-bloco-mensal').style.display=tipo==='mensal'?'block':'none';
   document.getElementById('ec-bloco-sessao').style.display=(tipo==='avulso'||tipo==='unica')?'block':'none';
   document.getElementById('ec-bloco-dia').style.display=(tipo==='avulso'||tipo==='mensal')?'block':'none';
+  document.getElementById('ec-bloco-freq').style.display=tipo==='avulso'?'block':'none';
   ecCalcSessao();
 }
 
@@ -2822,7 +2830,8 @@ function saveConv(){
   const diaSemana=document.getElementById('ec-dia-semana').value!==''?parseInt(document.getElementById('ec-dia-semana').value):null;
   // Para mensal, valor = valorMensal; para avulso/unica, valor = valor por sessão
   const valorFinal=modalidade==='mensal'?(valorMensal||null):novoValor;
-  const prevCampos={modalidade, valor:valorFinal, valorMensal, valorProporcional, diaSemana};
+  const frequencia=(modalidade==='avulso'&&document.getElementById('ec-frequencia').value==='quinzenal')?'quinzenal':'semanal';
+  const prevCampos={modalidade, valor:valorFinal, valorMensal, valorProporcional, diaSemana, frequencia};
 
   const ativoVal=document.getElementById('ec-ativo').value!=='false';
 
