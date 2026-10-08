@@ -3007,7 +3007,7 @@ function renderTrilha(c){
   const lista=loadTrilha();
   const emAnd=lista.filter(t=>!t.encerrada);
   const nomes=new Set(lista.map(t=>(t.nome||'').toLowerCase()));
-  const lim=trAddDias(trHoje(),-90);
+  const lim='2026-10-08';
   const cand=getConvertidos().filter(p=>p.ativo!==false&&p.fromLead&&p.status==='Fechado'&&(p.data||'')>=lim&&!nomes.has((p.paciente||p.responsavel||'').toLowerCase()));
   const al=trAlertas();
   c.innerHTML=`
@@ -3017,7 +3017,7 @@ function renderTrilha(c){
     <div class="stat-card"><div class="stat-label">Fechados sem trilha</div><div class="stat-value">${cand.length}</div></div>
   </div>
   ${al.length?`<div class="data-table" style="margin-bottom:18px;padding:14px 16px"><div class="section-title">🔔 Para cobrar / agir</div>${al.map(a=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;align-items:center"><span>${a.sev>1?'🔴':'🟡'}</span><strong style="min-width:180px">${esc(a.t.nome)}</strong><span style="flex:1;color:var(--text2)">${esc(a.msg)}</span><button class="btn-ghost" onclick="trAbrir('${a.t.id}')">Abrir</button></div>`).join('')}</div>`:''}
-  ${cand.length?`<div class="data-table" style="margin-bottom:18px;padding:14px 16px"><div class="section-title">🆕 Fechados sem trilha (últimos 90 dias)</div>${cand.map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;align-items:center"><strong style="min-width:220px">${esc(p.paciente||p.responsavel)}</strong><span style="flex:1;color:var(--text2)">${esc(p.servico||'')} · ${esc(p.terapeuta||'sem terapeuta')} · fechado em ${trFmt(p.data)}</span><button class="btn-primary" onclick="trIniciar('${esc(p.id)}')">Iniciar trilha</button></div>`).join('')}</div>`:''}
+  ${cand.length?`<div class="data-table" style="margin-bottom:18px;padding:14px 16px"><div class="section-title">🆕 Fechados sem trilha (a partir de 08/10/2026)</div>${cand.map(p=>`<div style="padding:6px 0;border-bottom:1px solid var(--border);font-size:13px;display:flex;gap:10px;align-items:center"><strong style="min-width:220px">${esc(p.paciente||p.responsavel)}</strong><span style="flex:1;color:var(--text2)">${esc(p.servico||'')} · ${esc(p.terapeuta||'sem terapeuta')} · fechado em ${trFmt(p.data)}</span><button class="btn-primary" onclick="trIniciar('${esc(p.id)}')">Iniciar trilha</button></div>`).join('')}</div>`:''}
   <div class="data-table"><table>
     <thead><tr><th>Paciente</th><th>Idade</th><th>Anamnese</th><th>Escola</th><th>Sessões</th><th>Devolutiva</th><th>Próxima ação</th><th></th></tr></thead>
     <tbody>${emAnd.map(t=>{const id=trIdade(t.nasc);return`<tr><td><strong>${esc(t.nome)}</strong><br><small style="color:var(--text3)">${t.tipo==='infantil'?'Infantil':'Adulto'}</small></td><td>${id===null?'—':id+' anos'}</td>${TR_ETAPAS.map(x=>{if(t.tipo==='adulto'&&x.k==='escola')return'<td>—</td>';const e=t.etapas[x.k],st=trStatusVis(e);return`<td><span style="font-size:11px;font-weight:600;color:${TR_COR[st]}">${TR_ST[st]}</span>${(e.data||e.inicio)?`<br><small>${trFmt(e.data||e.inicio)}</small>`:''}</td>`;}).join('')}<td style="font-size:12px">${esc(trProxima(t))}</td><td><button class="btn-ghost" onclick="trAbrir('${t.id}')">Abrir</button></td></tr>`;}).join('')||'<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:24px">Nenhuma trilha em andamento. Use "Fechados sem trilha" acima ou o botão + Nova trilha.</td></tr>'}</tbody>
