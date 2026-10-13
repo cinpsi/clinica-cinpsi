@@ -11720,7 +11720,7 @@ function nfMontarLinhas(){
     const emitida=D.notas.find(n=>n.mes===NF_MES&&nfFiscalChave(n.pac)===nfFiscalChave(g.pac)&&n.prof===g.prof&&n.status!=='erro');
     const a=aj[g.chave]||null; const igual=f.igual!=='nao';
     const L={pac:g.pac,prof:g.prof,chave:g.chave,f,qO,datasO,vsO,serv,mesTxt,emitida,igual,ajustado:!!a,novo:!nfCadastrado(g.pac),
-      q:a&&a.q!=null?a.q:qO,datas:a&&a.datas!=null?a.datas:datasO,vs:a&&a.vs!=null?a.vs:vsO,emitir:a&&a.emitir!=null?a.emitir:!emitida};
+      q:a&&a.q!=null?a.q:qO,datas:a&&a.datas!=null?a.datas:datasO,vs:a&&a.vs!=null?a.vs:vsO,emitir:(D.sel&&D.sel[NF_MES]&&D.sel[NF_MES][g.chave]!=null)?D.sel[NF_MES][g.chave]:(a&&a.emitir!=null?a.emitir:(!emitida&&g.prof!=='Erika'))};
     L.dif=(L.q!==qO||L.datas!==datasO||L.vs!==vsO);
     L.revisar=!igual&&!a;
     return L;
@@ -11731,7 +11731,7 @@ function nfSalvarAjuste(l){
   D.ajustes[NF_MES][l.chave]={q:l.q,datas:l.datas,vs:l.vs,emitir:l.emitir}; l.ajustado=true; l.revisar=false; nfSave(D);
 }
 function nfEdit(i,campo,val){
-  const l=NF_LIN[i]; if(campo==='datas') l.datas=String(val).trim(); else if(campo==='emitir') l.emitir=!!val; else l[campo]=+val;
+  const l=NF_LIN[i]; if(campo==='datas') l.datas=String(val).trim(); else if(campo==='emitir'){ nfSel(l,!!val); nfRenderLinhas(); return; } else l[campo]=+val;
   l.dif=(l.q!==l.qO||l.datas!==l.datasO||l.vs!==l.vsO); nfSalvarAjuste(l); nfRenderLinhas();
 }
 
@@ -11740,44 +11740,89 @@ function nfZerarImportacao(){
   const D=nfLoad(); const n=(D.sessoes[NF_MES]||[]).length;
   if(!n){ toast('Não há importação neste mês.'); return; }
   if(!confirm('Zerar a importação de '+NF_MES+'?\nSerá apagada só a lista de sessões do Doctoralia ('+n+' sessões) e os ajustes de datas/quantidades deste mês.\nDados fiscais dos pacientes, notas emitidas e contadores NÃO são alterados. Depois é só importar a planilha de novo.')) return;
-  delete D.sessoes[NF_MES]; if(D.ajustes) delete D.ajustes[NF_MES];
+  delete D.sessoes[NF_MES]; if(D.ajustes) delete D.ajustes[NF_MES]; if(D.sel) delete D.sel[NF_MES];
   nfSave(D); renderNfse(document.getElementById('main-content')); toast('Importação do mês zerada.');
+}
+let NF_PASSO=1, NF_BUSCA='';
+function nfIrPasso(n){NF_PASSO=n; renderNfse(document.getElementById('main-content'));}
+function nfSel(l,v){const D=nfLoad(); D.sel=D.sel||{}; D.sel[NF_MES]=D.sel[NF_MES]||{}; D.sel[NF_MES][l.chave]=!!v; l.emitir=!!v; nfSave(D);}
+function nfPassoCab(D){
+  const nomes=['Importar planilha','Quem será emitido','Revisar e editar','Gerar lote'];
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${nomes.map((t,i)=>{const n=i+1, at=n===NF_PASSO, ok=n<NF_PASSO, hab=n===1||(D.sessoes[NF_MES]||[]).length>0;
+    return `<button class="btn-ghost" ${hab?'':'disabled'} onclick="nfIrPasso(${n})" style="font-size:12.5px;${at?'background:var(--accent,#1f4e5a);color:#fff;border-color:transparent':''}${ok?';border-color:#1e7a3c':''}">${ok?'✅':n} ${t}</button>`;}).join('')}</div>`;
+}
+function nfPassoNav(ant,prox,txtProx){
+  return `<div style="display:flex;gap:10px;margin-top:14px">${ant?`<button class="btn-ghost" onclick="nfIrPasso(${ant})">← Voltar</button>`:''}${prox?`<button class="btn-primary" onclick="nfIrPasso(${prox})">${txtProx||'Continuar'} →</button>`:''}</div>`;
 }
 function renderNfse(c){
   const D=nfLoad(); nfMontarLinhas();
-  const meses=Object.keys(D.sessoes).sort().reverse();
-  c.innerHTML=`<div class="section" style="max-width:1250px">
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+  const meses=Object.keys(D.sessoes).sort().reverse(); const ns=(D.sessoes[NF_MES]||[]).length;
+  if(!ns) NF_PASSO=1;
+  let corpo='';
+  if(NF_PASSO===1){
+    corpo=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
       <div class="form-group" style="margin:0"><label class="form-label">Competência</label><input type="month" class="form-input" id="nf-mes" value="${NF_MES}" onchange="NF_MES=this.value;renderNfse(document.getElementById('main-content'))"></div>
-      <button class="btn-primary" onclick="nfImportarSessoes()">📥 Importar sessões do Doctoralia</button>
-      <button class="btn-ghost" onclick="nfExportar()">📤 Baixar planilha p/ edição</button>
-      <button class="btn-ghost" onclick="document.getElementById('nf-file2').click()">📥 Subir planilha editada</button>
-      <button class="btn-ghost" onclick="nfCompletarCep(false)">🔎 Completar rua/bairro pelo CEP</button>
-      <button class="btn-ghost" onclick="nfZerarImportacao()">🗑️ Zerar importação do mês</button>
-      <input type="file" id="nf-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="nfLerArquivo(this.files[0])">
-      <input type="file" id="nf-file2" accept=".xlsx" style="display:none" onchange="nfImportarEditada(this.files[0])">
-    </div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:10px">${(D.sessoes[NF_MES]||[]).length} sessões no mês (todas, exceto canceladas, inclusive as ainda não realizadas)${meses.length?' · meses com dados: '+meses.join(', '):''}</div>
-    <div id="nf-painel"></div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;background:var(--surface2);padding:10px 12px;border-radius:var(--radius-sm)">
-      <label class="form-label" style="margin:0">Série <input class="form-input" id="nf-serie" style="width:70px" value="${esc(D.cfg.serie)}"></label>
-      <label class="form-label" style="margin:0">Próximo nº RPS <input type="number" class="form-input" id="nf-rps" style="width:90px" value="${D.cfg.proxRps}" onchange="nfSalvarCfg()"></label>
-      <label class="form-label" style="margin:0">Próximo nº lote <input type="number" class="form-input" id="nf-lote" style="width:90px" value="${D.cfg.proxLote}" onchange="nfSalvarCfg()"></label>
-      <label class="form-label" style="margin:0">Data de emissão <input type="date" class="form-input" id="nf-dataem" value="${new Date().toISOString().slice(0,10)}"></label>
-      <label style="font-size:12.5px;margin-left:auto"><input type="checkbox" ${NF_SO_EDIT?'checked':''} onchange="NF_SO_EDIT=this.checked;nfRenderLinhas()"> Mostrar só quem precisa de edição</label>
-    </div>
-    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--surface2)">
-      <th></th><th style="text-align:left;padding:6px">Paciente</th><th style="text-align:left">Profissional</th><th style="text-align:left">Tomador / situação</th><th>Sessões</th><th style="text-align:left">Datas</th><th>Valor/sessão NF</th><th>Total</th><th></th></tr></thead>
-      <tbody id="nf-tbody"></tbody></table></div>
-    <div id="nf-resumo" style="margin:12px 0;font-size:13px"></div>
-    <button class="btn-primary" id="nf-gerar" onclick="nfGerar()">🧾 Gerar lote XML</button>
-    <div id="nf-depois"></div>
-    ${nfHistoricoHtml(D)}
-  </div>`;
-  nfRenderLinhas();
+      <button class="btn-primary" onclick="nfImportarSessoes()">📥 Subir planilha do Doctoralia</button>
+      <button class="btn-ghost" onclick="nfZerarImportacao()">🗑️ Zerar importação do mês</button></div>
+      <div style="font-size:13px;margin:8px 0">${ns?`<b>${ns}</b> sessões importadas em ${NF_MES}, de <b>${NF_LIN.length}</b> pacientes/profissionais (todas, exceto canceladas, inclusive as ainda não realizadas).`:'Nenhuma sessão importada neste mês. Suba a planilha de consultas do Doctoralia com todas as sessões do mês.'}${meses.length?` <span style="color:var(--text3)">Meses com dados: ${meses.join(', ')}.</span>`:''}</div>
+      ${ns?nfPassoNav(0,2,'Continuar: escolher quem será emitido'):''}`;
+  } else if(NF_PASSO===2){
+    corpo=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <input class="form-input" id="nf-busca" style="width:230px" placeholder="🔎 Buscar paciente" value="${esc(NF_BUSCA)}" oninput="NF_BUSCA=this.value;nfRenderPasso2()">
+      <button class="btn-ghost" onclick="nfMarcarTodos(true)">Marcar todos S</button><button class="btn-ghost" onclick="nfMarcarTodos(false)">Marcar todos N</button>
+      <span id="nf-resumo2" style="margin-left:auto;font-size:13px"></span></div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--surface2)"><th style="padding:6px">Emitir?</th><th style="text-align:left">Paciente</th><th style="text-align:left">Profissional</th><th>Sessões</th><th style="text-align:right">Total</th><th style="text-align:left;padding-left:10px">Observação</th></tr></thead><tbody id="nf-tbody2"></tbody></table></div>
+      ${nfPassoNav(1,3,'Continuar: revisar erros e editar')}`;
+  } else if(NF_PASSO===3){
+    corpo=`<div id="nf-painel"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+        <button class="btn-ghost" onclick="nfCompletarCep(false)">🔎 Completar rua/bairro pelo CEP</button>
+        <button class="btn-ghost" onclick="nfExportar()">📤 Baixar planilha p/ edição</button>
+        <button class="btn-ghost" onclick="document.getElementById('nf-file2').click()">📥 Subir planilha editada</button>
+        <label style="font-size:12.5px;margin-left:auto"><input type="checkbox" ${NF_SO_EDIT?'checked':''} onchange="NF_SO_EDIT=this.checked;nfRenderLinhas()"> Mostrar só quem precisa de edição</label></div>
+      <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--surface2)">
+        <th></th><th style="text-align:left;padding:6px">Paciente</th><th style="text-align:left">Profissional</th><th style="text-align:left">Tomador / situação</th><th>Sessões</th><th style="text-align:left">Datas</th><th>Valor/sessão NF</th><th>Total</th><th></th></tr></thead>
+        <tbody id="nf-tbody"></tbody></table></div>
+      <div id="nf-resumo" style="margin:12px 0;font-size:13px"></div>
+      ${nfPassoNav(2,4,'Continuar: gerar lote')}`;
+  } else {
+    corpo=`<div id="nf-painel"></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;background:var(--surface2);padding:10px 12px;border-radius:var(--radius-sm)">
+        <label class="form-label" style="margin:0">Série <input class="form-input" id="nf-serie" style="width:70px" value="${esc(D.cfg.serie)}"></label>
+        <label class="form-label" style="margin:0">Próximo nº RPS <input type="number" class="form-input" id="nf-rps" style="width:90px" value="${D.cfg.proxRps}" onchange="nfSalvarCfg()"></label>
+        <label class="form-label" style="margin:0">Próximo nº lote <input type="number" class="form-input" id="nf-lote" style="width:90px" value="${D.cfg.proxLote}" onchange="nfSalvarCfg()"></label>
+        <label class="form-label" style="margin:0">Data de emissão <input type="date" class="form-input" id="nf-dataem" value="${new Date().toISOString().slice(0,10)}"></label></div>
+      <div id="nf-resumo" style="margin:12px 0;font-size:13px"></div>
+      <button class="btn-primary" id="nf-gerar" onclick="nfGerar()">🧾 Gerar lote XML</button>
+      <div id="nf-depois"></div>
+      ${nfPassoNav(3,0)}
+      ${nfHistoricoHtml(D)}`;
+  }
+  c.innerHTML=`<div class="section" style="max-width:1250px">${nfPassoCab(D)}${corpo}
+    <input type="file" id="nf-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="nfLerArquivo(this.files[0])">
+    <input type="file" id="nf-file2" accept=".xlsx" style="display:none" onchange="nfImportarEditada(this.files[0])"></div>`;
+  if(NF_PASSO===2) nfRenderPasso2(); else if(NF_PASSO>=3){ nfRenderLinhas(); }
+}
+function nfMarcarTodos(v){
+  const D=nfLoad(); D.sel=D.sel||{}; D.sel[NF_MES]=D.sel[NF_MES]||{}; const q=nfNorm(NF_BUSCA);
+  NF_LIN.forEach(l=>{ if(q&&nfNorm(l.pac).indexOf(q)<0) return; if(v&&(l.emitida||l.prof==='Erika')) return; D.sel[NF_MES][l.chave]=v; l.emitir=v; });
+  nfSave(D); nfRenderPasso2();
+}
+function nfToggleEmitir(i,v){ nfSel(NF_LIN[i],v==='S'); nfRenderPasso2(); }
+function nfRenderPasso2(){
+  const tb=document.getElementById('nf-tbody2'); if(!tb) return; const q=nfNorm(NF_BUSCA);
+  const pill=(bg,cor,t)=>`<span style="background:${bg};color:${cor};padding:2px 8px;border-radius:99px;font-size:11.5px;margin-right:4px">${t}</span>`;
+  tb.innerHTML=NF_LIN.map((l,i)=>({l,i})).filter(x=>!q||nfNorm(x.l.pac).indexOf(q)>=0).map(({l,i})=>{
+    const e=nfseValidar(l,l.f).e; const tot=Math.round(l.q*l.vs*100)/100;
+    const obs=(l.emitida?pill('#e3f4e8','#1e7a3c','já no lote '+l.emitida.lote):'')+(l.prof==='Erika'?pill('#f3f4f6','#6b7280','⏸️ Erika sem CRP'):'')+(l.novo?pill('#fff3dc','#b26a00','🆕 sem cadastro'):'')+(e.length&&l.prof!=='Erika'?pill('#fde8e6','#b42318','⚠️ '+e.length+' pendência(s) de dados'):'');
+    return `<tr style="border-bottom:1px solid var(--border);${l.emitir?'':'opacity:.6'}"><td style="text-align:center;padding:4px"><select class="form-select" style="width:64px;font-weight:700;color:${l.emitir?'#1e7a3c':'#b42318'}" onchange="nfToggleEmitir(${i},this.value)"><option value="S" ${l.emitir?'selected':''}>S</option><option value="N" ${l.emitir?'':'selected'}>N</option></select></td>
+      <td style="padding:6px">${esc(l.pac)}</td><td>${esc(l.prof)}</td><td style="text-align:center">${l.q}</td><td style="text-align:right">R$ ${nfBrl(tot)}</td><td style="padding-left:10px">${obs}</td></tr>`;
+  }).join('')||'<tr><td colspan="6" style="padding:14px;color:var(--text3)">Nenhum paciente encontrado.</td></tr>';
+  const sel=NF_LIN.filter(l=>l.emitir); const tot=sel.reduce((a,l)=>a+Math.round(l.q*l.vs*100)/100,0);
+  const el=document.getElementById('nf-resumo2'); if(el) el.innerHTML=`<b>${sel.length}</b> de ${NF_LIN.length} serão emitidos · <b>R$ ${nfBrl(tot)}</b>`;
 }
 function nfPainel(){
-  const erika=NF_LIN.filter(l=>l.prof==='Erika'), novos=NF_LIN.filter(l=>l.novo), erros=NF_LIN.filter(l=>nfseValidar(l,l.f).e.length), rev=NF_LIN.filter(l=>l.revisar);
+  const SL=NF_LIN.filter(l=>l.emitir), erika=NF_LIN.filter(l=>l.prof==='Erika'), novos=SL.filter(l=>l.novo), erros=SL.filter(l=>nfseValidar(l,l.f).e.length), rev=SL.filter(l=>l.revisar);
   const el=document.getElementById('nf-painel'); if(!el) return;
   if(!NF_LIN.length){el.innerHTML='';return;}
   const box=(cor,bg,t)=>`<div style="border-left:4px solid ${cor};background:${bg};padding:8px 12px;margin-bottom:6px;font-size:12.5px">${t}</div>`;
@@ -11788,13 +11833,13 @@ function nfPainel(){
 }
 function nfRenderLinhas(){
   const tb=document.getElementById('nf-tbody'); if(!tb) return;
-  const lista=NF_LIN.map((l,i)=>({l,i})).filter(x=>!NF_SO_EDIT||x.l.revisar||x.l.novo||x.l.dif||nfseValidar(x.l,x.l.f).e.length);
+  const lista=NF_LIN.map((l,i)=>({l,i,er:nfseValidar(l,l.f).e.length})).filter(x=>x.l.emitir&&(!NF_SO_EDIT||x.l.revisar||x.l.novo||x.l.dif||x.er)).sort((a,b)=>(b.er>0)-(a.er>0));
   tb.innerHTML=lista.length?lista.map(({l,i})=>{
     const v=nfseValidar(l,l.f); const tot=Math.round(l.q*l.vs*100)/100;
     const pill=(bg,cor,t)=>`<span style="background:${bg};color:${cor};padding:2px 8px;border-radius:99px;font-size:11.5px;margin-right:4px">${t}</span>`;
     const sit=(l.emitida?pill('#e3f4e8','#1e7a3c','já no lote '+l.emitida.lote+(l.emitida.nfse?' · NFS-e '+l.emitida.nfse:'')):(v.e.length?pill('#fde8e6','#b42318',esc(v.e.join('; '))):pill('#e3f4e8','#1e7a3c','OK')))
       +(l.novo?pill('#fff3dc','#b26a00','🆕 sem cadastro'):'')+(l.revisar?pill('#e0e7ff','#2563eb','✏️ revisar'):'')+(l.dif?pill('#f3e8ff','#7c3aed','alterado'):'');
-    return `<tr style="border-bottom:1px solid var(--border)"><td><input type="checkbox" ${l.emitir?'checked':''} ${v.e.length?'disabled':''} onchange="nfEdit(${i},'emitir',this.checked)"></td>
+    return `<tr style="border-bottom:1px solid var(--border)"><td><button class="btn-ghost" style="font-size:11px;padding:2px 6px" title="N\u00E3o emitir" onclick="nfEdit(${i},'emitir',false)">\u2716</button></td>
       <td style="padding:6px">${esc(l.pac)}</td><td>${esc(l.prof)}</td><td>${esc(l.f.tomador||'—')}<br>${sit}</td>
       <td style="text-align:center"><input type="number" class="form-input" style="width:58px" value="${l.q}" onchange="nfEdit(${i},'q',this.value)"></td>
       <td><input class="form-input" style="width:150px" value="${esc(l.datas)}" onchange="nfEdit(${i},'datas',this.value)"></td>
@@ -11832,7 +11877,7 @@ async function nfLerArquivo(file){
     const D=nfLoad(); const ms=Object.keys(porMes);
     if(!ms.length){toast('Nenhuma sessão encontrada.');return;}
     ms.forEach(m=>D.sessoes[m]=porMes[m]); nfSave(D);
-    NF_MES=ms.sort().pop(); toast('✅ Sessões importadas: '+ms.length+' mês(es)');
+    NF_MES=ms.sort().pop(); NF_PASSO=2; toast('✅ Sessões importadas: '+ms.length+' mês(es)');
     renderNfse(document.getElementById('main-content'));
   }catch(e){toast('Erro ao ler a planilha.');}
 }
