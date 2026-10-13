@@ -11688,7 +11688,7 @@ function nfFiscalPadrao(pac){
   const f={tomador:'',cpf:'',cep:'',logradouro:'',numero:'',complemento:'',bairro:'',municipio:'Guarulhos',uf:'SP',email:'',igual:'sim'};
   if(!p) return f;
   const infantil=!!(p.responsavelLegal&&nfNorm(p.responsavelLegal)!==nfNorm(p.paciente));
-  f.tomador=infantil?p.responsavelLegal:p.paciente; f.cpf=p.cpf||''; f.email=p.email||'';
+  f.tomador=p.paciente; f.cpf=(infantil?p.cpfPaciente:p.cpf)||''; f.email=p.email||'';
   const end=String(p.endereco||''); const m=end.match(/\d{5}-?\d{3}/); if(m) f.cep=m[0];
   const partes=end.replace(/\s*-?\s*CEP.*$/i,'').split(',').map(s=>s.trim()).filter(Boolean);
   if(partes[0]) f.logradouro=partes[0]; if(partes[1]) f.numero=partes[1]; if(partes[2]) f.complemento=partes.slice(2).join(', ');
@@ -11733,6 +11733,7 @@ function renderNfse(c){
       <button class="btn-primary" onclick="nfImportarSessoes()">📥 Importar sessões do Doctoralia</button>
       <button class="btn-ghost" onclick="nfExportar()">📤 Baixar planilha p/ edição</button>
       <button class="btn-ghost" onclick="document.getElementById('nf-file2').click()">📥 Subir planilha editada</button>
+      <button class="btn-ghost" onclick="nfCompletarCep(false)">🔎 Completar rua/bairro pelo CEP</button>
       <input type="file" id="nf-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="nfLerArquivo(this.files[0])">
       <input type="file" id="nf-file2" accept=".xlsx" style="display:none" onchange="nfImportarEditada(this.files[0])">
     </div>
@@ -11845,7 +11846,7 @@ async function nfImportarEditada(file){
       if(f.igual==='nao'||a.q!==l.qO||a.datas!==l.datasO||a.vs!==l.vsO||!em) D.ajustes[NF_MES][chave]=a; else delete D.ajustes[NF_MES][chave];
       n++;
     });
-    nfSave(D); toast('✅ Planilha aplicada: '+n+' linhas'); renderNfse(document.getElementById('main-content'));
+    nfSave(D); toast('✅ Planilha aplicada: '+n+' linhas'); renderNfse(document.getElementById('main-content')); nfCompletarCep(true);
   }catch(e){toast('Erro ao ler a planilha editada.');}
 }
 
@@ -11861,6 +11862,7 @@ function nfEditarFiscal(i){
   <div class="form-group" style="grid-column:span 2"><label class="form-label">A nota deste paciente é sempre igual ao Doctoralia?</label><select class="form-select" id="nff-igual"><option value="sim" ${f.igual!=='nao'?'selected':''}>Sim — mesmas sessões, datas e valor</option><option value="nao" ${f.igual==='nao'?'selected':''}>Não — preciso revisar todo mês</option></select></div></div></div>
   <div class="modal-footer"><button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button><button class="btn-primary" onclick="nfSalvarFiscal()">💾 Salvar</button></div></div>`;
   document.body.appendChild(mo);
+  document.getElementById('nff-cep').addEventListener('blur',nfCepModal);
 }
 function nfSalvarFiscal(){
   const l=NF_LIN[window._nfEd]; const D=nfLoad(); const f={};
@@ -11868,6 +11870,29 @@ function nfSalvarFiscal(){
   f.uf=(f.uf||'SP').toUpperCase(); f.igual=document.getElementById('nff-igual').value; D.fiscal[nfFiscalChave(l.pac)]=Object.assign(l.f,f); nfSave(D);
   document.getElementById('modal-nf-fiscal').remove();
   l.f=Object.assign(l.f,f); l.igual=f.igual!=='nao'; l.revisar=!l.igual&&!l.ajustado; nfRenderLinhas();
+}
+
+// ── Endereço pelo CEP (ViaCEP) ───────────────────────────────
+async function nfViaCep(cep){try{const j=await (await fetch('https://viacep.com.br/ws/'+cep+'/json/')).json();return j.erro?null:j;}catch(e){return null;}}
+async function nfCepModal(){
+  const cep=nfDig(document.getElementById('nff-cep').value); if(cep.length!==8) return;
+  const j=await nfViaCep(cep); if(!j) return;
+  const set=(id,v,force)=>{const e=document.getElementById(id); if(e&&v&&(force||!e.value.trim())) e.value=v;};
+  set('nff-logradouro',j.logradouro); set('nff-bairro',j.bairro); set('nff-municipio',j.localidade,true); set('nff-uf',j.uf,true);
+}
+async function nfCompletarCep(silencioso){
+  const D=nfLoad(); let n=0;
+  for(const l of NF_LIN){
+    const f=Object.assign({},l.f); const cep=nfDig(f.cep);
+    if(cep.length!==8||(f.logradouro&&f.bairro)) continue;
+    const j=await nfViaCep(cep); if(!j) continue;
+    if(!f.logradouro&&j.logradouro) f.logradouro=j.logradouro;
+    if(!f.bairro&&j.bairro) f.bairro=j.bairro;
+    if(j.localidade) f.municipio=j.localidade; if(j.uf) f.uf=j.uf;
+    D.fiscal[nfFiscalChave(l.pac)]=Object.assign(D.fiscal[nfFiscalChave(l.pac)]||{},f); n++;
+  }
+  if(n){nfSave(D); renderNfse(document.getElementById('main-content'));}
+  if(n||!silencioso) toast(n?'🔎 Endereço completado pelo CEP em '+n+' nota(s)':'Nada a completar: todos os CEPs já têm rua e bairro.');
 }
 
 // ── Lembrete: dia 25 em diante, até subir a planilha do mês ──
