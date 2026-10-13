@@ -11637,7 +11637,8 @@ const NF_PROFS={
   Mayara:{nome:'Mayara Borges',esp:'Psicologia',reg:'CRP 06/179691',tit:'Psicóloga responsável'},
   Nayra:{nome:'Nayra Vieira Neri',esp:'Fonoaudiologia',reg:'CRFa 2-23081',tit:'Fonoaudióloga responsável'},
   Luciana:{nome:'Luciana Alves Duarte',esp:'Fonoaudiologia',reg:'CRFa 2-20761',tit:'Fonoaudióloga responsável'},
-  Adriana:{nome:'Adriana Monteiro',esp:'Psicopedagogia',reg:'',tit:'Psicopedagoga responsável'}
+  Adriana:{nome:'Adriana Monteiro',esp:'Psicopedagogia',reg:'',tit:'Psicopedagoga responsável'},
+  Erika:{nome:'',esp:'Psicopedagogia',reg:'',tit:''}
 };
 const NF_IBGE={"guarulhos":"3518800","sao paulo":"3550308","são paulo":"3550308","aruja":"3503901","arujá":"3503901","itaquaquecetuba":"3523107","mairipora":"3528502","mairiporã":"3528502","santa isabel":"3546801","poa":"3539806","poá":"3539806","ferraz de vasconcelos":"3515707","suzano":"3552502","mogi das cruzes":"3530607","osasco":"3534401"};
 const nfDig=s=>String(s??'').replace(/\D/g,'');
@@ -11682,9 +11683,15 @@ function nfseValidar(l,f){
 const NF_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
 function nfDatasTxt(dias){const d=dias.map(x=>String(x).padStart(2,'0'));return d.length<2?d.join(''):d.slice(0,-1).join('; ')+' e '+d[d.length-1];}
 function nfFiscalChave(pac){return nfNorm(pac);}
-function nfCadastrado(pac){return (typeof getConvertidos==='function'?getConvertidos():[]).some(x=>nfNorm(x.paciente)===nfNorm(pac));}
+function nfAchaPac(pac){
+  const L=(typeof getConvertidos==='function'?getConvertidos():[]), n=nfNorm(pac);
+  const ex=L.find(x=>nfNorm(x.paciente)===n); if(ex) return ex;
+  const c=L.filter(x=>{const m=nfNorm(x.paciente); if(m.split(' ').length<2||n.split(' ').length<2) return false; return n.indexOf(m+' ')===0||m.indexOf(n+' ')===0;});
+  return c.length===1?c[0]:null;
+}
+function nfCadastrado(pac){return !!nfAchaPac(pac);}
 function nfFiscalPadrao(pac){
-  const p=(typeof getConvertidos==='function'?getConvertidos():[]).find(x=>nfNorm(x.paciente)===nfNorm(pac));
+  const p=nfAchaPac(pac);
   const f={tomador:'',cpf:'',cep:'',logradouro:'',numero:'',complemento:'',bairro:'',municipio:'Guarulhos',uf:'SP',email:'',igual:'sim'};
   if(!p) return f;
   const infantil=!!(p.responsavelLegal&&nfNorm(p.responsavelLegal)!==nfNorm(p.paciente));
@@ -11744,7 +11751,10 @@ function nfZerarImportacao(){
   nfSave(D); renderNfse(document.getElementById('main-content')); toast('Importação do mês zerada.');
 }
 let NF_PASSO=1, NF_BUSCA='';
-function nfIrPasso(n){NF_PASSO=n; renderNfse(document.getElementById('main-content'));}
+function nfIrPasso(n){
+  if(n>=3){const D=nfLoad(); D.sel=D.sel||{}; D.sel[NF_MES]=D.sel[NF_MES]||{}; NF_LIN.forEach(l=>{D.sel[NF_MES][l.chave]=l.emitir;}); nfSave(D);}
+  NF_PASSO=n; renderNfse(document.getElementById('main-content'));
+}
 function nfSel(l,v){const D=nfLoad(); D.sel=D.sel||{}; D.sel[NF_MES]=D.sel[NF_MES]||{}; D.sel[NF_MES][l.chave]=!!v; l.emitir=!!v; nfSave(D);}
 function nfPassoCab(D){
   const nomes=['Importar planilha','Quem será emitido','Revisar e editar','Gerar lote'];
@@ -11767,7 +11777,7 @@ function renderNfse(c){
       <div style="font-size:13px;margin:8px 0">${ns?`<b>${ns}</b> sessões importadas em ${NF_MES}, de <b>${NF_LIN.length}</b> pacientes/profissionais (todas, exceto canceladas, inclusive as ainda não realizadas).`:'Nenhuma sessão importada neste mês. Suba a planilha de consultas do Doctoralia com todas as sessões do mês.'}${meses.length?` <span style="color:var(--text3)">Meses com dados: ${meses.join(', ')}.</span>`:''}</div>
       ${ns?nfPassoNav(0,2,'Continuar: escolher quem será emitido'):''}`;
   } else if(NF_PASSO===2){
-    corpo=`<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+    corpo=`<div id="nf-conf"></div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
       <input class="form-input" id="nf-busca" style="width:230px" placeholder="🔎 Buscar paciente" value="${esc(NF_BUSCA)}" oninput="NF_BUSCA=this.value;nfRenderPasso2()">
       <button class="btn-ghost" onclick="nfMarcarTodos(true)">Marcar todos S</button><button class="btn-ghost" onclick="nfMarcarTodos(false)">Marcar todos N</button>
       <span id="nf-resumo2" style="margin-left:auto;font-size:13px"></span></div>
@@ -11809,12 +11819,21 @@ function nfMarcarTodos(v){
   nfSave(D); nfRenderPasso2();
 }
 function nfToggleEmitir(i,v){ nfSel(NF_LIN[i],v==='S'); nfRenderPasso2(); }
+function nfConferenciaN(){
+  const D=nfLoad(); const [a,m]=NF_MES.split('-').map(Number); const pv=(m===1?(a-1)+'-12':a+'-'+String(m-1).padStart(2,'0'));
+  const sp=(D.sel&&D.sel[pv])||{}; const nomes={};
+  Object.keys(sp).forEach(k=>{ if(sp[k]===false) nomes[k.split('|')[0]]=1; });
+  const ls=NF_LIN.filter(l=>!l.emitir&&nomes[nfFiscalChave(l.pac)]);
+  if(!ls.length) return '';
+  return `<div style="border-left:4px solid #b26a00;background:#fff8ea;padding:8px 12px;margin-bottom:10px;font-size:12.5px"><b>🔁 Conferência mensal:</b> em ${pv} estes pacientes estavam como <b>N</b> e continuam como N. Algum pediu para voltar para S? ${ls.map(l=>esc(l.pac)).join(', ')}.</div>`;
+}
 function nfRenderPasso2(){
+  const cf=document.getElementById('nf-conf'); if(cf) cf.innerHTML=nfConferenciaN();
   const tb=document.getElementById('nf-tbody2'); if(!tb) return; const q=nfNorm(NF_BUSCA);
   const pill=(bg,cor,t)=>`<span style="background:${bg};color:${cor};padding:2px 8px;border-radius:99px;font-size:11.5px;margin-right:4px">${t}</span>`;
   tb.innerHTML=NF_LIN.map((l,i)=>({l,i})).filter(x=>!q||nfNorm(x.l.pac).indexOf(q)>=0).map(({l,i})=>{
     const e=nfseValidar(l,l.f).e; const tot=Math.round(l.q*l.vs*100)/100;
-    const obs=(l.emitida?pill('#e3f4e8','#1e7a3c','já no lote '+l.emitida.lote):'')+(l.prof==='Erika'?pill('#f3f4f6','#6b7280','⏸️ Erika sem CRP'):'')+(l.novo?pill('#fff3dc','#b26a00','🆕 sem cadastro'):'')+(e.length&&l.prof!=='Erika'?pill('#fde8e6','#b42318','⚠️ '+e.length+' pendência(s) de dados'):'');
+    const obs=(l.emitida?pill('#e3f4e8','#1e7a3c','já no lote '+l.emitida.lote):'')+(l.prof==='Erika'&&!l.emitir?pill('#f3f4f6','#6b7280','⏸️ Erika pausada'):'')+(l.novo?pill('#fff3dc','#b26a00','🆕 sem cadastro'):'')+(e.length&&(l.prof!=='Erika'||l.emitir)?pill('#fde8e6','#b42318','⚠️ '+e.length+' pendência(s) de dados'):'');
     return `<tr style="border-bottom:1px solid var(--border);${l.emitir?'':'opacity:.6'}"><td style="text-align:center;padding:4px"><select class="form-select" style="width:64px;font-weight:700;color:${l.emitir?'#1e7a3c':'#b42318'}" onchange="nfToggleEmitir(${i},this.value)"><option value="S" ${l.emitir?'selected':''}>S</option><option value="N" ${l.emitir?'':'selected'}>N</option></select></td>
       <td style="padding:6px">${esc(l.pac)}</td><td>${esc(l.prof)}</td><td style="text-align:center">${l.q}</td><td style="text-align:right">R$ ${nfBrl(tot)}</td><td style="padding-left:10px">${obs}</td></tr>`;
   }).join('')||'<tr><td colspan="6" style="padding:14px;color:var(--text3)">Nenhum paciente encontrado.</td></tr>';
@@ -11822,7 +11841,7 @@ function nfRenderPasso2(){
   const el=document.getElementById('nf-resumo2'); if(el) el.innerHTML=`<b>${sel.length}</b> de ${NF_LIN.length} serão emitidos · <b>R$ ${nfBrl(tot)}</b>`;
 }
 function nfPainel(){
-  const SL=NF_LIN.filter(l=>l.emitir), erika=NF_LIN.filter(l=>l.prof==='Erika'), novos=SL.filter(l=>l.novo), erros=SL.filter(l=>nfseValidar(l,l.f).e.length), rev=SL.filter(l=>l.revisar);
+  const SL=NF_LIN.filter(l=>l.emitir), erika=NF_LIN.filter(l=>l.prof==='Erika'&&!l.emitir), novos=SL.filter(l=>l.novo), erros=SL.filter(l=>nfseValidar(l,l.f).e.length), rev=SL.filter(l=>l.revisar);
   const el=document.getElementById('nf-painel'); if(!el) return;
   if(!NF_LIN.length){el.innerHTML='';return;}
   const box=(cor,bg,t)=>`<div style="border-left:4px solid ${cor};background:${bg};padding:8px 12px;margin-bottom:6px;font-size:12.5px">${t}</div>`;
@@ -11984,7 +12003,7 @@ function nfGerar(){
   const dataEm=document.getElementById('nf-dataem').value;
   const sel=NF_LIN.filter(l=>l.emitir&&!nfseValidar(l,l.f).e.length);
   if(!sel.length) return;
-  const pEr=NF_LIN.filter(l=>l.prof==='Erika'); if(pEr.length&&!confirm('LEMBRETE: '+pEr.length+' nota(s) da Erika (sem CRP) est\u00E3o pausadas e ficam FORA deste lote.\nContinuar gerando o lote?')) return;
+  const pEr=NF_LIN.filter(l=>l.prof==='Erika'&&!l.emitir); if(pEr.length&&!confirm('LEMBRETE: '+pEr.length+' nota(s) da Erika (sem CRP) est\u00E3o pausadas e ficam FORA deste lote.\nContinuar gerando o lote?')) return;
   const lote=D.cfg.proxLote; let n=D.cfg.proxRps; const serie=D.cfg.serie; const [ano,mm]=NF_MES.split('-');
   if(D.lotes.some(x=>x.lote===lote&&x.status!=='erro')&&!confirm('O lote '+lote+' já foi gerado e não foi marcado como erro. Gerar de novo com o mesmo número?')) return;
   const notas=[], xmls=[];
