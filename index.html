@@ -11631,7 +11631,7 @@ const NF_KEY='cinpsi_nfse';
 const NF_PREST={cnpj:'56616870000144',im:'677836',item:'04.03',tribMun:'865000301',nbs:'123012100',aliq:0.02,ibgeGru:'3518800'};
 const NF_PROFS={
   Tatiane:{nome:'Tatiane Sanches',esp:'Psicologia',reg:'CRP 06148941',tit:'Psicoterapeuta responsável'},
-  Leticia:{nome:'Tatiane Sanches',esp:'Psicologia',reg:'CRP 06148941',tit:'Psicoterapeuta responsável'},
+  Leticia:{nome:'Leticia Braga Martins / Tatiane Sanches',esp:'Psicologia',reg:'CRP 06148941',tit:'Psicoterapeuta responsável'},
   Juliana:{nome:'Juliana Aparecida Barbosa Calleff',esp:'Psicologia',reg:'CRP 06/114330',tit:'Psicóloga responsável'},
   Mayara:{nome:'Mayara Borges',esp:'Psicologia',reg:'CRP 06/179691',tit:'Psicóloga responsável'},
   Nayra:{nome:'Nayra Vieira Neri',esp:'Fonoaudiologia',reg:'CRFa 2-23081',tit:'Fonoaudióloga responsável'},
@@ -11647,6 +11647,7 @@ const nfNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,
 function nfCpfOk(c){if(c.length!==11||/^(\d)\1+$/.test(c))return false;for(const n of[9,10]){let s=0;for(let i=0;i<n;i++)s+=(+c[i])*(n+1-i);if((s*10)%11%10!==+c[n])return false}return true}
 function nfLoad(){const d=load(NF_KEY)||{};d.cfg=d.cfg||{serie:'CIN',proxRps:25,proxLote:10};d.fiscal=d.fiscal||{};d.sessoes=d.sessoes||{};d.notas=d.notas||[];d.lotes=d.lotes||[];return d;}
 function nfSave(d){store(NF_KEY,d);}
+function nfProf(p){return /licenca|clinpsi|administrativ/.test(nfNorm(p))?'Leticia':p;}
 let NF_MES=new Date().toISOString().slice(0,7);
 let NF_LIN=[];
 
@@ -11693,7 +11694,7 @@ function nfFiscalPadrao(pac){
 }
 function nfMontarLinhas(){
   const D=nfLoad(); const ses=(D.sessoes[NF_MES]||[]); const mapa={};
-  ses.forEach(s=>{const k=nfFiscalChave(s.pac)+'|'+s.prof; (mapa[k]=mapa[k]||{pac:s.pac,prof:s.prof,serv0:s.servico,sess:[]}).sess.push(s);});
+  ses.forEach(s=>{const pf=nfProf(s.prof); const k=nfFiscalChave(s.pac)+'|'+pf; (mapa[k]=mapa[k]||{pac:s.pac,prof:pf,serv0:s.servico,sess:[]}).sess.push(s);});
   const [ano,mm]=NF_MES.split('-'); const mesTxt=NF_MESES[+mm-1]+' de '+ano;
   NF_LIN=Object.values(mapa).sort((a,b)=>a.pac.localeCompare(b.pac)).map(g=>{
     const f=Object.assign(nfFiscalPadrao(g.pac),D.fiscal[nfFiscalChave(g.pac)]||{});
@@ -11773,7 +11774,7 @@ async function nfLerArquivo(file){
       const estado=ix.estado!=null?planNorm(r[ix.estado]):''; if(ix.estado!=null&&!/realizada/.test(estado)) return;
       const valor=planNum(r[ix.valor]); if(!valor) return;
       const pac=String(r[ix.pac]||'').trim(), dt=planData(r[ix.data]); if(!pac||!dt) return;
-      const prof=fatProfKey(r[ix.prof]);
+      const prof=nfProf(fatProfKey(r[ix.prof]));
       (porMes[dt.slice(0,7)]=porMes[dt.slice(0,7)]||[]).push({pac,prof,data:dt,valor,servico:ix.servico!=null?String(r[ix.servico]||'').trim():''});
     });
     const D=nfLoad(); const ms=Object.keys(porMes);
