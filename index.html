@@ -12035,9 +12035,15 @@ function nfHistoricoHtml(D){
     return `<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:6px;font-size:12.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
       <b>Lote ${x.lote}</b> · ${x.mes} · RPS ${x.rpsIni}–${x.rpsFim} · ${x.qtd} notas · R$ ${nfBrl(x.total)}
       <span style="color:${cor};font-weight:600">${x.status==='gerado'?'aguardando retorno':x.status}</span>
-      ${x.status==='gerado'?`<button class="btn-ghost" style="font-size:11.5px" onclick="nfRetorno(${x.lote},true)">✅ Processado com sucesso</button><button class="btn-ghost" style="font-size:11.5px" onclick="nfRetorno(${x.lote},false)">❌ Erro</button>`:''}
+      ${x.status==='gerado'?`<button class="btn-ghost" style="font-size:11.5px" onclick="nfRetorno(${x.lote},true)">✅ Processado com sucesso</button><button class="btn-ghost" style="font-size:11.5px" onclick="nfRetorno(${x.lote},false)">❌ Erro</button><button class="btn-ghost" style="font-size:11.5px" onclick="nfDescartar(${x.lote})">🗑️ Descartar (teste)</button>`:''}
       ${x.status==='sucesso'?`<button class="btn-ghost" style="font-size:11.5px" onclick="nfNumerosNfse(${x.lote})">🔢 Nºs das NFS-e</button><button class="btn-ghost" style="font-size:11.5px" onclick="nfEmails(${x.lote})">✉️ E-mails</button>`:''}</div>`;
   }).join('')+'</div>';
+}
+function nfDescartar(lote){
+  const D=nfLoad(); const x=D.lotes.find(y=>y.lote===lote); if(!x||x.status!=='gerado') return;
+  if(!confirm('Descartar o lote '+lote+' (teste)?\nO lote some do hist\u00F3rico e os contadores de RPS e lote N\u00C3O mudam. Os pacientes voltam a poder entrar em um novo lote.')) return;
+  D.lotes=D.lotes.filter(y=>y.lote!==lote); D.notas=D.notas.filter(n=>n.lote!==lote);
+  nfSave(D); renderNfse(document.getElementById('main-content')); toast('Lote '+lote+' descartado.');
 }
 function nfRetorno(lote,ok){
   const D=nfLoad(); const x=D.lotes.find(y=>y.lote===lote); if(!x) return;
