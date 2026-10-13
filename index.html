@@ -11788,7 +11788,7 @@ async function nfLerArquivo(file){
 function nfEditarFiscal(i){
   const l=NF_LIN[i], f=l.f; window._nfEd=i;
   document.getElementById('modal-nf-fiscal')?.remove();
-  const mo=document.createElement('div'); mo.className='modal-overlay'; mo.id='modal-nf-fiscal';
+  const mo=document.createElement('div'); mo.className='modal-overlay open'; mo.id='modal-nf-fiscal';
   const campo=(k,lb,w)=>`<div class="form-group" style="${w?'grid-column:span '+w:''}"><label class="form-label">${lb}</label><input class="form-input" id="nff-${k}" value="${esc(f[k]||'')}"></div>`;
   mo.innerHTML=`<div class="modal" style="max-width:640px"><div class="modal-header"><div class="modal-title">🪪 Dados fiscais — ${esc(l.pac)}</div><button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button></div>
   <div class="modal-body"><p style="font-size:12px;color:var(--text3);margin:0 0 10px">Tomador = quem recebe a nota (paciente adulto ou responsável legal). Vale para todos os meses.</p>
@@ -11861,7 +11861,7 @@ function nfRetorno(lote,ok){
 function nfNumerosNfse(lote){
   const D=nfLoad(); const ns=D.notas.filter(n=>n.lote===lote);
   document.getElementById('modal-nf-num')?.remove();
-  const mo=document.createElement('div'); mo.className='modal-overlay'; mo.id='modal-nf-num';
+  const mo=document.createElement('div'); mo.className='modal-overlay open'; mo.id='modal-nf-num';
   mo.innerHTML=`<div class="modal" style="max-width:560px"><div class="modal-header"><div class="modal-title">🔢 Nº das NFS-e — lote ${lote}</div><button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button></div>
   <div class="modal-body"><p style="font-size:12px;color:var(--text3)">Veja em Consultar NFS-e no GISS.</p>${ns.map((n,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:13px"><span style="flex:1">RPS ${n.rps} · ${esc(n.pac)} · R$ ${nfBrl(n.total)}</span><input class="form-input" style="width:90px" id="nfn-${i}" value="${esc(n.nfse||'')}" placeholder="nº NFS-e"></div>`).join('')}</div>
   <div class="modal-footer"><button class="btn-primary" onclick="nfSalvarNumeros(${lote})">💾 Salvar</button></div></div>`;
