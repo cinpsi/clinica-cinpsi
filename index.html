@@ -11691,7 +11691,19 @@ function nfFiscalPadrao(pac){
   f.tomador=p.paciente; f.cpf=(infantil?p.cpfPaciente:p.cpf)||''; f.email=p.email||'';
   const end=String(p.endereco||''); const m=end.match(/\d{5}-?\d{3}/); if(m) f.cep=m[0];
   const partes=end.replace(/\s*-?\s*CEP.*$/i,'').split(',').map(s=>s.trim()).filter(Boolean);
-  if(partes[0]) f.logradouro=partes[0]; if(partes[1]) f.numero=partes[1]; if(partes[2]) f.complemento=partes.slice(2).join(', ');
+  const p0=partes[0]||'';
+  if(p0&&!/^\d{5}-?\d{3}$/.test(p0)){
+    if(/^[A-Za-z\u00C0-\u00FF]/.test(p0)&&!/^(casa|apto?|ap\.?|bloco|bl\.?)\b/i.test(p0)){
+      f.logradouro=p0;
+      if(partes[1]){const n1=partes[1].match(/^(\d+[A-Za-z]?)\b/); f.numero=n1?n1[1]:partes[1];}
+      if(partes[2]) f.complemento=partes.slice(2).join(', ');
+    } else {
+      const cs=p0.match(/^casa\s+(\d+)\s*$/i), mm=p0.match(/^(\d+[A-Za-z]?)\s*[\/\-]?\s*(.*)$/);
+      if(cs){f.numero=cs[1]; f.complemento=['Casa'].concat(partes.slice(1)).join(', ');}
+      else if(mm){f.numero=mm[1]; f.complemento=[mm[2]].concat(partes.slice(1)).filter(Boolean).join(', ');}
+      else f.complemento=partes.join(', ');
+    }
+  }
   return f;
 }
 let NF_SO_EDIT=false;
@@ -11765,11 +11777,12 @@ function renderNfse(c){
   nfRenderLinhas();
 }
 function nfPainel(){
-  const novos=NF_LIN.filter(l=>l.novo), erros=NF_LIN.filter(l=>nfseValidar(l,l.f).e.length), rev=NF_LIN.filter(l=>l.revisar);
+  const erika=NF_LIN.filter(l=>l.prof==='Erika'), novos=NF_LIN.filter(l=>l.novo), erros=NF_LIN.filter(l=>nfseValidar(l,l.f).e.length), rev=NF_LIN.filter(l=>l.revisar);
   const el=document.getElementById('nf-painel'); if(!el) return;
   if(!NF_LIN.length){el.innerHTML='';return;}
   const box=(cor,bg,t)=>`<div style="border-left:4px solid ${cor};background:${bg};padding:8px 12px;margin-bottom:6px;font-size:12.5px">${t}</div>`;
-  el.innerHTML=(novos.length?box('#b26a00','#fff8ea',`<b>🆕 ${novos.length} paciente(s) sem cadastro no sistema:</b> ${novos.map(l=>esc(l.pac)).join(', ')}. Cadastre em Leads/Pacientes ou preencha os dados na planilha.`):'')
+  el.innerHTML=(erika.length?box('#6b7280','#f3f4f6',`<b>\u23F8\uFE0F ${erika.length} nota(s) da Erika pausadas</b> (sem CRP) \u2014 ficam fora do lote.`):'')
+   +(novos.length?box('#b26a00','#fff8ea',`<b>🆕 ${novos.length} paciente(s) sem cadastro no sistema:</b> ${novos.map(l=>esc(l.pac)).join(', ')}. Cadastre em Leads/Pacientes ou preencha os dados na planilha.`):'')
    +(rev.length?box('#2563eb','#eef2ff',`<b>✏️ ${rev.length} paciente(s) com "NF diferente do Doctoralia"</b> ainda sem revisão neste mês: ${rev.map(l=>esc(l.pac)).join(', ')}.`):'')
    +(erros.length?box('#b42318','#fdeceb',`<b>⚠️ ${erros.length} nota(s) com dados faltando.</b> Baixe a planilha para edição, preencha e suba de volta.`):box('#1e7a3c','#eef8f1','✅ Nenhuma pendência de dados fiscais.'));
 }
@@ -11926,6 +11939,7 @@ function nfGerar(){
   const dataEm=document.getElementById('nf-dataem').value;
   const sel=NF_LIN.filter(l=>l.emitir&&!nfseValidar(l,l.f).e.length);
   if(!sel.length) return;
+  const pEr=NF_LIN.filter(l=>l.prof==='Erika'); if(pEr.length&&!confirm('LEMBRETE: '+pEr.length+' nota(s) da Erika (sem CRP) est\u00E3o pausadas e ficam FORA deste lote.\nContinuar gerando o lote?')) return;
   const lote=D.cfg.proxLote; let n=D.cfg.proxRps; const serie=D.cfg.serie; const [ano,mm]=NF_MES.split('-');
   if(D.lotes.some(x=>x.lote===lote&&x.status!=='erro')&&!confirm('O lote '+lote+' já foi gerado e não foi marcado como erro. Gerar de novo com o mesmo número?')) return;
   const notas=[], xmls=[];
