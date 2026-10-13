@@ -901,7 +901,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -1684,6 +1684,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads</button>
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Pacientes</button>
       <button class="nav-item" onclick="showView('trilha')" id="nav-trilha"><span class="nav-icon">🧭</span> Trilha de avaliação</button>
+      <button class="nav-item" onclick="showView('nfse')" id="nav-nfse"><span class="nav-icon">🧾</span> Notas Fiscais</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('reunioes')" id="nav-reunioes"><span class="nav-icon">📝</span> Reuniões</button>
       <div class="nav-section">Configurações</div>
@@ -1708,6 +1709,7 @@ const VM={
   'leads':{title:'Leads',sub:'Gerencie e acompanhe seus leads',role:'admin'},
   'convertidos':{title:'Pacientes',sub:'Pacientes ativos e histórico',role:'admin'},
   'trilha':{title:'Trilha de avaliação',sub:'Etapas de entrada do paciente novo',role:'admin'},
+  'nfse':{title:'Notas Fiscais',sub:'Lote XML de NFS-e para o GISS Guarulhos',role:'admin'},
   'registros':{title:'Registros de Supervisão',sub:'Histórico de supervisões'},
   'novo-registro':{title:'Novo Registro',sub:'Preencha os dados da supervisão'},
   'detalhe':{title:'Detalhe',sub:''},
@@ -1769,6 +1771,7 @@ function showView(name){
   else if(name==='leads') renderLeadsView(c);
   else if(name==='convertidos') renderConvertidos(c);
   else if(name==='trilha'&&CU.role==='admin') renderTrilha(c);
+  else if(name==='nfse'&&CU.role==='admin') renderNfse(c);
   else if(name==='faturamento') renderFaturamento(c);
   else if(name==='registros') renderRegistros(c);
   else if(name==='novo-registro') renderNovoRegistro(c);
@@ -11615,6 +11618,263 @@ async function forceSyncAll(btn){
     if(btn){ btn.textContent='❌ Erro'; btn.disabled=false; }
     setTimeout(()=>{ if(btn) btn.textContent='☁️ Sincronizar agora'; },3000);
   }
+}
+
+
+// ════════════════════════════════════════════════════════════
+// NOTAS FISCAIS (NFS-e) — lote XML para o GISS Online de Guarulhos
+// Dados em 'cinpsi_nfse': {cfg:{serie,proxRps,proxLote}, fiscal:{}, sessoes:{'AAAA-MM':[]}, notas:[], lotes:[]}
+// A lógica de geração do XML é idêntica à do Gerador_Lote_NFSe_CINPSI.html.
+// Para migrar ao Emissor Nacional: trocar apenas nfseGerarLoteGISS().
+// ════════════════════════════════════════════════════════════
+const NF_KEY='cinpsi_nfse';
+const NF_PREST={cnpj:'56616870000144',im:'677836',item:'04.03',tribMun:'865000301',nbs:'123012100',aliq:0.02,ibgeGru:'3518800'};
+const NF_PROFS={
+  Tatiane:{nome:'Tatiane Sanches',esp:'Psicologia',reg:'CRP 06148941',tit:'Psicoterapeuta responsável'},
+  Leticia:{nome:'Tatiane Sanches',esp:'Psicologia',reg:'CRP 06148941',tit:'Psicoterapeuta responsável'},
+  Juliana:{nome:'Juliana Aparecida Barbosa Calleff',esp:'Psicologia',reg:'CRP 06/114330',tit:'Psicóloga responsável'},
+  Mayara:{nome:'Mayara Borges',esp:'Psicologia',reg:'CRP 06/179691',tit:'Psicóloga responsável'},
+  Nayra:{nome:'Nayra Vieira Neri',esp:'Fonoaudiologia',reg:'CRFa 2-23081',tit:'Fonoaudióloga responsável'},
+  Luciana:{nome:'Luciana Alves Duarte',esp:'Fonoaudiologia',reg:'CRFa 2-20761',tit:'Fonoaudióloga responsável'},
+  Adriana:{nome:'Adriana Monteiro',esp:'Psicopedagogia',reg:'',tit:'Psicopedagoga responsável'}
+};
+const NF_IBGE={"guarulhos":"3518800","sao paulo":"3550308","são paulo":"3550308","aruja":"3503901","arujá":"3503901","itaquaquecetuba":"3523107","mairipora":"3528502","mairiporã":"3528502","santa isabel":"3546801","poa":"3539806","poá":"3539806","ferraz de vasconcelos":"3515707","suzano":"3552502","mogi das cruzes":"3530607","osasco":"3534401"};
+const nfDig=s=>String(s??'').replace(/\D/g,'');
+const nfEsc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const nfTxt=s=>nfEsc(String(s??'').split(/\s+/).filter(Boolean).join(' '));
+const nfBrl=v=>Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const nfNorm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+function nfCpfOk(c){if(c.length!==11||/^(\d)\1+$/.test(c))return false;for(const n of[9,10]){let s=0;for(let i=0;i<n;i++)s+=(+c[i])*(n+1-i);if((s*10)%11%10!==+c[n])return false}return true}
+function nfLoad(){const d=load(NF_KEY)||{};d.cfg=d.cfg||{serie:'CIN',proxRps:25,proxLote:10};d.fiscal=d.fiscal||{};d.sessoes=d.sessoes||{};d.notas=d.notas||[];d.lotes=d.lotes||[];return d;}
+function nfSave(d){store(NF_KEY,d);}
+let NF_MES=new Date().toISOString().slice(0,7);
+let NF_LIN=[];
+
+// ── Geração do XML (idêntica ao gerador) ─────────────────────
+function nfseDescricao(r){
+  const q=r.q, vs=r.vs;
+  return `Referente a ${q} ${q===1?'sessão':'sessões'} de ${r.serv} ${q===1?'realizada':'realizadas'} em ${r.datas} de ${r.mesTxt}.\n**Valor por sessão R$ ${nfBrl(vs)};\n${(r.tit||'')} ${r.profNome} ${r.reg||''}`.trimEnd();
+}
+function nfseXmlRps(r,n,serie,dataEm){
+  const compXml=r.complemento?`<Complemento>${nfTxt(r.complemento)}</Complemento>`:''; const contato=r.email?`<Contato><Email>${nfTxt(r.email)}</Email></Contato>`:'';
+  const P=NF_PREST;
+  return `<Rps><InfDeclaracaoPrestacaoServico Id="rps${n}"><Rps><IdentificacaoRps><Numero>${n}</Numero><Serie>${nfEsc(serie)}</Serie><Tipo>1</Tipo></IdentificacaoRps><DataEmissao>${dataEm}</DataEmissao><Status>1</Status></Rps><Competencia>${r.compd}</Competencia><Servico><Valores><ValorServicos>${r.total.toFixed(2)}</ValorServicos><Aliquota>${P.aliq.toFixed(4)}</Aliquota><trib><totTrib><indTotTrib>0</indTotTrib></totTrib></trib></Valores><IssRetido>2</IssRetido><ItemListaServico>${P.item}</ItemListaServico><CodigoTributacaoMunicipio>${P.tribMun}</CodigoTributacaoMunicipio><CodigoNbs>${P.nbs}</CodigoNbs><Discriminacao>${nfEsc(r.disc)}</Discriminacao><CodigoMunicipio>${P.ibgeGru}</CodigoMunicipio><ExigibilidadeISS>1</ExigibilidadeISS><MunicipioIncidencia>${P.ibgeGru}</MunicipioIncidencia></Servico><Prestador><CpfCnpj><Cnpj>${P.cnpj}</Cnpj></CpfCnpj><InscricaoMunicipal>${P.im}</InscricaoMunicipal></Prestador><TomadorServico><IdentificacaoTomador><CpfCnpj><Cpf>${r.cpf}</Cpf></CpfCnpj></IdentificacaoTomador><RazaoSocial>${nfTxt(r.tomador)}</RazaoSocial><Endereco><Endereco>${nfTxt(r.logradouro)}</Endereco><Numero>${nfTxt(r.numero)}</Numero>${compXml}<Bairro>${nfTxt(r.bairro)}</Bairro><CodigoMunicipio>${r.ibge}</CodigoMunicipio><Uf>${r.uf}</Uf><Cep>${r.cep}</Cep></Endereco>${contato}</TomadorServico><OptanteSimplesNacional>1</OptanteSimplesNacional><IncentivoFiscal>2</IncentivoFiscal></InfDeclaracaoPrestacaoServico></Rps>`;
+}
+function nfseGerarLoteGISS(rpsXmls,lote){
+  const P=NF_PREST;
+  return `<?xml version="1.0" encoding="UTF-8"?><e:EnviarLoteRpsEnvio xmlns:e="http://www.giss.com.br/enviar-lote-rps-envio-v2_04.xsd" xmlns="http://www.giss.com.br/tipos-v2_04.xsd"><e:LoteRps Id="lote${lote}" versao="2.04"><NumeroLote>${lote}</NumeroLote><Prestador><CpfCnpj><Cnpj>${P.cnpj}</Cnpj></CpfCnpj><InscricaoMunicipal>${P.im}</InscricaoMunicipal></Prestador><QuantidadeRps>${rpsXmls.length}</QuantidadeRps><ListaRps>${rpsXmls.join('')}</ListaRps></e:LoteRps></e:EnviarLoteRpsEnvio>`;
+}
+
+// ── Validação de uma linha (mesmas regras do gerador) ────────
+function nfseValidar(l,f){
+  const e=[]; const cpf=nfDig(f.cpf), cep=nfDig(f.cep);
+  if(!nfCpfOk(cpf)) e.push('CPF inválido'); if(cep.length!==8) e.push('CEP inválido');
+  const mun=String(f.municipio||'Guarulhos').trim(); const ibge=/^\d{7}$/.test(mun)?mun:NF_IBGE[mun.toLowerCase()]; if(!ibge) e.push('município sem código IBGE');
+  const p=NF_PROFS[l.prof]; if(!p) e.push('profissional não cadastrada'); else if(!p.reg&&p.esp!=='Psicopedagogia') e.push('profissional sem registro');
+  [['logradouro','logradouro'],['numero','número'],['bairro','bairro']].forEach(([k,n])=>{ if(!String(f[k]||'').trim()) e.push('falta '+n); });
+  if(!(l.q>0)) e.push('sem sessões'); if(!(l.vs>0)) e.push('sem valor por sessão');
+  return {e,cpf,cep,ibge,p};
+}
+
+// ── Montagem das linhas do mês a partir das sessões importadas ──
+const NF_MESES=['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+function nfDatasTxt(dias){const d=dias.map(x=>String(x).padStart(2,'0'));return d.length<2?d.join(''):d.slice(0,-1).join('; ')+' e '+d[d.length-1];}
+function nfFiscalChave(pac){return nfNorm(pac);}
+function nfFiscalPadrao(pac){
+  const p=(typeof getConvertidos==='function'?getConvertidos():[]).find(x=>nfNorm(x.paciente)===nfNorm(pac));
+  const f={tomador:'',cpf:'',cep:'',logradouro:'',numero:'',complemento:'',bairro:'',municipio:'Guarulhos',uf:'SP',email:'',tipo:'sessao'};
+  if(!p) return f;
+  const infantil=!!(p.responsavelLegal&&nfNorm(p.responsavelLegal)!==nfNorm(p.paciente));
+  f.tomador=infantil?p.responsavelLegal:p.paciente; f.cpf=p.cpf||''; f.email=p.email||'';
+  const end=String(p.endereco||''); const m=end.match(/\d{5}-?\d{3}/); if(m) f.cep=m[0];
+  const partes=end.replace(/\s*-?\s*CEP.*$/i,'').split(',').map(s=>s.trim()).filter(Boolean);
+  if(partes[0]) f.logradouro=partes[0]; if(partes[1]) f.numero=partes[1]; if(partes[2]) f.complemento=partes.slice(2).join(', ');
+  return f;
+}
+function nfMontarLinhas(){
+  const D=nfLoad(); const ses=(D.sessoes[NF_MES]||[]); const mapa={};
+  ses.forEach(s=>{const k=nfFiscalChave(s.pac)+'|'+s.prof; (mapa[k]=mapa[k]||{pac:s.pac,prof:s.prof,serv0:s.servico,sess:[]}).sess.push(s);});
+  const [ano,mm]=NF_MES.split('-'); const mesTxt=NF_MESES[+mm-1]+' de '+ano;
+  NF_LIN=Object.values(mapa).sort((a,b)=>a.pac.localeCompare(b.pac)).map(g=>{
+    const f=Object.assign(nfFiscalPadrao(g.pac),D.fiscal[nfFiscalChave(g.pac)]||{});
+    g.sess.sort((a,b)=>a.data.localeCompare(b.data));
+    const dias=g.sess.map(s=>s.data.slice(8,10)); const freq={}; g.sess.forEach(s=>freq[s.valor]=(freq[s.valor]||0)+1);
+    const vs=+Object.entries(freq).sort((a,b)=>b[1]-a[1])[0][0];
+    const p=NF_PROFS[g.prof]; const serv=p?(p.esp==='Psicologia'?'atendimento psicológico':p.esp==='Psicopedagogia'?'psicopedagogia':p.esp):'';
+    const emitida=D.notas.find(n=>n.mes===NF_MES&&nfFiscalChave(n.pac)===nfFiscalChave(g.pac)&&n.prof===g.prof&&n.status!=='erro');
+    const L={pac:g.pac,prof:g.prof,f,q:g.sess.length,datas:nfDatasTxt(dias),vs,serv,mesTxt,emitida,
+      emitir:!!f.cpf&&!emitida&&f.tipo!=='nao', manual:''};
+    return L;
+  });
+}
+
+// ── Tela ─────────────────────────────────────────────────────
+function renderNfse(c){
+  const D=nfLoad(); nfMontarLinhas();
+  const meses=Object.keys(D.sessoes).sort().reverse();
+  c.innerHTML=`<div class="section" style="max-width:1200px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px">
+      <div class="form-group" style="margin:0"><label class="form-label">Competência</label><input type="month" class="form-input" id="nf-mes" value="${NF_MES}" onchange="NF_MES=this.value;renderNfse(document.getElementById('main-content'))"></div>
+      <button class="btn-primary" onclick="nfImportarSessoes()">📥 Importar sessões do Doctoralia</button>
+      <div style="font-size:12px;color:var(--text3)">${(D.sessoes[NF_MES]||[]).length} sessões realizadas no mês${meses.length?' · meses com dados: '+meses.join(', '):''}</div>
+      <input type="file" id="nf-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="nfLerArquivo(this.files[0])">
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px;background:var(--surface2);padding:10px 12px;border-radius:var(--radius-sm)">
+      <label class="form-label" style="margin:0">Série <input class="form-input" id="nf-serie" style="width:70px" value="${esc(D.cfg.serie)}"></label>
+      <label class="form-label" style="margin:0">Próximo nº RPS <input type="number" class="form-input" id="nf-rps" style="width:90px" value="${D.cfg.proxRps}" onchange="nfSalvarCfg()"></label>
+      <label class="form-label" style="margin:0">Próximo nº lote <input type="number" class="form-input" id="nf-lote" style="width:90px" value="${D.cfg.proxLote}" onchange="nfSalvarCfg()"></label>
+      <label class="form-label" style="margin:0">Data de emissão <input type="date" class="form-input" id="nf-dataem" value="${new Date().toISOString().slice(0,10)}"></label>
+      <span style="font-size:12px;color:var(--text3)">Os números só avançam depois de você confirmar "processado com sucesso".</span>
+    </div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12.5px"><thead><tr style="background:var(--surface2)">
+      <th></th><th style="text-align:left;padding:6px">Paciente</th><th style="text-align:left">Profissional</th><th style="text-align:left">Tomador / situação</th><th>Sessões</th><th style="text-align:left">Datas</th><th>Valor/sessão NF</th><th>Total</th><th></th></tr></thead>
+      <tbody id="nf-tbody"></tbody></table></div>
+    <div id="nf-resumo" style="margin:12px 0;font-size:13px"></div>
+    <button class="btn-primary" id="nf-gerar" onclick="nfGerar()">🧾 Gerar lote XML</button>
+    <div id="nf-depois"></div>
+    ${nfHistoricoHtml(D)}
+  </div>`;
+  nfRenderLinhas();
+}
+function nfRenderLinhas(){
+  const D=nfLoad(); const tb=document.getElementById('nf-tbody'); if(!tb) return;
+  tb.innerHTML=NF_LIN.length?NF_LIN.map((l,i)=>{
+    const v=nfseValidar(l,l.f); const tot=Math.round(l.q*l.vs*100)/100;
+    const sit=l.emitida?`<span class="pill" style="background:#e3f4e8;color:#1e7a3c;padding:2px 8px;border-radius:99px">já no lote ${l.emitida.lote}${l.emitida.nfse?' · NFS-e '+l.emitida.nfse:''}</span>`:(v.e.length?`<span style="background:#fde8e6;color:#b42318;padding:2px 8px;border-radius:99px;font-size:11.5px">${esc(v.e.join('; '))}</span>`:'<span style="background:#e3f4e8;color:#1e7a3c;padding:2px 8px;border-radius:99px;font-size:11.5px">OK</span>');
+    return `<tr style="border-bottom:1px solid var(--border)"><td><input type="checkbox" ${l.emitir?'checked':''} ${v.e.length?'disabled':''} onchange="NF_LIN[${i}].emitir=this.checked;nfResumo()"></td>
+      <td style="padding:6px">${esc(l.pac)}</td><td>${esc(l.prof)}</td><td>${esc(l.f.tomador||'—')}<br>${sit}</td>
+      <td style="text-align:center"><input type="number" class="form-input" style="width:58px" value="${l.q}" onchange="NF_LIN[${i}].q=+this.value;nfRenderLinhas()"></td>
+      <td><input class="form-input" style="width:150px" value="${esc(l.datas)}" onchange="NF_LIN[${i}].datas=this.value;nfResumo()"></td>
+      <td style="text-align:center"><input type="number" step="0.01" class="form-input" style="width:90px" value="${l.vs}" onchange="NF_LIN[${i}].vs=+this.value;nfRenderLinhas()"></td>
+      <td style="text-align:right">R$ ${nfBrl(tot)}</td>
+      <td><button class="btn-ghost" style="font-size:11.5px" onclick="nfEditarFiscal(${i})">🪪 Fiscal</button></td></tr>
+      <tr><td></td><td colspan="8" style="font-size:11.5px;color:var(--text3);white-space:pre-line;padding:0 6px 8px">${esc(nfseDescricao({q:l.q,vs:l.vs,serv:l.serv,datas:l.datas,mesTxt:l.mesTxt,tit:(NF_PROFS[l.prof]||{}).tit,profNome:(NF_PROFS[l.prof]||{}).nome||l.prof,reg:(NF_PROFS[l.prof]||{}).reg}))}</td></tr>`;
+  }).join(''):'<tr><td colspan="9" style="padding:14px;color:var(--text3)">Nenhuma sessão neste mês. Importe a planilha de consultas do Doctoralia.</td></tr>';
+  nfResumo();
+}
+function nfResumo(){
+  const sel=NF_LIN.filter(l=>l.emitir&&!nfseValidar(l,l.f).e.length);
+  const tot=sel.reduce((a,l)=>a+Math.round(l.q*l.vs*100)/100,0);
+  const el=document.getElementById('nf-resumo'); if(el) el.innerHTML=`<b>${sel.length}</b> notas no lote · <b>R$ ${nfBrl(tot)}</b>`;
+  const b=document.getElementById('nf-gerar'); if(b) b.disabled=!sel.length;
+}
+function nfSalvarCfg(){const D=nfLoad();D.cfg.serie=document.getElementById('nf-serie').value.trim()||'CIN';D.cfg.proxRps=+document.getElementById('nf-rps').value;D.cfg.proxLote=+document.getElementById('nf-lote').value;nfSave(D);}
+
+// ── Importar sessões (planilha de consultas do Doctoralia) ───
+function nfImportarSessoes(){document.getElementById('nf-file').click();}
+async function nfLerArquivo(file){
+  if(!file) return;
+  try{
+    const rows=await xlsxLerArquivo(file); const ix=planColunas(rows[0]);
+    if(ix.prof==null||ix.valor==null||ix.pac==null||ix.data==null){toast('Não encontrei as colunas Paciente, Especialista, Data e Preço.');return;}
+    const porMes={};
+    rows.slice(1).forEach(r=>{
+      if(!r||!r.length) return;
+      const estado=ix.estado!=null?planNorm(r[ix.estado]):''; if(ix.estado!=null&&!/realizada/.test(estado)) return;
+      const valor=planNum(r[ix.valor]); if(!valor) return;
+      const pac=String(r[ix.pac]||'').trim(), dt=planData(r[ix.data]); if(!pac||!dt) return;
+      const prof=fatProfKey(r[ix.prof]);
+      (porMes[dt.slice(0,7)]=porMes[dt.slice(0,7)]||[]).push({pac,prof,data:dt,valor,servico:ix.servico!=null?String(r[ix.servico]||'').trim():''});
+    });
+    const D=nfLoad(); const ms=Object.keys(porMes);
+    if(!ms.length){toast('Nenhuma sessão realizada encontrada.');return;}
+    ms.forEach(m=>D.sessoes[m]=porMes[m]); nfSave(D);
+    NF_MES=ms.sort().pop(); toast('✅ Sessões importadas: '+ms.length+' mês(es)');
+    renderNfse(document.getElementById('main-content'));
+  }catch(e){toast('Erro ao ler a planilha.');}
+}
+
+// ── Cadastro fiscal (tomador) ────────────────────────────────
+function nfEditarFiscal(i){
+  const l=NF_LIN[i], f=l.f; window._nfEd=i;
+  document.getElementById('modal-nf-fiscal')?.remove();
+  const mo=document.createElement('div'); mo.className='modal-overlay'; mo.id='modal-nf-fiscal';
+  const campo=(k,lb,w)=>`<div class="form-group" style="${w?'grid-column:span '+w:''}"><label class="form-label">${lb}</label><input class="form-input" id="nff-${k}" value="${esc(f[k]||'')}"></div>`;
+  mo.innerHTML=`<div class="modal" style="max-width:640px"><div class="modal-header"><div class="modal-title">🪪 Dados fiscais — ${esc(l.pac)}</div><button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button></div>
+  <div class="modal-body"><p style="font-size:12px;color:var(--text3);margin:0 0 10px">Tomador = quem recebe a nota (paciente adulto ou responsável legal). Vale para todos os meses.</p>
+  <div class="form-grid">${campo('tomador','Tomador (nome na nota)',2)}${campo('cpf','CPF do tomador')}${campo('email','E-mail')}${campo('cep','CEP')}${campo('logradouro','Logradouro',2)}${campo('numero','Número')}${campo('complemento','Complemento')}${campo('bairro','Bairro')}${campo('municipio','Município')}${campo('uf','UF')}</div></div>
+  <div class="modal-footer"><button class="btn-ghost" onclick="this.closest('.modal-overlay').remove()">Cancelar</button><button class="btn-primary" onclick="nfSalvarFiscal()">💾 Salvar</button></div></div>`;
+  document.body.appendChild(mo);
+}
+function nfSalvarFiscal(){
+  const l=NF_LIN[window._nfEd]; const D=nfLoad(); const f={};
+  ['tomador','cpf','email','cep','logradouro','numero','complemento','bairro','municipio','uf'].forEach(k=>f[k]=document.getElementById('nff-'+k).value.trim());
+  f.uf=(f.uf||'SP').toUpperCase(); D.fiscal[nfFiscalChave(l.pac)]=Object.assign(l.f,f); nfSave(D);
+  document.getElementById('modal-nf-fiscal').remove();
+  l.f=Object.assign(l.f,f); l.emitir=!l.emitida; nfRenderLinhas();
+}
+
+// ── Gerar lote ───────────────────────────────────────────────
+function nfGerar(){
+  nfSalvarCfg(); const D=nfLoad();
+  const dataEm=document.getElementById('nf-dataem').value;
+  const sel=NF_LIN.filter(l=>l.emitir&&!nfseValidar(l,l.f).e.length);
+  if(!sel.length) return;
+  const lote=D.cfg.proxLote; let n=D.cfg.proxRps; const serie=D.cfg.serie; const [ano,mm]=NF_MES.split('-');
+  if(D.lotes.some(x=>x.lote===lote&&x.status!=='erro')&&!confirm('O lote '+lote+' já foi gerado e não foi marcado como erro. Gerar de novo com o mesmo número?')) return;
+  const notas=[], xmls=[];
+  sel.forEach(l=>{
+    const v=nfseValidar(l,l.f), p=v.p, f=l.f;
+    const total=Math.round(l.q*l.vs*100)/100;
+    const r={q:l.q,vs:l.vs,serv:l.serv,datas:l.datas,mesTxt:l.mesTxt,tit:p.tit,profNome:p.nome,reg:p.reg,total,cpf:v.cpf,cep:v.cep,ibge:v.ibge,uf:(f.uf||'SP').toUpperCase(),
+      tomador:f.tomador,logradouro:f.logradouro,numero:f.numero,complemento:f.complemento,bairro:f.bairro,email:f.email,compd:`${ano}-${mm}-01`};
+    r.disc=nfseDescricao(r);
+    xmls.push(nfseXmlRps(r,n,serie,dataEm));
+    notas.push({mes:NF_MES,pac:l.pac,prof:l.prof,tomador:f.tomador,email:f.email,rps:n,lote,serie,qtd:l.q,total,nfse:'',status:'gerado'});
+    n++;
+  });
+  const xml=nfseGerarLoteGISS(xmls,lote);
+  const nome='lote_'+String(lote).padStart(6,'0')+'.xml';
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([xml],{type:'text/xml'})); a.download=nome; document.body.appendChild(a); a.click(); a.remove();
+  D.lotes=D.lotes.filter(x=>x.lote!==lote); D.notas=D.notas.filter(x=>x.lote!==lote);
+  D.lotes.push({lote,serie,mes:NF_MES,geradoEm:new Date().toISOString(),rpsIni:notas[0].rps,rpsFim:notas[notas.length-1].rps,qtd:notas.length,total:notas.reduce((a,x)=>a+x.total,0),status:'gerado'});
+  D.notas.push(...notas); nfSave(D);
+  document.getElementById('nf-depois').innerHTML=`<div style="border-left:4px solid #1e7a3c;background:#eef8f1;padding:10px 12px;margin-top:12px;font-size:13px"><b>${nome} gerado</b> (${notas.length} notas). No GISS: Serviços Prestados → Enviar Arquivo RPS. Quando aparecer "Processado com Sucesso", registre o resultado no histórico abaixo.</div>`;
+  renderNfse(document.getElementById('main-content')); document.getElementById('nf-depois').innerHTML='<div style="border-left:4px solid #1e7a3c;background:#eef8f1;padding:10px 12px;margin-top:12px;font-size:13px"><b>'+nome+' gerado</b> ('+notas.length+' notas). No GISS: Serviços Prestados → Enviar Arquivo RPS. Depois registre o resultado no histórico abaixo.</div>';
+}
+
+// ── Histórico / retorno do GISS ──────────────────────────────
+function nfHistoricoHtml(D){
+  if(!D.lotes.length) return '';
+  return `<div style="margin-top:22px"><div class="section-title">📚 Lotes gerados</div>`+D.lotes.slice().sort((a,b)=>b.lote-a.lote).map(x=>{
+    const cor=x.status==='sucesso'?'#1e7a3c':x.status==='erro'?'#b42318':'#b26a00';
+    return `<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:6px;font-size:12.5px;display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <b>Lote ${x.lote}</b> · ${x.mes} · RPS ${x.rpsIni}–${x.rpsFim} · ${x.qtd} notas · R$ ${nfBrl(x.total)}
+      <span style="color:${cor};font-weight:600">${x.status==='gerado'?'aguardando retorno':x.status}</span>
+      ${x.status==='gerado'?`<button class="btn-ghost" style="font-size:11.5px" onclick="nfRetorno(${x.lote},true)">✅ Processado com sucesso</button><button class="btn-ghost" style="font-size:11.5px" onclick="nfRetorno(${x.lote},false)">❌ Erro</button>`:''}
+      ${x.status==='sucesso'?`<button class="btn-ghost" style="font-size:11.5px" onclick="nfNumerosNfse(${x.lote})">🔢 Nºs das NFS-e</button><button class="btn-ghost" style="font-size:11.5px" onclick="nfEmails(${x.lote})">✉️ E-mails</button>`:''}</div>`;
+  }).join('')+'</div>';
+}
+function nfRetorno(lote,ok){
+  const D=nfLoad(); const x=D.lotes.find(y=>y.lote===lote); if(!x) return;
+  if(ok){
+    x.status='sucesso'; D.notas.filter(n=>n.lote===lote).forEach(n=>n.status='emitida');
+    D.cfg.proxRps=Math.max(D.cfg.proxRps,x.rpsFim+1); D.cfg.proxLote=Math.max(D.cfg.proxLote,lote+1);
+    toast('✅ Lote '+lote+' registrado. Próximo RPS '+D.cfg.proxRps+', lote '+D.cfg.proxLote);
+  } else {
+    x.status='erro'; D.notas.filter(n=>n.lote===lote).forEach(n=>n.status='erro');
+    D.cfg.proxLote=Math.max(D.cfg.proxLote,lote+1);
+    toast('Lote '+lote+' marcado com erro. Próximo lote: '+D.cfg.proxLote+' (os RPS podem ser reaproveitados)');
+  }
+  nfSave(D); renderNfse(document.getElementById('main-content'));
+}
+function nfNumerosNfse(lote){
+  const D=nfLoad(); const ns=D.notas.filter(n=>n.lote===lote);
+  document.getElementById('modal-nf-num')?.remove();
+  const mo=document.createElement('div'); mo.className='modal-overlay'; mo.id='modal-nf-num';
+  mo.innerHTML=`<div class="modal" style="max-width:560px"><div class="modal-header"><div class="modal-title">🔢 Nº das NFS-e — lote ${lote}</div><button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button></div>
+  <div class="modal-body"><p style="font-size:12px;color:var(--text3)">Veja em Consultar NFS-e no GISS.</p>${ns.map((n,i)=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;font-size:13px"><span style="flex:1">RPS ${n.rps} · ${esc(n.pac)} · R$ ${nfBrl(n.total)}</span><input class="form-input" style="width:90px" id="nfn-${i}" value="${esc(n.nfse||'')}" placeholder="nº NFS-e"></div>`).join('')}</div>
+  <div class="modal-footer"><button class="btn-primary" onclick="nfSalvarNumeros(${lote})">💾 Salvar</button></div></div>`;
+  document.body.appendChild(mo);
+}
+function nfSalvarNumeros(lote){
+  const D=nfLoad(); D.notas.filter(n=>n.lote===lote).forEach((n,i)=>{n.nfse=document.getElementById('nfn-'+i).value.trim();});
+  nfSave(D); document.getElementById('modal-nf-num').remove(); toast('✅ Números salvos');
+}
+function nfEmails(lote){
+  const D=nfLoad(); const ns=D.notas.filter(n=>n.lote===lote);
+  const ok=ns.filter(n=>/.+@.+\..+/.test(n.email||'')), sem=ns.length-ok.length;
+  alert('Lote '+lote+': '+ok.length+' notas com e-mail cadastrado'+(sem?', '+sem+' sem e-mail (enviar por WhatsApp).':'.')+'\n\nO envio dos PDFs por e-mail é feito pelo Claude no chat, com a sua confirmação.');
 }
 
 </script>
