@@ -11724,6 +11724,13 @@ function nfEdit(i,campo,val){
 }
 
 // ── Tela ─────────────────────────────────────────────────────
+function nfZerarImportacao(){
+  const D=nfLoad(); const n=(D.sessoes[NF_MES]||[]).length;
+  if(!n){ toast('Não há importação neste mês.'); return; }
+  if(!confirm('Zerar a importação de '+NF_MES+'?\nSerá apagada só a lista de sessões do Doctoralia ('+n+' sessões) e os ajustes de datas/quantidades deste mês.\nDados fiscais dos pacientes, notas emitidas e contadores NÃO são alterados. Depois é só importar a planilha de novo.')) return;
+  delete D.sessoes[NF_MES]; if(D.ajustes) delete D.ajustes[NF_MES];
+  nfSave(D); renderNfse(document.getElementById('main-content')); toast('Importação do mês zerada.');
+}
 function renderNfse(c){
   const D=nfLoad(); nfMontarLinhas();
   const meses=Object.keys(D.sessoes).sort().reverse();
@@ -11734,6 +11741,7 @@ function renderNfse(c){
       <button class="btn-ghost" onclick="nfExportar()">📤 Baixar planilha p/ edição</button>
       <button class="btn-ghost" onclick="document.getElementById('nf-file2').click()">📥 Subir planilha editada</button>
       <button class="btn-ghost" onclick="nfCompletarCep(false)">🔎 Completar rua/bairro pelo CEP</button>
+      <button class="btn-ghost" onclick="nfZerarImportacao()">🗑️ Zerar importação do mês</button>
       <input type="file" id="nf-file" accept=".xlsx,.xls,.csv" style="display:none" onchange="nfLerArquivo(this.files[0])">
       <input type="file" id="nf-file2" accept=".xlsx" style="display:none" onchange="nfImportarEditada(this.files[0])">
     </div>
