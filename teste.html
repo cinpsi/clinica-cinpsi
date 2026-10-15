@@ -1,0 +1,518 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="robots" content="noindex"><title>BRIEF-2 para Pais · CINPSI</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Open+Sans:wght@400;600&display=swap">
+<style>
+/* Layout: coluna única de 560px, uma etapa por tela, botões de resposta em 3 colunas, tudo pensado para polegar. */
+:root{
+  --bg:#F7F5F2; --surface:#FFFFFF; --fg:#292A2D; --muted:#5A5E66;
+  --primary:#04253D; --on-primary:#FFFFFF; --sky:#9BC8E0; --sky-soft:#E3EFF6;
+  --teal:#276265; --gold:#B2680E; --line:#DDD8D0; --focus:#1B6FA8;
+  --warn:#9A3412; --warn-soft:#FBEADF;
+  --font-display:'Montserrat',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-body:'Open Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0D1822; --surface:#152330; --fg:#ECE9E4; --muted:#A3ABB4;
+    --primary:#9BC8E0; --on-primary:#04253D; --sky-soft:#1D3344;
+    --teal:#6FB7B0; --gold:#E0A050; --line:#2B3C4B; --focus:#9BC8E0;
+    --warn:#F2A97B; --warn-soft:#3A2418; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0D1822; --surface:#152330; --fg:#ECE9E4; --muted:#A3ABB4;
+  --primary:#9BC8E0; --on-primary:#04253D; --sky-soft:#1D3344;
+  --teal:#6FB7B0; --gold:#E0A050; --line:#2B3C4B; --focus:#9BC8E0;
+  --warn:#F2A97B; --warn-soft:#3A2418; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{
+  background:var(--bg); color:var(--fg); font-family:var(--font-body); font-size:16px; line-height:1.5;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+  padding-block:0 32px;
+}
+.app{max-width:560px; margin:0 auto}
+h1,h2{font-family:var(--font-display); color:var(--primary); text-wrap:balance; margin:0}
+h1{font-size:24px; line-height:1.2; font-weight:700; margin-top:20px}
+h2{font-size:16px; font-weight:600; margin:24px 0 10px}
+p{margin:0}
+.lead{margin-top:10px; color:var(--muted)}
+
+.top{position:sticky; top:env(safe-area-inset-top, 0px); z-index:5; background:var(--bg); padding:12px 0 10px; border-bottom:1px solid var(--line)}
+.top-row{display:flex; justify-content:space-between; align-items:baseline; gap:12px}
+.brand{font-family:var(--font-display); font-weight:700; font-size:13px; letter-spacing:.14em; color:var(--primary)}
+.stat{font-size:13px; color:var(--muted); font-variant-numeric:tabular-nums; text-align:right}
+.bar{height:6px; background:var(--line); border-radius:3px; margin-top:8px; overflow:hidden}
+.bar i{display:block; height:100%; background:var(--teal); border-radius:3px; transition:width .25s}
+
+.logo{display:flex; justify-content:center; margin-top:20px}
+.logo img{display:block; width:min(280px, 78%); height:auto; border-radius:14px}
+.logo-dark{display:none!important}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]) .logo-light{display:none!important}
+  :root:not([data-theme="light"]) .logo-dark{display:block!important}
+}
+:root[data-theme="dark"] .logo-light{display:none!important}
+:root[data-theme="dark"] .logo-dark{display:block!important}
+.doc p + p{margin-top:12px}
+.hint{font-size:13px; color:var(--muted)}
+.how{background:var(--sky-soft); border-radius:12px; padding:14px; margin-top:16px; font-size:15px}
+.how ul{margin:8px 0 0; padding:0; list-style:none; display:grid; gap:6px}
+.how li{display:flex; gap:10px; align-items:baseline}
+.how b{font-family:var(--font-display); min-width:1.2em; color:var(--primary)}
+
+.field{display:grid; gap:6px; margin-bottom:14px}
+.field label{font-weight:600; font-size:14px}
+.field input,.field select{
+  font:inherit; font-size:16px; min-height:48px; padding:0 12px; width:100%;
+  background:var(--surface); color:var(--fg); border:1.5px solid var(--line); border-radius:10px;
+}
+.field input[aria-invalid="true"],.field select[aria-invalid="true"]{border-color:var(--warn)}
+.field input:focus-visible,.field select:focus-visible,.btn:focus-visible,textarea:focus-visible{outline:3px solid var(--focus); outline-offset:2px}
+
+.item{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 12px 12px; margin-top:12px; scroll-margin-top:96px}
+.item.missing{border-color:var(--warn); background:var(--warn-soft)}
+.item .n{font-family:var(--font-display); font-size:12px; font-weight:600; letter-spacing:.06em; color:var(--teal); text-transform:uppercase}
+.item.done .n::after{content:" ✓"}
+.item .q{font-size:16px; line-height:1.45; margin-top:4px}
+.choices{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px}
+.choices label{position:relative; display:block; min-width:0}
+.choices input{position:absolute; opacity:0; inset:0; width:100%; height:100%; margin:0; cursor:pointer}
+.opt{
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:66px; padding:6px 2px;
+  border:1.5px solid var(--line); border-radius:10px; background:var(--bg); text-align:center; pointer-events:none;
+}
+.opt b{font-family:var(--font-display); font-size:20px; line-height:1.1}
+.opt span{font-size:11.5px; line-height:1.2; color:var(--muted)}
+.choices input:checked + .opt{background:var(--primary); color:var(--on-primary); border-color:var(--primary)}
+.choices input:checked + .opt span{color:inherit}
+.choices input:checked + .opt b::after{content:" ✓"; font-size:14px}
+.choices input:focus-visible + .opt{outline:3px solid var(--focus); outline-offset:2px}
+
+.msg{min-height:1.4em; margin-top:14px; font-size:14px; color:var(--warn); font-weight:600}
+.nav{display:flex; gap:10px; margin-top:8px}
+.nav .btn{flex:1}
+.btn{
+  display:flex; align-items:center; justify-content:center; text-align:center; text-decoration:none; cursor:pointer;
+  font-family:var(--font-display); font-weight:600; font-size:16px; min-height:52px; padding:0 18px;
+  border-radius:12px; border:1.5px solid var(--primary); background:var(--primary); color:var(--on-primary);
+}
+.btn.ghost{background:transparent; color:var(--primary)}
+.btn.block{width:100%}
+.stack{display:grid; gap:10px; margin-top:16px}
+
+.counts{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px}
+.counts div{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 6px; text-align:center}
+.counts b{display:block; font-family:var(--font-display); font-size:24px; font-variant-numeric:tabular-nums; color:var(--primary)}
+.counts span{font-size:12px; color:var(--muted)}
+.jump{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+.jump button{font:inherit; font-size:14px; min-height:40px; padding:0 14px; border-radius:20px; border:1.5px solid var(--warn); background:var(--warn-soft); color:var(--warn); cursor:pointer; font-weight:600}
+textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12.5px; line-height:1.5; padding:12px; min-height:220px; background:var(--surface); color:var(--fg); border:1.5px solid var(--line); border-radius:10px; resize:vertical}
+.note{font-size:13px; color:var(--muted); margin-top:12px}
+.ok{color:var(--teal); font-weight:600; min-height:1.4em; font-size:14px; margin-top:8px}
+.foot{margin-top:28px; padding-top:14px; border-top:1px solid var(--line); font-size:12px; color:var(--muted)}
+@media (prefers-reduced-motion: reduce){.bar i{transition:none}}
+</style>
+</head><body>
+<div class="app">
+  <header class="top">
+    <div class="top-row"><div class="brand">BRIEF-2 · PAIS</div><div class="stat" id="stat"></div></div>
+    <div class="bar" aria-hidden="true"><i id="bar" style="width:0%"></i></div>
+  </header>
+  <main id="main"></main>
+  <footer class="foot">
+    O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica. Baseado no BRIEF-2 (Gioia, Isquith, Guy e Kenworthy).
+  </footer>
+</div>
+
+<script>
+(function(){
+  // Número do WhatsApp do CINPSI, só dígitos com DDI e DDD (ex.: 5511999999999). Vazio = a família escolhe o contato.
+  var CLINIC_WHATSAPP = '5511994027759';
+  var LOGO_LIGHT = 'https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png', LOGO_DARK = 'https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png';
+
+  var ITEMS = [
+    'É inquieto',
+    'Resiste ou tem problema em aceitar uma forma diferente de resolver um problema com trabalho escolar, amigos, trabalhos domésticos, etc.',
+    'Quando são dadas três tarefas para fazer, só se lembra da primeira ou da última',
+    'Não é consciente de quanto seu comportamento afeta ou incomoda outros',
+    'O trabalho é desleixado',
+    'Tem reações explosivas, bravas',
+    'Não se planeja com antecedência para obrigações escolares',
+    'Não acha coisas na sala ou na carteira escolar',
+    'Não toma iniciativa',
+    'Não pensa antes de fazer as coisas (é impulsivo)',
+    'Tem problemas para se acostumar a novas situações (aulas, grupos, amigos)',
+    'Tem um período curto de atenção',
+    'Tem problemas de compreensão de suas próprias forças e fraquezas',
+    'Tem explosões por pequenos motivos',
+    'Apega-se a detalhes e perde a visão geral',
+    'Perde o controle com mais frequência que os amigos',
+    'Fica preso em um tópico ou atividade',
+    'Esquece o seu nome',
+    'Tem problemas com tarefas que têm mais de um passo',
+    'Não percebe que certas ações incomodam outros',
+    'Tem escrita manual ruim',
+    'Pequenos eventos geram grandes reações',
+    'Tem boas ideias, mas não termina os trabalhos (não dá continuidade)',
+    'Fala em hora errada',
+    'Tem problemas em terminar tarefas (tarefas, trabalho de casa)',
+    'Não percebe quando seus comportamentos causam reações negativas',
+    'Reage mais fortemente a situações do que outras crianças',
+    'Tem problemas para se lembrar de fatos, mesmo que em poucos minutos',
+    'Comete erros por descuido',
+    'Fica fora do lugar em horas erradas',
+    'Torna-se angustiado/preocupado com situações novas',
+    'Tem problemas em concentrar em tarefas, lição de casa, etc.',
+    'Tem escrita manual ruim',
+    'Muda de humor frequentemente',
+    'Tem boas ideias, mas não as coloca no papel',
+    'Tem problemas em contar até três',
+    'Deixa bagunças que outros têm de limpar',
+    'Precisa receber uma ordem para iniciar uma tarefa mesmo quando tem vontade',
+    'Age muito agressivo ou “fora de controle”',
+    'Pensa muito sobre o mesmo tópico',
+    'Esquece-se do que ele/ela estava fazendo',
+    'Não verifica erros no trabalho',
+    'Explosões de bravura ou de choro são intensas mas terminam repentinamente',
+    'Torna-se oprimido por grandes atribuições',
+    'Perde a lancheira, o dinheiro do lanche, bilhetes autorização, lição de casa, etc.',
+    'Precisa de ajuda de um adulto para permanecer em uma tarefa',
+    'Esquece-se de entregar a lição de casa, mesmo quando completa',
+    'Tem problemas em colocar freios em suas ações',
+    'Resiste a mudanças de rotina, comidas, lugares, etc.',
+    'Tem problemas para iniciar lições de casa ou obrigações',
+    'O temperamento é facilmente influenciado pela situação',
+    'Subestima o tempo necessário para terminar tarefas',
+    'Não traz para casa lição de casa, folhas de anotações, materiais, etc.',
+    'Não é capaz de achar a porta da frente de casa',
+    'Não toma iniciativa',
+    'Torna-se angustiado facilmente',
+    'Começa tarefas ou obrigações no último minuto',
+    'Tem problemas em mudar de uma atividade para outra',
+    'Tem problemas em executar ações necessárias para alcançar objetivos (economizar dinheiro para um item especial, estudar para obter uma boa nota)',
+    'É perturbado por mudança de professora ou de aula',
+    'Tem problemas para organizar atividades com amigos',
+    'Parece infantilizado',
+    'Deixa uma trilha de pertences onde quer que vá'
+  ];
+  var OPTS = [['N','Nunca'],['A','Às vezes'],['F','Frequentemente']];
+  // Telas: 0 instruções, 1 identificação, 2..LAST frases, REVIEW revisão.
+  var PER = 7, TOTAL = ITEMS.length, NPAGES = Math.ceil(TOTAL / PER), LAST = NPAGES + 1, REVIEW = NPAGES + 2;
+  var CODE = (new URLSearchParams(location.search).get('c')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
+  var KEY = 'cinpsi:teste:BRIEF2PAIS:' + (CODE || 'sem-codigo');
+  var FB_KEY = 'AIzaSyBX5voXFH6oURfXUdSa_PxsNNFYldhmFKo';
+  var TOKEN = '8d5uC0LDA0pPqRH6KoYf8nOe';
+  var API = 'https://firestore.googleapis.com/v1/projects/clinica-gestao/databases/(default)/documents/pre_cadastros?key=';
+
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  function todayISO(){ var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
+  function todayBR(){ var d = new Date(); return pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear(); }
+  function fmt(iso){ var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || ''); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+  // "18/07/2012" -> "2012-07-18"; vazio se a data não existir.
+  function parseBR(t){
+    var m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(t || '').trim());
+    if (!m) return '';
+    var d = +m[1], mo = +m[2], y = +m[3], dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return '';
+    return y + '-' + pad(mo) + '-' + pad(d);
+  }
+  function maskDate(v){
+    var d = String(v).replace(/\D/g, '').slice(0, 8), o = d.slice(0, 2);
+    if (d.length > 2) o += '/' + d.slice(2, 4);
+    if (d.length > 4) o += '/' + d.slice(4);
+    return o;
+  }
+  function esc(s){ return String(s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function reduced(){ return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+
+  function fresh(){
+    return { page:0, done:false,
+      id:{ nome:'', nasc:'', sexo:'', serie:'', informante:'', relacao:'', relacaoOutro:'', data:todayBR() },
+      ans:new Array(TOTAL).fill('') };
+  }
+  var S = fresh();
+  try {
+    var raw = localStorage.getItem(KEY);
+    if (raw) {
+      var p = JSON.parse(raw);
+      if (p && Array.isArray(p.ans) && p.ans.length === TOTAL && p.id) {
+        S = p; S.id.data = S.id.data || todayBR();
+      }
+    }
+  } catch(e) {}
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
+
+  var main = document.getElementById('main');
+  var stat = document.getElementById('stat');
+  var bar = document.getElementById('bar');
+
+  function answered(){ var c = 0; for (var i = 0; i < TOTAL; i++) if (S.ans[i]) c++; return c; }
+  function pageRange(pg){ var a = (pg - 2) * PER; return [a, Math.min(a + PER, TOTAL)]; }
+
+  function updateTop(){
+    var n = answered();
+    bar.style.width = Math.round(n / TOTAL * 100) + '%';
+    var label = S.done ? 'Concluído' : S.page === 0 ? 'Instruções' : S.page === 1 ? 'Identificação' : S.page === REVIEW ? 'Revisão' : 'Parte ' + (S.page - 1) + ' de ' + NPAGES;
+    stat.textContent = label + ' · ' + n + ' de ' + TOTAL + ' respondidos';
+  }
+
+  function go(pg, keepScroll){
+    S.page = pg; S.done = false; save(); render();
+    if (!keepScroll) window.scrollTo(0, 0);
+  }
+
+  /* ---------- Instruções ---------- */
+  function logoHTML(){
+    return '<div class="logo"><img class="logo-light" src="' + LOGO_LIGHT + '" alt="CINPSI – Centro Integrado de Neurociências e Psicologia">' +
+      '<img class="logo-dark" src="' + LOGO_DARK + '" alt="CINPSI – Centro Integrado de Neurociências e Psicologia"></div>';
+  }
+
+  function renderIntro(){
+    main.innerHTML =
+      logoHTML() +
+      '<h1>Instruções</h1>' +
+      '<div class="doc" style="margin-top:12px">' +
+        '<p>Nas próximas telas há uma lista de afirmações que descrevem crianças. Nós gostaríamos de saber se sua criança teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>' +
+        '<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense sobre sua criança conforme você ler cada afirmação.</p>' +
+      '</div>' +
+      '<div class="how"><ul>' +
+        '<li><b>N</b><span>Se o comportamento for <b style="min-width:0">Nunca</b> um problema</span></li>' +
+        '<li><b>A</b><span>Se o comportamento for <b style="min-width:0">Algumas vezes</b> um problema</span></li>' +
+        '<li><b>F</b><span>Se o comportamento for <b style="min-width:0">Frequentemente</b> um problema</span></li>' +
+      '</ul></div>' +
+      '<p class="hint" style="margin-top:14px">Leva cerca de 10 minutos. Suas respostas ficam salvas neste aparelho enquanto você responde, então você pode parar e continuar depois. Use sempre o mesmo aparelho e o mesmo link.</p>' +
+      '<div class="nav" style="margin-top:20px"><button class="btn" id="go1" type="button">Continuar</button></div>';
+    document.getElementById('go1').addEventListener('click', function(){ go(1); });
+  }
+
+  /* ---------- Identificação ---------- */
+  function renderIdent(){
+    main.innerHTML =
+      '<h1>Identificação</h1>' +
+      '<p class="lead">Antes de começar, preencha os dados abaixo.</p>' +
+      '<h2>Sobre a criança</h2>' +
+      '<div class="field"><label for="f-nome">Nome da criança</label><input id="f-nome" data-k="nome" autocomplete="off" autocapitalize="words"></div>' +
+      '<div class="field"><label for="f-nasc">Data de nascimento</label><input id="f-nasc" data-k="nasc" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"><span class="hint">Digite só os números. Exemplo: 18072012</span></div>' +
+      '<div class="field"><label for="f-sexo">Sexo</label><select id="f-sexo" data-k="sexo"><option value="">Selecione</option><option>Feminino</option><option>Masculino</option></select></div>' +
+      '<div class="field"><label for="f-serie">Série ou ano escolar</label><input id="f-serie" data-k="serie" autocomplete="off" placeholder="Ex.: 5º ano"></div>' +
+      '<h2>Quem está respondendo</h2>' +
+      '<div class="field"><label for="f-informante">Seu nome</label><input id="f-informante" data-k="informante" autocomplete="name" autocapitalize="words"></div>' +
+      '<div class="field"><label for="f-relacao">Relação com a criança</label><select id="f-relacao" data-k="relacao"><option value="">Selecione</option><option>Mãe</option><option>Pai</option><option>Madrasta</option><option>Padrasto</option><option>Avó</option><option>Avô</option><option value="Outro">Outro responsável</option></select></div>' +
+      '<div class="field" id="w-outro" hidden><label for="f-outro">Qual a relação?</label><input id="f-outro" data-k="relacaoOutro" autocomplete="off"></div>' +
+      '<div class="field"><label for="f-data">Data de hoje</label><input id="f-data" data-k="data" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"></div>' +
+      '<p class="msg" id="msg" role="alert"></p>' +
+      '<div class="nav"><button class="btn ghost" id="back" type="button">Voltar</button><button class="btn" id="start" type="button">Começar</button></div>';
+
+    var fields = main.querySelectorAll('[data-k]');
+    Array.prototype.forEach.call(fields, function(el){ el.value = S.id[el.getAttribute('data-k')] || ''; });
+    function toggleOutro(){ document.getElementById('w-outro').hidden = S.id.relacao !== 'Outro'; }
+    toggleOutro();
+    Array.prototype.forEach.call(fields, function(el){
+      el.addEventListener('input', function(){
+        if (el.getAttribute('data-date')) el.value = maskDate(el.value);
+        S.id[el.getAttribute('data-k')] = el.value; el.removeAttribute('aria-invalid');
+        if (el.getAttribute('data-k') === 'relacao') toggleOutro();
+        save();
+      });
+    });
+    document.getElementById('back').addEventListener('click', function(){ go(0); });
+    document.getElementById('start').addEventListener('click', function(){
+      var need = ['nome','nasc','sexo','informante','relacao','data'];
+      if (S.id.relacao === 'Outro') need.push('relacaoOutro');
+      var first = null, text = '';
+      function flag(k, t){
+        var el = main.querySelector('[data-k="' + k + '"]');
+        el.setAttribute('aria-invalid', 'true');
+        if (!first) { first = el; text = t; }
+      }
+      need.forEach(function(k){
+        if (!String(S.id[k]).trim()) flag(k, 'Preencha os campos marcados para continuar.');
+      });
+      var nasc = parseBR(S.id.nasc);
+      if (S.id.nasc && (!nasc || nasc > todayISO() || +nasc.slice(0, 4) < 1990)) flag('nasc', 'Confira a data de nascimento: digite dia, mês e ano. Exemplo: 18/07/2012.');
+      var hoje = parseBR(S.id.data);
+      if (S.id.data && !hoje) flag('data', 'Confira a data de hoje: digite dia, mês e ano.');
+      if (first) {
+        document.getElementById('msg').textContent = text;
+        first.scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
+        return;
+      }
+      go(2);
+    });
+  }
+
+  /* ---------- Itens ---------- */
+  function itemHTML(i){
+    var cur = S.ans[i], name = 'q' + (i + 1), html =
+      '<div class="item' + (cur ? ' done' : '') + '" id="it' + i + '" role="radiogroup" aria-labelledby="q' + i + '">' +
+      '<div class="n">Frase ' + (i + 1) + '</div><div class="q" id="q' + i + '">' + esc(ITEMS[i]) + '</div>' +
+      '<div class="choices">';
+    OPTS.forEach(function(o){
+      html += '<label><input type="radio" name="' + name + '" value="' + o[0] + '" data-i="' + i + '"' + (cur === o[0] ? ' checked' : '') +
+        ' aria-label="' + esc(o[1]) + '"><span class="opt"><b>' + o[0] + '</b><span>' + o[1] + '</span></span></label>';
+    });
+    return html + '</div></div>';
+  }
+
+  function renderItems(){
+    var r = pageRange(S.page), html = '<h1>Frases ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
+      '<p class="lead">Nos últimos 6 meses, o quanto isto foi um problema?</p>';
+    for (var i = r[0]; i < r[1]; i++) html += itemHTML(i);
+    html += '<p class="msg" id="msg" role="alert"></p><div class="nav">' +
+      '<button class="btn ghost" id="back" type="button">Voltar</button>' +
+      '<button class="btn" id="next" type="button">' + (S.page === LAST ? 'Revisar' : 'Próxima parte') + '</button></div>';
+    main.innerHTML = html;
+
+    main.onchange = function(e){
+      var t = e.target;
+      if (!t || t.type !== 'radio') return;
+      var i = +t.getAttribute('data-i');
+      S.ans[i] = t.value; save(); updateTop();
+      var row = document.getElementById('it' + i);
+      row.classList.add('done'); row.classList.remove('missing');
+      document.getElementById('msg').textContent = '';
+      var nxt = null;
+      for (var j = i + 1; j < r[1]; j++) if (!S.ans[j]) { nxt = j; break; }
+      if (nxt !== null) setTimeout(function(){
+        var el = document.getElementById('it' + nxt);
+        if (el) el.scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
+      }, 200);
+    };
+    document.getElementById('back').addEventListener('click', function(){ go(S.page - 1); });
+    document.getElementById('next').addEventListener('click', function(){
+      var miss = [];
+      for (var i = r[0]; i < r[1]; i++) if (!S.ans[i]) miss.push(i);
+      if (miss.length) {
+        miss.forEach(function(i){ document.getElementById('it' + i).classList.add('missing'); });
+        document.getElementById('msg').textContent = miss.length === 1 ? 'Falta responder 1 frase nesta parte.' : 'Faltam ' + miss.length + ' frases nesta parte.';
+        document.getElementById('it' + miss[0]).scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
+        return;
+      }
+      go(S.page + 1);
+    });
+  }
+
+  /* ---------- Revisão ---------- */
+  function counts(){ var c = {N:0, A:0, F:0}; S.ans.forEach(function(a){ if (c[a] !== undefined) c[a]++; }); return c; }
+
+  function renderReview(){
+    var c = counts(), miss = [];
+    S.ans.forEach(function(a, i){ if (!a) miss.push(i); });
+    var html = '<h1>Revisão</h1>';
+    if (miss.length) {
+      html += '<p class="lead">Ainda faltam ' + miss.length + ' frases. Toque em uma para voltar até ela.</p><div class="jump">';
+      miss.forEach(function(i){ html += '<button type="button" data-go="' + i + '">Frase ' + (i + 1) + '</button>'; });
+      html += '</div>';
+    } else {
+      html += '<p class="lead">Todas as 63 frases foram respondidas. Confira o resumo e conclua.</p>';
+    }
+    html += '<div class="counts"><div><b>' + c.N + '</b><span>Nunca</span></div><div><b>' + c.A + '</b><span>Às vezes</span></div><div><b>' + c.F + '</b><span>Frequentemente</span></div></div>' +
+      '<div class="nav" style="margin-top:20px"><button class="btn ghost" id="back" type="button">Voltar</button>' +
+      '<button class="btn" id="finish" type="button"' + (miss.length ? ' disabled style="opacity:.45;cursor:not-allowed"' : '') + '>Concluir</button></div>';
+    main.innerHTML = html;
+    document.getElementById('back').addEventListener('click', function(){ go(LAST); });
+    Array.prototype.forEach.call(main.querySelectorAll('[data-go]'), function(b){
+      b.addEventListener('click', function(){
+        var i = +b.getAttribute('data-go');
+        S.page = Math.floor(i / PER) + 2; save(); render();
+        var el = document.getElementById('it' + i);
+        if (el) { el.classList.add('missing'); el.scrollIntoView({block:'center'}); }
+      });
+    });
+    var fin = document.getElementById('finish');
+    if (!miss.length) fin.addEventListener('click', function(){ S.done = true; save(); render(); window.scrollTo(0, 0); });
+  }
+
+  /* ---------- Exportação ---------- */
+  function clean(s){ return String(s || '').replace(/[|\r\n]+/g, ' ').trim(); }
+  function relacaoTxt(){ return S.id.relacao === 'Outro' ? (clean(S.id.relacaoOutro) || 'Outro') : S.id.relacao; }
+  function buildCode(){
+    var d = S.id;
+    return ['BRIEF2PAIS','v1',clean(d.nome),parseBR(d.nasc),clean(d.sexo),clean(d.serie),clean(d.informante),relacaoTxt(),parseBR(d.data),S.ans.join('')].join('|');
+  }
+  function buildMessage(){
+    var d = S.id, lines = [
+      'BRIEF-2 · Formulário dos Pais',
+      'Criança: ' + clean(d.nome),
+      'Nascimento: ' + fmt(parseBR(d.nasc)),
+      'Sexo: ' + clean(d.sexo),
+      'Série: ' + (clean(d.serie) || '-'),
+      'Informante: ' + clean(d.informante) + ' (' + relacaoTxt() + ')',
+      'Data: ' + fmt(parseBR(d.data)),
+      '',
+      'Respostas (N=Nunca, A=Às vezes, F=Frequentemente)'
+    ];
+    for (var a = 0; a < TOTAL; a += 10) {
+      var b = Math.min(a + 10, TOTAL);
+      lines.push((a + 1) + '-' + b + ': ' + S.ans.slice(a, b).join(''));
+    }
+    lines.push('', 'Código: ' + buildCode());
+    return lines.join('\n');
+  }
+
+  function enviar(){
+    var payload = { _teste:true, codigo:CODE, escala:'BRIEF2PAIS', versao:'v1', enviadoEm:new Date().toISOString(),
+      crianca:{ nome:clean(S.id.nome), nasc:parseBR(S.id.nasc), sexo:S.id.sexo, serie:clean(S.id.serie) },
+      informante:{ nome:clean(S.id.informante), relacao:relacaoTxt(), data:parseBR(S.id.data) },
+      respostas:S.ans.join(''), codigoNeuro:buildCode() };
+    var body = { fields:{
+      leadId:{stringValue:CODE}, tipo:{stringValue:'teste'},
+      dados:{stringValue:JSON.stringify(payload)}, token:{stringValue:TOKEN} } };
+    return fetch(API + FB_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+      .then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); });
+  }
+
+  function renderDone(){
+    var msg = buildMessage();
+    var sent = !!S.sent;
+    main.innerHTML =
+      logoHTML() +
+      '<h1>' + (sent ? 'Respostas enviadas' : 'Falta só enviar') + '</h1>' +
+      '<p class="lead">' + (sent ? 'Obrigado, ' + esc(clean(S.id.informante).split(' ')[0] || '') + '. Recebemos as respostas e a equipe do CINPSI dará sequência. Você já pode fechar esta página.' :
+        'Obrigado, ' + esc(clean(S.id.informante).split(' ')[0] || '') + '. Toque em enviar para entregar as respostas à equipe do CINPSI.') + '</p>' +
+      (sent ? '' : '<div class="stack"><button class="btn block" id="send" type="button">Enviar respostas</button></div>') +
+      '<p class="ok" id="ok" role="status"></p>' +
+      '<p class="msg" id="err" role="alert"></p>' +
+      '<div id="alt" ' + (S.fail ? '' : 'hidden') + '>' +
+        '<p class="note">Não foi possível enviar agora. Você pode mandar pelo WhatsApp do CINPSI:</p>' +
+        '<div class="stack"><a class="btn block" href="https://wa.me/' + CLINIC_WHATSAPP + '?text=' + encodeURIComponent(msg) + '" target="_blank" rel="noopener">Enviar pelo WhatsApp</a>' +
+        '<button class="btn ghost block" id="copy" type="button">Copiar respostas</button></div>' +
+        '<textarea id="out" readonly aria-label="Respostas em texto" style="margin-top:12px">' + esc(msg) + '</textarea></div>' +
+      (sent ? '' : '<div class="stack"><button class="btn ghost block" id="edit" type="button">Revisar respostas</button></div>');
+    var ok = document.getElementById('ok'), err = document.getElementById('err');
+    var send = document.getElementById('send');
+    if (send) send.addEventListener('click', function(){
+      if (!CODE) { err.textContent = 'Link inválido. Peça um novo link à clínica.'; return; }
+      send.disabled = true; send.textContent = 'Enviando...'; err.textContent = '';
+      enviar().then(function(){ S.sent = true; S.fail = false; save(); render(); window.scrollTo(0,0); },
+        function(){ S.fail = true; save(); send.disabled = false; send.textContent = 'Tentar enviar de novo'; err.textContent = 'Não conseguimos enviar. Verifique a internet e tente de novo.'; document.getElementById('alt').hidden = false; });
+    });
+    var copy = document.getElementById('copy');
+    if (copy) copy.addEventListener('click', function(){
+      var out = document.getElementById('out');
+      function fallback(){ out.focus(); out.select(); ok.textContent = 'Selecione o texto abaixo e copie.'; }
+      if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(msg).then(function(){ ok.textContent = 'Texto copiado.'; }, fallback); else fallback();
+    });
+    var ed = document.getElementById('edit');
+    if (ed) ed.addEventListener('click', function(){ go(REVIEW); });
+  }
+
+  function render(){
+    main.onchange = null;
+    updateTop();
+    if (S.done) renderDone();
+    else if (S.page === 0) renderIntro();
+    else if (S.page === 1) renderIdent();
+    else if (S.page === REVIEW) renderReview();
+    else renderItems();
+  }
+  if (!CODE) { main.innerHTML = '<h1>Link inválido</h1><p class="lead">Este link está incompleto. Peça um novo link à equipe do CINPSI.</p>'; return; }
+  render();
+})();
+</script>
+</body></html>
