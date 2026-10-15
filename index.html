@@ -769,6 +769,7 @@ async function preCadProcessar(docs){
       try{ dados=JSON.parse(String(x.dados||'{}'))||{}; }catch(e){}
       const tipo=x.tipo==='infantil'?'infantil':'adulto';
       const leadId=String(x.leadId||'').trim();
+      if(dados&&dados._teste){ try{testesReceberResposta(dados);}catch(e){console.warn('teste',e);} continue; }
       try{
         const leads=loadLeads();
         const hoje=new Date().toISOString().slice(0,10);
@@ -913,7 +914,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse','cinpsi_testes'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -1688,6 +1689,199 @@ function toggleLembrete(){
 // ════════════════════════════════════════════════════════════
 // NAVIGATION
 // ════════════════════════════════════════════════════════════
+
+// ════════════════════════════════════════════════════════════
+// TESTES (escalas) — link com código único por respondente.
+// Página pública: teste.html?c=CODIGO (só grava). Resposta chega em 'pre_cadastros'
+// com dados._teste e é guardada em 'cinpsi_testes' {links:[...]}.
+// Sem correção automática: o app mostra o código para lançar no Neurocortex.
+// ════════════════════════════════════════════════════════════
+const TE_KEY='cinpsi_testes';
+const loadTestes=()=>{const d=load(TE_KEY);return (d&&Array.isArray(d.links))?d:{links:[]};};
+const saveTestes=d=>store(TE_KEY,d);
+const TE_CAT={
+  BRIEF2PAIS:{nome:'BRIEF-2 (Pais)',min:5,max:18,pagina:'teste.html',resp:['Mãe','Pai'],tempo:'10 minutos',
+    obs:'Função executiva, relato dos pais. Faixa oficial do BRIEF-2: 5 a 18 anos.'}
+};
+const TE_ALFA='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function teCodigo(){
+  const usados=new Set(loadTestes().links.map(l=>l.codigo));
+  let c;
+  do{ c=''; for(let i=0;i<8;i++) c+=TE_ALFA[Math.floor(Math.random()*TE_ALFA.length)]; }while(usados.has(c));
+  return c;
+}
+function teUrl(cod,esc_){ return new URL((TE_CAT[esc_]||{pagina:'teste.html'}).pagina+'?c='+cod,location.href).href; }
+function teIdade(p){ const n=p&&(p.nascimento||p.nasc); if(!n||!/^\d{4}-\d{2}-\d{2}/.test(n)) return null; const d=new Date(n.slice(0,10)+'T12:00:00'),h=new Date(); let a=h.getFullYear()-d.getFullYear(); const m=h.getMonth()-d.getMonth(); if(m<0||(m===0&&h.getDate()<d.getDate())) a--; return a; }
+function teSugeridos(idade){ if(idade===null) return []; return Object.keys(TE_CAT).filter(k=>idade>=TE_CAT[k].min&&idade<=TE_CAT[k].max); }
+function tePacientes(){
+  const vistos=new Set(); const out=[];
+  getConvertidos().filter(p=>p.ativo!==false).forEach(p=>{
+    const nome=(p.paciente||p.responsavel||'').trim(); if(!nome) return;
+    const k=nome.toLowerCase(); if(vistos.has(k)) return; vistos.add(k);
+    if(CU.role!=='admin'&&(p.terapeuta||'').toLowerCase()!==(CU.nome||'').toLowerCase()) return;
+    out.push(p);
+  });
+  return out.sort((a,b)=>(a.paciente||a.responsavel).localeCompare(b.paciente||b.responsavel,'pt-BR'));
+}
+function tePacNome(p){ return (p.paciente||p.responsavel||'').trim(); }
+function teLinksDe(nome){ return loadTestes().links.filter(l=>(l.pacNome||'').toLowerCase()===nome.toLowerCase()); }
+function teRespondidosNovos(){
+  const meu=l=>CU.role==='admin'||(l.terapeuta||'').toLowerCase()===(CU.nome||'').toLowerCase();
+  return loadTestes().links.filter(l=>l.status==='respondido'&&!l.visto&&meu(l)).length;
+}
+
+// Chamado por preCadProcessar quando o formulário público envia uma resposta
+function testesReceberResposta(dados){
+  const cod=String(dados.codigo||'').toUpperCase();
+  const T=loadTestes();
+  const l=T.links.find(x=>x.codigo===cod);
+  if(!l){ toast('Resposta de teste com código desconhecido: '+cod); return; }
+  if(l.status==='respondido') return;
+  l.status='respondido'; l.respondidoEm=new Date().toISOString(); l.visto=false;
+  l.resposta={crianca:dados.crianca||{},informante:dados.informante||{},respostas:String(dados.respostas||''),codigoNeuro:String(dados.codigoNeuro||'')};
+  saveTestes(T);
+  toast('📝 '+l.escalaNome+' respondido: '+l.pacNome);
+  try{ if(typeof _currentView!=='undefined'&&_currentView==='testes') renderTestes(document.getElementById('main-content')); }catch(e){}
+  try{ teAtualizarBadge(); }catch(e){}
+}
+function teAtualizarBadge(){
+  const b=document.getElementById('te-nav-badge'); if(!b) return;
+  const n=teRespondidosNovos(); b.textContent=n; b.style.display=n?'':'none';
+}
+
+// ── Tela principal ──
+let teFiltroTer='', teBusca='';
+function renderTestes(c){
+  const pacs=tePacientes();
+  const todos=loadTestes().links;
+  const terap=[...new Set(getConvertidos().map(p=>p.terapeuta).filter(Boolean))].sort();
+  const lista=pacs.filter(p=>(!teBusca||tePacNome(p).toLowerCase().includes(teBusca.toLowerCase()))&&(!teFiltroTer||(p.terapeuta||'')===teFiltroTer));
+  const pend=todos.filter(l=>l.status==='pendente').length, resp=todos.filter(l=>l.status==='respondido').length, novos=teRespondidosNovos();
+  c.innerHTML=`
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
+    <div class="stat-card"><div class="stat-label">Aguardando resposta</div><div class="stat-value">${pend}</div></div>
+    <div class="stat-card"><div class="stat-label">Respondidos</div><div class="stat-value">${resp}</div></div>
+    <div class="stat-card"><div class="stat-label">Novos (não vistos)</div><div class="stat-value" style="color:${novos?'#15803d':'inherit'}">${novos}</div></div>
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+    <input class="form-input" style="max-width:260px" placeholder="Buscar paciente..." value="${esc(teBusca)}" oninput="teBusca=this.value;teRenderLinhas()">
+    ${CU.role==='admin'?`<select class="form-input" style="max-width:220px" onchange="teFiltroTer=this.value;teRenderLinhas()"><option value="">Todas as terapeutas</option>${terap.map(t=>`<option${t===teFiltroTer?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}
+  </div>
+  <div class="data-table"><table>
+    <thead><tr><th>Paciente</th><th>Idade</th>${CU.role==='admin'?'<th>Terapeuta</th>':''}<th>Sugestão</th><th>Testes</th><th></th></tr></thead>
+    <tbody id="te-linhas"></tbody>
+  </table></div>
+  ${CU.role!=='admin'?'<p style="color:var(--text3);font-size:12px;margin-top:10px">Você vê apenas os seus pacientes.</p>':''}`;
+  teRenderLinhas();
+}
+function teRenderLinhas(){
+  const tb=document.getElementById('te-linhas'); if(!tb) return;
+  const lista=tePacientes().filter(p=>(!teBusca||tePacNome(p).toLowerCase().includes(teBusca.toLowerCase()))&&(!teFiltroTer||(p.terapeuta||'')===teFiltroTer));
+  if(!lista.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum paciente encontrado.</td></tr>'; return; }
+  tb.innerHTML=lista.map(p=>{
+    const nome=tePacNome(p), id=teIdade(p), sug=teSugeridos(id), ls=teLinksDe(nome);
+    const pend=ls.filter(l=>l.status==='pendente').length, rsp=ls.filter(l=>l.status==='respondido').length, nv=ls.filter(l=>l.status==='respondido'&&!l.visto).length;
+    return `<tr><td><strong>${esc(nome)}</strong></td><td>${id===null?'—':id+' anos'}</td>${CU.role==='admin'?`<td>${esc(p.terapeuta||'—')}</td>`:''}
+      <td>${sug.length?sug.map(k=>`<span style="font-size:11px;background:#e0f2fe;color:#075985;border-radius:10px;padding:2px 8px">${esc(TE_CAT[k].nome)}</span>`).join(' '):'<span style="color:var(--text3)">—</span>'}</td>
+      <td style="font-size:12px">${pend?`⏳ ${pend} pendente(s) `:''}${rsp?`✅ ${rsp} respondido(s)`:''}${nv?` <span style="background:#15803d;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">novo</span>`:''}${!pend&&!rsp?'—':''}</td>
+      <td><button class="btn-ghost" onclick="teAbrir('${esc(nome).replace(/'/g,"\\'")}')">Abrir</button></td></tr>`;
+  }).join('');
+}
+
+// ── Ficha do paciente: abas Testes | Trilha ──
+let teAbaAtual='testes', teNomeAtual='';
+function teAbrir(nome,aba){
+  teNomeAtual=nome; teAbaAtual=aba||'testes';
+  const T=loadTestes(); let m=false;
+  T.links.forEach(l=>{ if((l.pacNome||'').toLowerCase()===nome.toLowerCase()&&l.status==='respondido'&&!l.visto){ l.visto=true; m=true; } });
+  if(m){ saveTestes(T); teAtualizarBadge(); }
+  teRenderFicha();
+}
+function teFechar(){ document.getElementById('modal-testes')?.remove(); const v=document.getElementById('te-linhas'); if(v) teRenderLinhas(); }
+function teRenderFicha(){
+  const nome=teNomeAtual;
+  const p=tePacientes().find(x=>tePacNome(x).toLowerCase()===nome.toLowerCase())||getConvertidos().find(x=>tePacNome(x).toLowerCase()===nome.toLowerCase())||{};
+  const id=teIdade(p);
+  let mo=document.getElementById('modal-testes');
+  if(!mo){ mo=document.createElement('div'); mo.className='modal-overlay open'; mo.id='modal-testes'; mo.onclick=e=>{ if(e.target===mo) teFechar(); }; document.body.appendChild(mo); }
+  const tab=(k,t)=>`<button onclick="teAbaAtual='${k}';teRenderFicha()" style="flex:1;padding:10px;border:none;border-bottom:3px solid ${teAbaAtual===k?'var(--accent)':'transparent'};background:none;font-weight:${teAbaAtual===k?'600':'400'};cursor:pointer;font-size:14px">${t}</button>`;
+  mo.innerHTML=`<div class="modal" style="max-width:680px">
+    <div class="modal-header"><div class="modal-title">🧪 ${esc(nome)}${id!==null?` <span style="font-weight:400;color:var(--text3);font-size:13px">· ${id} anos</span>`:''}</div><button class="modal-close" onclick="teFechar()">×</button></div>
+    <div style="display:flex;border-bottom:1px solid var(--border)">${tab('testes','Testes')}${tab('trilha','Trilha')}</div>
+    <div style="padding:16px 20px">${teAbaAtual==='testes'?teHtmlTestes(p,id):teHtmlTrilha(nome)}</div></div>`;
+}
+function teHtmlTestes(p,id){
+  const nome=tePacNome(p)||teNomeAtual, sug=teSugeridos(id), ls=teLinksDe(nome).sort((a,b)=>(b.criado||'').localeCompare(a.criado||''));
+  const q=s=>String(s).replace(/'/g,"\\'");
+  const botoes=k=>TE_CAT[k].resp.map(r=>`<button class="btn-primary" style="padding:6px 12px;font-size:12px" onclick="teGerar('${k}','${q(r)}')">🔗 Gerar link — ${esc(r)}</button>`).join(' ');
+  const sugHtml=sug.length?sug.map(k=>`<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:600;font-size:13px">${esc(TE_CAT[k].nome)} <span style="font-weight:400;color:var(--text3)">· ${TE_CAT[k].tempo}</span></div><div style="font-size:12px;color:var(--text3);margin:2px 0 8px">${esc(TE_CAT[k].obs)}</div>${botoes(k)}</div>`).join(''):`<p style="font-size:13px;color:var(--text3)">${id===null?'Sem data de nascimento no cadastro: não dá para sugerir por idade.':'Nenhum teste cadastrado para '+id+' anos.'} Use "Outro teste" abaixo.</p>`;
+  const outros=Object.keys(TE_CAT).filter(k=>!sug.includes(k));
+  const avulso=`<div style="margin-top:6px;font-size:13px"><b>Outro teste</b> (qualquer paciente, mesmo fora da trilha):<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><select class="form-input" id="te-avulso" style="max-width:240px">${Object.keys(TE_CAT).map(k=>`<option value="${k}">${esc(TE_CAT[k].nome)}${(id!==null&&(id<TE_CAT[k].min||id>TE_CAT[k].max))?' (fora da faixa '+TE_CAT[k].min+'-'+TE_CAT[k].max+')':''}</option>`).join('')}</select><select class="form-input" id="te-avulso-r" style="max-width:140px"><option>Mãe</option><option>Pai</option><option>Outro</option></select><button class="btn-ghost" onclick="teGerarAvulso()">🔗 Gerar link</button></div></div>`;
+  const lista=ls.length?ls.map(l=>teHtmlLink(l,p)).join(''):'<p style="font-size:13px;color:var(--text3)">Nenhum link gerado ainda.</p>';
+  return `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Sugeridos pela idade</div>${sugHtml}${avulso}
+    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:20px 0 8px">Links e respostas</div>${lista}`;
+}
+function teHtmlLink(l,p){
+  const url=teUrl(l.codigo,l.escala), ok=l.status==='respondido';
+  const msg=`Olá! Segue o link do questionário ${l.escalaNome} referente a ${l.pacNome}. Quem responde: ${l.respondente||'responsável'}. Leva cerca de ${(TE_CAT[l.escala]||{}).tempo||'10 minutos'}.\n${url}\nEquipe CINPSI`;
+  const tel=String(p.telefone||'').replace(/\D/g,''); const wa='https://wa.me/'+(tel&&tel.length<=11?'55'+tel:tel)+'?text='+encodeURIComponent(msg);
+  return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${ok?'#f0fdf4':'var(--surface)'}">
+    <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="font-size:13px"><b>${esc(l.escalaNome)}</b> · ${esc(l.respondente||'—')} · código <code>${esc(l.codigo)}</code></div>
+    <div style="font-size:12px;color:${ok?'#15803d':'#b45309'}">${ok?'✅ Respondido em '+new Date(l.respondidoEm).toLocaleString('pt-BR'):'⏳ Pendente · gerado em '+(l.criado||'').split('-').reverse().join('/')}</div></div>
+    <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+      ${ok?'':`<button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiar('${l.codigo}','url')">📋 Copiar link</button><a class="btn-ghost" style="padding:4px 10px;font-size:12px;text-decoration:none" target="_blank" rel="noopener" href="${wa}">💬 WhatsApp</a><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiar('${l.codigo}','msg')">Copiar mensagem</button><button class="btn-ghost" style="padding:4px 10px;font-size:12px;color:#b91c1c" onclick="teExcluir('${l.codigo}')">Excluir</button>`}
+      ${ok?`<button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="teVerResposta('${l.codigo}')">Ver resposta</button>`:''}
+    </div><div id="te-resp-${l.codigo}"></div></div>`;
+}
+function teGerar(escala,resp){
+  const nome=teNomeAtual, p=tePacientes().find(x=>tePacNome(x).toLowerCase()===nome.toLowerCase())||{};
+  const T=loadTestes();
+  const ja=T.links.find(l=>(l.pacNome||'').toLowerCase()===nome.toLowerCase()&&l.escala===escala&&l.respondente===resp&&l.status==='pendente');
+  if(ja&&!confirm('Já existe um link pendente deste teste para '+resp+'. Gerar outro mesmo assim?')) return;
+  T.links.push({codigo:teCodigo(),escala,escalaNome:TE_CAT[escala].nome,pacNome:nome,pacId:String(p.id||''),nasc:p.nascimento||'',terapeuta:p.terapeuta||CU.nome||'',respondente:resp,
+    criado:new Date().toISOString().slice(0,10),criadoPor:CU.nome||'',status:'pendente',visto:true});
+  saveTestes(T); teRenderFicha(); toast('Link gerado ✅');
+}
+function teGerarAvulso(){
+  const k=document.getElementById('te-avulso').value, r=document.getElementById('te-avulso-r').value;
+  teGerar(k,r);
+}
+function teCopiarTexto(t){
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(()=>toast('Copiado ✅'),()=>prompt('Copie:',t)); else prompt('Copie:',t);
+}
+function teCopiar(cod,tipo){
+  const l=loadTestes().links.find(x=>x.codigo===cod); if(!l) return;
+  const url=teUrl(l.codigo,l.escala);
+  if(tipo==='url') return teCopiarTexto(url);
+  teCopiarTexto(`Olá! Segue o link do questionário ${l.escalaNome} referente a ${l.pacNome}. Quem responde: ${l.respondente||'responsável'}. Leva cerca de ${(TE_CAT[l.escala]||{}).tempo||'10 minutos'}.\n${url}\nEquipe CINPSI`);
+}
+function teExcluir(cod){
+  if(!confirm('Excluir este link pendente? Ele deixa de funcionar para quem receber.')) return;
+  const T=loadTestes(); T.links=T.links.filter(l=>!(l.codigo===cod&&l.status==='pendente')); saveTestes(T); teRenderFicha();
+}
+function teVerResposta(cod){
+  const box=document.getElementById('te-resp-'+cod); if(!box) return;
+  if(box.innerHTML){ box.innerHTML=''; return; }
+  const l=loadTestes().links.find(x=>x.codigo===cod); if(!l||!l.resposta) return;
+  const r=l.resposta, a=r.respostas||'', n={N:0,A:0,F:0}; a.split('').forEach(ch=>{ if(n[ch]!==undefined) n[ch]++; });
+  const fm=iso=>iso?iso.split('-').reverse().join('/'):'—';
+  box.innerHTML=`<div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;font-size:13px">
+    <div><b>Criança:</b> ${esc(r.crianca.nome||'')} · nasc. ${fm(r.crianca.nasc)} · ${esc(r.crianca.sexo||'')} · série: ${esc(r.crianca.serie||'—')}</div>
+    <div><b>Informante:</b> ${esc(r.informante.nome||'')} (${esc(r.informante.relacao||'')}) · data ${fm(r.informante.data)}</div>
+    <div style="margin:6px 0"><b>Resumo:</b> Nunca ${n.N} · Às vezes ${n.A} · Frequentemente ${n.F} · total ${a.length}</div>
+    <div style="margin-top:6px"><b>Código para lançar no Neurocortex</b> (N=Nunca, A=Às vezes, F=Frequentemente):</div>
+    <textarea readonly style="width:100%;font-family:monospace;font-size:12px;min-height:64px;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px">${esc(a)}</textarea>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiarTexto('${esc(a)}')">📋 Copiar respostas</button><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiarTexto(loadTestes().links.find(x=>x.codigo==='${cod}').resposta.codigoNeuro)">📋 Copiar código completo</button></div></div>`;
+}
+function teHtmlTrilha(nome){
+  const t=(typeof loadTrilha==='function'?loadTrilha():[]).find(x=>(x.nome||'').toLowerCase()===nome.toLowerCase()&&!x.encerrada)||(typeof loadTrilha==='function'?loadTrilha():[]).find(x=>(x.nome||'').toLowerCase()===nome.toLowerCase());
+  if(!t) return '<p style="font-size:13px;color:var(--text3)">Este paciente não está em nenhuma trilha de avaliação.</p>';
+  const fm=iso=>iso?iso.split('-').reverse().join('/'):'';
+  return `<p style="font-size:12px;color:var(--text3);margin-bottom:10px">${t.encerrada?'Trilha encerrada':'Trilha em andamento'} · criada em ${fm(t.criado)}</p>`+
+  TR_ETAPAS.filter(x=>!(t.tipo==='adulto'&&x.k==='escola')).map(x=>{ const e=t.etapas[x.k]||{}; const st=trStatusVis(e);
+    return `<div style="display:flex;justify-content:space-between;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:13px"><span>${x.ico} ${esc(x.nome)}</span><span style="color:${TR_COR[st]||'#6b7280'}">${TR_ST[st]||st}${e.data?' · '+fm(e.data):''}</span></div>`; }).join('');
+}
+
 function buildNav(){
   const nav=document.getElementById('sidebar-nav');
   let html='';
@@ -1697,6 +1891,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('leads')" id="nav-leads"><span class="nav-icon">📥</span> Leads</button>
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Pacientes</button>
       <button class="nav-item" onclick="showView('trilha')" id="nav-trilha"><span class="nav-icon">🧭</span> Trilha de avaliação</button>
+      <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('nfse')" id="nav-nfse"><span class="nav-icon">🧾</span> Notas Fiscais</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('reunioes')" id="nav-reunioes"><span class="nav-icon">📝</span> Reuniões</button>
@@ -1704,14 +1899,19 @@ function buildNav(){
       <button class="nav-item" onclick="showView('usuarios')" id="nav-usuarios"><span class="nav-icon">🔐</span> Usuários</button>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else if(CU.role==='supervisora'){
-    html+=`<div class="nav-section">Configurações</div>
+    html+=`<div class="nav-section">Pacientes</div>
+      <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
+      <div class="nav-section">Configurações</div>
       <button class="nav-item" onclick="showView('usuarios')" id="nav-usuarios"><span class="nav-icon">🔐</span> Usuários</button>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else {
-    html+=`<div class="nav-section">Conta</div>
+    html+=`<div class="nav-section">Pacientes</div>
+      <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
+      <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   }
   nav.innerHTML=html;
+  try{teAtualizarBadge();}catch(e){}
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1722,6 +1922,7 @@ const VM={
   'leads':{title:'Leads',sub:'Gerencie e acompanhe seus leads',role:'admin'},
   'convertidos':{title:'Pacientes',sub:'Pacientes ativos e histórico',role:'admin'},
   'trilha':{title:'Trilha de avaliação',sub:'Etapas de entrada do paciente novo',role:'admin'},
+  'testes':{title:'Testes',sub:'Escalas e questionários enviados por link'},
   'nfse':{title:'Notas Fiscais',sub:'Lote XML de NFS-e para o GISS Guarulhos',role:'admin'},
   'registros':{title:'Registros de Supervisão',sub:'Histórico de supervisões'},
   'novo-registro':{title:'Novo Registro',sub:'Preencha os dados da supervisão'},
@@ -1784,6 +1985,7 @@ function showView(name){
   else if(name==='leads') renderLeadsView(c);
   else if(name==='convertidos') renderConvertidos(c);
   else if(name==='trilha'&&CU.role==='admin') renderTrilha(c);
+  else if(name==='testes') renderTestes(c);
   else if(name==='nfse'&&CU.role==='admin') renderNfse(c);
   else if(name==='faturamento') renderFaturamento(c);
   else if(name==='registros') renderRegistros(c);
