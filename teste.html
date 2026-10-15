@@ -29,6 +29,7 @@
   --warn:#F2A97B; --warn-soft:#3A2418; color-scheme:dark;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{
   background:var(--bg); color:var(--fg); font-family:var(--font-body); font-size:16px; line-height:1.5;
   padding-left:max(16px, env(safe-area-inset-left, 0px));
@@ -245,6 +246,22 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
       }
     }
   } catch(e) {}
+  // Dados da criança vêm no link (após o #, que não vai para nenhum servidor)
+  var PRE = null;
+  try {
+    var h = location.hash.replace(/^#d=/, '').replace(/-/g,'+').replace(/_/g,'/');
+    while (h.length % 4) h += '=';
+    var j = JSON.parse(decodeURIComponent(escape(atob(h))));
+    if (j && j.n && /^\d{4}-\d{2}-\d{2}$/.test(j.b||'')) PRE = j;
+  } catch(e) {}
+  function applyPre(){
+    if (!PRE) return;
+    S.id.nome = PRE.n; S.id.nasc = fmt(PRE.b);
+    S.id.relacao = PRE.r || 'Outro'; S.id.informante = PRE.r || 'Responsável'; if (!PRE.r) S.id.relacaoOutro = 'Responsável';
+    S.id.data = todayBR();
+    if (PRE.s) S.id.sexo = PRE.s;
+  }
+  applyPre();
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
 
   var main = document.getElementById('main');
@@ -295,16 +312,17 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
     main.innerHTML =
       '<h1>Identificação</h1>' +
       '<p class="lead">Antes de começar, preencha os dados abaixo.</p>' +
-      '<h2>Sobre a criança</h2>' +
-      '<div class="field"><label for="f-nome">Nome da criança</label><input id="f-nome" data-k="nome" autocomplete="off" autocapitalize="words"></div>' +
-      '<div class="field"><label for="f-nasc">Data de nascimento</label><input id="f-nasc" data-k="nasc" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"><span class="hint">Digite só os números. Exemplo: 18072012</span></div>' +
-      '<div class="field"><label for="f-sexo">Sexo</label><select id="f-sexo" data-k="sexo"><option value="">Selecione</option><option>Feminino</option><option>Masculino</option></select></div>' +
+      (PRE ? '<div class="how" style="margin-top:12px"><b style="min-width:0">' + esc(PRE.n) + '</b><br><span class="hint">Nascimento: ' + esc(fmt(PRE.b)) + (PRE.r ? ' · Respondendo: ' + esc(PRE.r) : '') + '</span></div>' : '') +
+      '<h2>' + (PRE ? 'Só mais dois dados' : 'Sobre a criança') + '</h2>' +
+      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-nome">Nome da criança</label><input id="f-nome" data-k="nome" autocomplete="off" autocapitalize="words"></div>' +
+      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-nasc">Data de nascimento</label><input id="f-nasc" data-k="nasc" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"><span class="hint">Digite só os números. Exemplo: 18072012</span></div>' +
+      '<div class="field"' + (PRE && PRE.s ? ' hidden' : '') + '><label for="f-sexo">Sexo da criança</label><select id="f-sexo" data-k="sexo"><option value="">Selecione</option><option>Feminino</option><option>Masculino</option></select></div>' +
       '<div class="field"><label for="f-serie">Série ou ano escolar</label><input id="f-serie" data-k="serie" autocomplete="off" placeholder="Ex.: 5º ano"></div>' +
-      '<h2>Quem está respondendo</h2>' +
-      '<div class="field"><label for="f-informante">Seu nome</label><input id="f-informante" data-k="informante" autocomplete="name" autocapitalize="words"></div>' +
-      '<div class="field"><label for="f-relacao">Relação com a criança</label><select id="f-relacao" data-k="relacao"><option value="">Selecione</option><option>Mãe</option><option>Pai</option><option>Madrasta</option><option>Padrasto</option><option>Avó</option><option>Avô</option><option value="Outro">Outro responsável</option></select></div>' +
+      '<h2' + (PRE ? ' hidden' : '') + '>Quem está respondendo</h2>' +
+      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-informante">Seu nome</label><input id="f-informante" data-k="informante" autocomplete="name" autocapitalize="words"></div>' +
+      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-relacao">Relação com a criança</label><select id="f-relacao" data-k="relacao"><option value="">Selecione</option><option>Mãe</option><option>Pai</option><option>Madrasta</option><option>Padrasto</option><option>Avó</option><option>Avô</option><option value="Outro">Outro responsável</option></select></div>' +
       '<div class="field" id="w-outro" hidden><label for="f-outro">Qual a relação?</label><input id="f-outro" data-k="relacaoOutro" autocomplete="off"></div>' +
-      '<div class="field"><label for="f-data">Data de hoje</label><input id="f-data" data-k="data" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"></div>' +
+      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-data">Data de hoje</label><input id="f-data" data-k="data" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"></div>' +
       '<p class="msg" id="msg" role="alert"></p>' +
       '<div class="nav"><button class="btn ghost" id="back" type="button">Voltar</button><button class="btn" id="start" type="button">Começar</button></div>';
 
