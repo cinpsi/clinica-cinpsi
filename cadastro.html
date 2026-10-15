@@ -67,10 +67,12 @@ button:disabled{opacity:.6;cursor:wait}
       {k:'cpf',l:'CPF',t:'cpf',r:1},
       {k:'celular',l:'Celular (com DDD)',t:'tel',r:1,ac:'tel'},
       {k:'email',l:'E-mail',t:'email',r:1,ac:'email'},
-      {k:'endereco',l:'Endereço com CEP',t:'text',r:1,ac:'street-address'},
+      {k:'cep',l:'CEP',t:'cep',r:1},
+      {k:'complemento',l:'Rua, número, complemento (apto/bloco)',t:'text',r:1,ac:'street-address'},
       {k:'atendimento',l:'Atendimento',t:'select',o:ATEND,r:1},
       {k:'queixa',l:'Queixa',t:'area',r:1},
       {k:'emergenciaNome',l:'Nome do contato de emergência',t:'text',r:0},
+      {k:'emergenciaParentesco',l:'Quem é essa pessoa para você?',t:'select',o:['Pai','Mãe','Marido','Esposa','Companheiro(a)','Filho(a)','Irmão(ã)','Amigo(a)','Outro'],r:0},
       {k:'emergenciaTel',l:'Telefone do contato de emergência',t:'tel',r:0},
       {k:'origem',l:'Onde nos conheceu?',t:'select',o:ORIG,r:1},
       {k:'notaFiscal',l:'Deseja nota fiscal do serviço?',t:'select',o:SIMNAO,r:1},
@@ -184,6 +186,7 @@ button:disabled{opacity:.6;cursor:wait}
       if(bad) ok=false;
       dados[c.k]=v;
     });
+    if(tipo==='adulto'&&(dados.emergenciaNome||dados.emergenciaTel)&&!dados.emergenciaParentesco){marcar('emergenciaParentesco',true);document.getElementById('e_emergenciaParentesco').textContent='Informe quem é o contato de emergência (pai, mãe, marido, esposa...).';ok=false;}
     if(tipo==='infantil'&&!dados.pai&&!dados.mae){marcar('mae',true);document.getElementById('e_mae').textContent='Informe o nome do pai ou da mãe.';ok=false;}
     var lg=document.getElementById('i_lgpd').checked;
     document.getElementById('g_lgpd').classList.toggle('invalid',!lg);
