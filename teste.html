@@ -207,8 +207,7 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   var CODE = (new URLSearchParams(location.search).get('c')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
   var KEY = 'cinpsi:teste:BRIEF2PAIS:' + (CODE || 'sem-codigo');
   var FB_KEY = 'AIzaSyBX5voXFH6oURfXUdSa_PxsNNFYldhmFKo';
-  var TOKEN = '8d5uC0LDA0pPqRH6KoYf8nOe';
-  var API = 'https://firestore.googleapis.com/v1/projects/clinica-gestao/databases/(default)/documents/pre_cadastros?key=';
+    var API = 'https://firestore.googleapis.com/v1/projects/clinica-gestao/databases/(default)/documents/testes_respostas?key=';
 
   function pad(n){ return (n < 10 ? '0' : '') + n; }
   function todayISO(){ var d = new Date(); return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate()); }
@@ -474,15 +473,14 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   }
 
   function enviar(){
-    var payload = { _teste:true, codigo:CODE, escala:'BRIEF2PAIS', versao:'v1', enviadoEm:new Date().toISOString(),
+    var payload = { codigo:CODE, escala:'BRIEF2PAIS', versao:'v1',
       crianca:{ nome:clean(S.id.nome), nasc:parseBR(S.id.nasc), sexo:S.id.sexo, serie:clean(S.id.serie) },
       informante:{ nome:clean(S.id.informante), relacao:relacaoTxt(), data:parseBR(S.id.data) },
       respostas:S.ans.join(''), codigoNeuro:buildCode() };
     var body = { fields:{
-      leadId:{stringValue:CODE}, tipo:{stringValue:'teste'},
-      dados:{stringValue:JSON.stringify(payload)}, token:{stringValue:TOKEN} } };
-    return fetch(API + FB_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
-      .then(function(r){ if(!r.ok) throw new Error('http ' + r.status); return r.json(); });
+      escala:{stringValue:'BRIEF2PAIS'}, dados:{stringValue:JSON.stringify(payload)}, enviadoEm:{stringValue:new Date().toISOString()} } };
+    return fetch(API + FB_KEY + '&documentId=' + encodeURIComponent(CODE), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+      .then(function(r){ if(!r.ok){ var e = new Error('http ' + r.status); e.status = r.status; throw e; } return r.json(); });
   }
 
   function renderDone(){
@@ -508,7 +506,9 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
       if (!CODE) { err.textContent = 'Link inválido. Peça um novo link à clínica.'; return; }
       send.disabled = true; send.textContent = 'Enviando...'; err.textContent = '';
       enviar().then(function(){ S.sent = true; S.fail = false; save(); render(); window.scrollTo(0,0); },
-        function(){ S.fail = true; save(); send.disabled = false; send.textContent = 'Tentar enviar de novo'; err.textContent = 'Não conseguimos enviar. Verifique a internet e tente de novo.'; document.getElementById('alt').hidden = false; });
+        function(e){ send.disabled = false; send.textContent = 'Tentar enviar de novo';
+          if (e && (e.status === 403 || e.status === 409)) { err.textContent = 'Este link não está mais ativo ou já foi respondido. Peça um novo link à clínica.'; return; }
+          S.fail = true; save(); err.textContent = 'Não conseguimos enviar. Verifique a internet e tente de novo.'; document.getElementById('alt').hidden = false; });
     });
     var copy = document.getElementById('copy');
     if (copy) copy.addEventListener('click', function(){
