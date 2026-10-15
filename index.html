@@ -581,8 +581,8 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
             </select></div>
           <div class="form-group"><label class="form-label">Serviço</label>
             <select class="form-select" id="fl-servico"><option value="">Selecione...</option>
-              <option>Fonoaudiologia Infantil</option><option>Psicologia Infantil</option><option>Psicologia Adulto</option>
-              <option>Fonoaudiologia</option><option>Psicologia</option><option>Psicopedagogia</option>
+              <option>Psicoterapia Adulto</option><option>Psicoterapia Infantil</option><option>Avaliação Neuropsicológica</option>
+              <option>Fonoaudiologia Adulto</option><option>Fonoaudiologia Infantil</option><option>Psicopedagogia</option>
             </select></div>
           <div class="form-group"><label class="form-label">Status</label>
             <select class="form-select" id="fl-status" onchange="onLeadStatusChange()">
@@ -699,11 +699,22 @@ async function leadsEntradaProcessar(docs){
     if(typeof refreshLeads==='function'){ try{ refreshLeads(); }catch(e){} }
   } finally { window._leadsEntradaBusy=false; }
 }
+function leadsGarantirOpcao(id,v){
+  const s=document.getElementById(id); if(!s||!v) return;
+  if(![].some.call(s.options,o=>o.value===v||o.text===v)){ const o=document.createElement('option'); o.value=v; o.textContent=v+' (antigo)'; s.appendChild(o); }
+}
+function leadsMigrarServicos(){
+  const mapa={'Psicologia Infantil':'Psicoterapia Infantil','Psicologia Adulto':'Psicoterapia Adulto','Psicoterapia Criança':'Psicoterapia Infantil','Avaliação neuropsicológica':'Avaliação Neuropsicológica'};
+  const fix=arr=>{let m=false; (arr||[]).forEach(x=>{ if(x&&x.servico&&mapa[x.servico]){x.servico=mapa[x.servico]; m=true;} }); return m;};
+  try{ const L=loadLeads(); if(fix(L)) saveLeads(L); }catch(e){}
+  try{ const A=loadConvAntigos(); if(fix(A)) saveConvAntigos(A); }catch(e){}
+}
 function leadsEntradaIniciar(){
   if(window._leadsEntradaOn||typeof _db==='undefined'||!_db) return;
   window._leadsEntradaOn=true;
   // espera os dados da nuvem chegarem antes de gravar qualquer lead
   setTimeout(function(){
+    try{ leadsMigrarServicos(); }catch(e){}
     _db.collection('entrada_leads').onSnapshot(function(snap){
       const docs=[];
       snap.forEach(d=>docs.push({ref:d.ref,data:d.data()}));
@@ -732,8 +743,9 @@ function preCadNorm(s){return String(s||'').trim().toLowerCase().normalize('NFD'
 function preCadFmtData(iso){const m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso||''));return m?m[3]+'/'+m[2]+'/'+m[1]:String(iso||'');}
 function preCadServico(tipo,at){
   const inf=tipo==='infantil';
-  if(/psicoterapia/i.test(at)) return inf?'Psicologia Infantil':'Psicologia Adulto';
-  if(/fonoaudiologia/i.test(at)) return inf?'Fonoaudiologia Infantil':'Fonoaudiologia';
+  if(/neuropsic/i.test(at)) return 'Avaliação Neuropsicológica';
+  if(/psicoterapia/i.test(at)) return inf?'Psicoterapia Infantil':'Psicoterapia Adulto';
+  if(/fonoaudiologia/i.test(at)) return inf?'Fonoaudiologia Infantil':'Fonoaudiologia Adulto';
   if(/psicopedagogia/i.test(at)&&!/avalia/i.test(at)) return 'Psicopedagogia';
   return '';
 }
@@ -2286,7 +2298,7 @@ function openLeadModal(id){
   document.getElementById('fl-nasc').value=l?.nascimento||'';
   document.getElementById('fl-escola').value=l?.escola||'';
   document.getElementById('fl-origem').value=l?.origem||'';
-  document.getElementById('fl-servico').value=l?.servico||'';
+  leadsGarantirOpcao('fl-servico',l?.servico); document.getElementById('fl-servico').value=l?.servico||'';
   document.getElementById('fl-status').value=l?.status||'Novo';
   document.getElementById('fl-prox').value=l?.prox_contato||'';
   document.getElementById('fl-obs').value=l?.observacao||'';
@@ -2588,9 +2600,9 @@ function duplicarConvertido(id){
     +'<select class="form-select" id="dup-terapeuta"><option value="">Selecione...</option>'+tOpts+'</select></div>'
     +'<div class="form-group"><label class="form-label">Serviço</label>'
     +'<select class="form-select" id="dup-servico"><option value="">Selecione...</option>'
-    +'<option>Fonoaudiologia Infantil</option><option>Psicologia Infantil</option>'
-    +'<option>Psicologia Adulto</option><option>Fonoaudiologia</option>'
-    +'<option>Psicologia</option><option>Psicopedagogia</option>'
+    +'<option>Psicoterapia Adulto</option><option>Psicoterapia Infantil</option>'
+    +'<option>Avaliação Neuropsicológica</option><option>Fonoaudiologia Adulto</option>'
+    +'<option>Fonoaudiologia Infantil</option><option>Psicopedagogia</option>'
     +'</select></div>'
     +'<div class="form-group full"><label class="form-label">Modalidade de cobrança</label>'
     +'<div style="display:flex;gap:8px;margin-top:4px">'
@@ -2701,9 +2713,9 @@ function openConvModal(id){
           <div class="form-group"><label class="form-label">Serviço</label>
             <select class="form-select" id="ec-servico">
               <option value="">Selecione...</option>
-              <option>Fonoaudiologia Infantil</option><option>Psicologia Infantil</option>
-              <option>Psicologia Adulto</option><option>Fonoaudiologia</option>
-              <option>Psicologia</option><option>Psicopedagogia</option>
+              <option>Psicoterapia Adulto</option><option>Psicoterapia Infantil</option>
+              <option>Avaliação Neuropsicológica</option><option>Fonoaudiologia Adulto</option>
+              <option>Fonoaudiologia Infantil</option><option>Psicopedagogia</option>
             </select></div>
           <div class="form-group"><label class="form-label">Terapeuta</label>
             <select class="form-select" id="ec-terapeuta"><option value="">Selecione...</option></select></div>
@@ -2774,7 +2786,7 @@ function openConvModal(id){
   document.getElementById('ec-paciente').value=p.paciente||'';
   document.getElementById('ec-telefone').value=p.telefone||'';
   document.getElementById('ec-origem').value=p.origem||'';
-  document.getElementById('ec-servico').value=p.servico||'';
+  leadsGarantirOpcao('ec-servico',p.servico); document.getElementById('ec-servico').value=p.servico||'';
   document.getElementById('ec-valor').value=p.valor||'';
   document.getElementById('ec-valor-mensal').value=p.valorMensal||p.valor||'';
   document.getElementById('ec-valor-proporcional').value=p.valorProporcional||'';
