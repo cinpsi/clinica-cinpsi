@@ -1710,7 +1710,16 @@ function teCodigo(){
   do{ c=''; for(let i=0;i<8;i++) c+=TE_ALFA[Math.floor(Math.random()*TE_ALFA.length)]; }while(usados.has(c));
   return c;
 }
-function teUrl(cod,esc_){ return new URL((TE_CAT[esc_]||{pagina:'teste.html'}).pagina+'?c='+cod,location.href).href; }
+function teUrl(cod,esc_){
+  const base=new URL((TE_CAT[esc_]||{pagina:'teste.html'}).pagina+'?c='+cod,location.href).href;
+  const l=(loadTestes().links||[]).find(x=>x.codigo===cod);
+  if(!l||!l.nasc) return base;
+  try{
+    const j=JSON.stringify({n:l.pacNome,b:String(l.nasc).slice(0,10),r:l.respondente||''});
+    const b=btoa(unescape(encodeURIComponent(j))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    return base+'#d='+b;
+  }catch(e){ return base; }
+}
 function teIdade(p){ const n=p&&(p.nascimento||p.nasc); if(!n||!/^\d{4}-\d{2}-\d{2}/.test(n)) return null; const d=new Date(n.slice(0,10)+'T12:00:00'),h=new Date(); let a=h.getFullYear()-d.getFullYear(); const m=h.getMonth()-d.getMonth(); if(m<0||(m===0&&h.getDate()<d.getDate())) a--; return a; }
 function teSugeridos(idade){ if(idade===null) return []; return Object.keys(TE_CAT).filter(k=>idade>=TE_CAT[k].min&&idade<=TE_CAT[k].max); }
 function tePacientes(){
