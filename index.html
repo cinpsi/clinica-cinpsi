@@ -549,7 +549,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <div class="form-section">
         <div class="section-title">Identificação</div>
         <div class="form-grid">
-          <div class="form-group"><label class="form-label">Responsável *</label><input class="form-input" id="fl-responsavel" placeholder="Nome do responsável"></div>
+          <div class="form-group"><label class="form-label">Responsável <span style="font-weight:400;color:var(--text3)">(obrigatório só para criança)</span></label><input class="form-input" id="fl-responsavel" placeholder="Nome do responsável"></div>
           <div class="form-group"><label class="form-label">Nome do paciente</label><input class="form-input" id="fl-paciente" placeholder="Nome do paciente"></div>
           <div class="form-group"><label class="form-label">Telefone</label><input class="form-input" id="fl-telefone" placeholder="(11) 99999-9999"></div>
           <div class="form-group"><label class="form-label">Data de entrada *</label><input class="form-input" id="fl-data" type="date"></div>
@@ -735,7 +735,7 @@ function leadsEntradaIniciar(){
 const PRECAD_ROTULOS={
   nome:'Nome completo',nascimento:'Data de nascimento',cpf:'CPF',celular:'Celular',email:'E-mail',
   endereco:'Endereço com CEP',cep:'CEP',complemento:'Endereço / complemento',atendimento:'Atendimento',queixa:'Queixa',
-  emergenciaNome:'Contato de emergência',emergenciaTel:'Telefone de emergência',origem:'Onde nos conheceu',
+  emergenciaNome:'Contato de emergência',emergenciaParentesco:'Parentesco do contato',emergenciaTel:'Telefone de emergência',origem:'Onde nos conheceu',
   notaFiscal:'Nota fiscal',encaminhamento:'Encaminhamento por escrito',pai:'Nome do pai',mae:'Nome da mãe',
   cpfResponsavel:'CPF do responsável',campanhas:'Aceita campanhas e avisos'
 };
@@ -866,8 +866,8 @@ function leadFormAplicarObj(l){
   } else {
     if(d.nome){ l.paciente=d.nome; if(!l.responsavel||l.responsavel===l.telefone) l.responsavel=d.nome; }
     if(d.cpf) l.cpf=d.cpf;
-    if(d.endereco) l.endereco=d.endereco;
-    if(d.emergenciaNome||d.emergenciaTel) l.contatoEmergencia=[d.emergenciaNome,d.emergenciaTel].filter(Boolean).join(' - ');
+    if(d.endereco) l.endereco=d.endereco; else if(d.cep||d.complemento) l.endereco=[d.complemento,d.cep].filter(Boolean).join(' - CEP ');
+    if(d.emergenciaNome||d.emergenciaTel) l.contatoEmergencia=[d.emergenciaNome&&(d.emergenciaNome+(d.emergenciaParentesco?' ('+d.emergenciaParentesco+')':'')),d.emergenciaTel].filter(Boolean).join(' - ');
   }
   if(d.nascimento) l.nascimento=d.nascimento;
   if(d.email) l.email=d.email;
@@ -2324,8 +2324,13 @@ function onLeadStatusChange(){
 }
 
 function saveLead(){
-  const responsavel=document.getElementById('fl-responsavel').value.trim();
-  if(!responsavel){toast('Responsável é obrigatório.');return;}
+  let responsavel=document.getElementById('fl-responsavel').value.trim();
+  if(!responsavel){
+    const pacN=document.getElementById('fl-paciente').value.trim();
+    if(/infantil/i.test(document.getElementById('fl-servico').value)){toast('Responsável é obrigatório para atendimento infantil.');return;}
+    if(!pacN){toast('Informe o nome do paciente (ou do responsável).');return;}
+    responsavel=pacN;
+  }
   const leads=loadLeads();
   const rec={
     id:editLeadId||Date.now().toString(),
