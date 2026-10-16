@@ -715,11 +715,13 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
     var h = location.hash.replace(/^#d=/, '').replace(/-/g,'+').replace(/_/g,'/');
     while (h.length % 4) h += '=';
     var j = JSON.parse(decodeURIComponent(escape(atob(h))));
-    if (j && j.n && /^\d{4}-\d{2}-\d{2}$/.test(j.b||'')) PRE = j;
+    if (j && j.n && (!j.b || /^\d{4}-\d{2}-\d{2}$/.test(j.b))) PRE = j;
   } catch(e) {}
+  var ADULT = false;
+  try { if (PRE && PRE.b) { var _b = new Date(PRE.b + 'T12:00:00'), _h = new Date(), _a = _h.getFullYear() - _b.getFullYear(); if (_h.getMonth() < _b.getMonth() || (_h.getMonth() === _b.getMonth() && _h.getDate() < _b.getDate())) _a--; ADULT = _a >= 18; } } catch(e) {}
   function applyPre(){
     if (!PRE) return;
-    S.id.nome = PRE.n; S.id.nasc = fmt(PRE.b);
+    S.id.nome = PRE.n; if (PRE.b) S.id.nasc = fmt(PRE.b);
     S.id.data = todayBR();
     if (PRE.s) S.id.sexo = PRE.s;
     if (CFG.resp === 'self') { S.id.informante = PRE.n; S.id.relacao = 'Outro'; S.id.relacaoOutro = 'Paciente'; }
@@ -771,12 +773,12 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
     main.innerHTML =
       '<h1>Identificação</h1>' +
       '<p class="lead">Antes de começar, preencha os dados abaixo.</p>' +
-      (PRE ? '<div class="how" style="margin-top:12px"><b style="min-width:0">' + esc(PRE.n) + '</b><br><span class="hint">Nascimento: ' + esc(fmt(PRE.b)) + (PRE.r ? ' · Respondendo: ' + esc(PRE.r) : '') + '</span></div>' : '') +
-      '<h2>' + (PRE ? (CFG.resp === 'prof' ? 'Só mais alguns dados' : 'Só mais dois dados') : 'Sobre ' + (CFG.resp === 'self' ? 'você' : 'a criança')) + '</h2>' +
+      (PRE ? '<div class="how" style="margin-top:12px"><b style="min-width:0">' + esc(PRE.n) + '</b>' + (PRE.b || PRE.r ? '<br><span class="hint">' + (PRE.b ? 'Nascimento: ' + esc(fmt(PRE.b)) : '') + (PRE.b && PRE.r ? ' · ' : '') + (PRE.r ? 'Respondendo: ' + esc(PRE.r) : '') + '</span>' : '') + '</div>' : '') +
+      '<h2>' + (PRE ? (CFG.resp === 'prof' || !PRE.b ? 'Só mais alguns dados' : 'Só mais dois dados') : 'Sobre ' + (CFG.resp === 'self' ? 'você' : 'a criança')) + '</h2>' +
       '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-nome">Nome da criança</label><input id="f-nome" data-k="nome" autocomplete="off" autocapitalize="words"></div>' +
-      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-nasc">Data de nascimento</label><input id="f-nasc" data-k="nasc" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"><span class="hint">Digite só os números. Exemplo: 18072012</span></div>' +
+      '<div class="field"' + (PRE && PRE.b ? ' hidden' : '') + '><label for="f-nasc">Data de nascimento</label><input id="f-nasc" data-k="nasc" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"><span class="hint">Digite só os números. Exemplo: 18072012</span></div>' +
       '<div class="field"' + (PRE && PRE.s ? ' hidden' : '') + '><label for="f-sexo">' + (CFG.resp === 'self' ? 'Seu sexo' : 'Sexo da criança') + '</label><select id="f-sexo" data-k="sexo"><option value="">Selecione</option><option>Feminino</option><option>Masculino</option></select></div>' +
-      '<div class="field"><label for="f-serie">' + (CFG.resp === 'self' ? 'Sua série ou ano escolar' : 'Série ou ano escolar') + '</label><input id="f-serie" data-k="serie" autocomplete="off" placeholder="Ex.: 5º ano"></div>' +
+      '<div class="field"' + (ADULT ? ' hidden' : '') + '><label for="f-serie">' + (CFG.resp === 'self' ? 'Sua série ou ano escolar' : 'Série ou ano escolar') + '</label><input id="f-serie" data-k="serie" autocomplete="off" placeholder="Ex.: 5º ano"></div>' +
       '<h2' + (PRE && CFG.resp !== 'prof' ? ' hidden' : '') + '>Quem está respondendo</h2>' +
       '<div class="field"' + (PRE && CFG.resp !== 'prof' ? ' hidden' : '') + '><label for="f-informante">' + (CFG.resp === 'prof' ? 'Seu nome (professor(a))' : 'Seu nome') + '</label><input id="f-informante" data-k="informante" autocomplete="name" autocapitalize="words"></div>' +
       '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-relacao">Relação com a criança</label><select id="f-relacao" data-k="relacao"><option value="">Selecione</option><option>Mãe</option><option>Pai</option><option>Madrasta</option><option>Padrasto</option><option>Avó</option><option>Avô</option><option value="Outro">Outro responsável</option></select></div>' +
@@ -886,10 +888,9 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
       miss.forEach(function(i){ html += '<button type="button" data-go="' + i + '">' + CFG.lbl + ' ' + (i + 1) + '</button>'; });
       html += '</div>';
     } else {
-      html += '<p class="lead">Todos os ' + TOTAL + ' itens foram respondidos. Confira o resumo e conclua.</p>';
+      html += '<p class="lead">Você respondeu todos os itens. Toque em Concluir para enviar.</p>';
     }
-    html += '<div class="counts">' + OPTS.map(function(o){ return '<div><b>' + c[o[0]] + '</b><span>' + esc(o[1]) + '</span></div>'; }).join('') + '</div>' +
-      '<div class="nav" style="margin-top:20px"><button class="btn ghost" id="back" type="button">Voltar</button>' +
+    html += '<div class="nav" style="margin-top:20px"><button class="btn ghost" id="back" type="button">Voltar</button>' +
       '<button class="btn" id="finish" type="button"' + (miss.length ? ' disabled style="opacity:.45;cursor:not-allowed"' : '') + '>Concluir</button></div>';
     main.innerHTML = html;
     document.getElementById('back').addEventListener('click', function(){ go(LAST); });
