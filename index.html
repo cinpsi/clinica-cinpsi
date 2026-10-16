@@ -1825,6 +1825,7 @@ function teHtmlLink(l,p){
     <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
       ${ok?'':`<button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiar('${l.codigo}','url')">📋 Copiar link</button><a class="btn-ghost" style="padding:4px 10px;font-size:12px;text-decoration:none" target="_blank" rel="noopener" href="${wa}">💬 WhatsApp</a><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiar('${l.codigo}','msg')">Copiar mensagem</button><button class="btn-ghost" style="padding:4px 10px;font-size:12px;color:#b91c1c" onclick="teExcluir('${l.codigo}')">Excluir</button>`}
       ${ok?`<button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="teVerResposta('${l.codigo}')">Ver resposta</button>`:''}
+      ${ok&&CU.role==='admin'?`<button class="btn-ghost" style="padding:4px 10px;font-size:12px;color:#b91c1c" onclick="teExcluir('${l.codigo}')">🗑️ Excluir</button>`:''}
     </div><div id="te-resp-${l.codigo}"></div></div>`;
 }
 function teGerar(escala,resp){
@@ -1854,8 +1855,17 @@ function teCopiar(cod,tipo){
   teCopiarTexto(`Olá! Segue o link do questionário ${l.escalaNome} referente a ${l.pacNome}. Quem responde: ${l.respondente||'responsável'}. Leva cerca de ${(TE_CAT[l.escala]||{}).tempo||'10 minutos'}.\n${url}\nEquipe CINPSI`);
 }
 function teExcluir(cod){
-  if(!confirm('Excluir este link pendente? Ele deixa de funcionar para quem receber.')) return;
-  teFs().collection('testes_links').doc(cod).delete().then(()=>{ _teLinks=_teLinks.filter(l=>l.codigo!==cod); teRenderFicha(); }).catch(e=>toast('Não foi possível excluir: '+(e&&e.code||'erro')));
+  const l=_teLinks.find(x=>x.codigo===cod); if(!l) return;
+  const resp=l.status==='respondido';
+  if(resp&&CU.role!=='admin'){ toast('Só a administração pode excluir testes respondidos.'); return; }
+  const msg=resp?'Excluir este teste RESPONDIDO ('+l.escalaNome+' · '+l.pacNome+')? A resposta será apagada e não pode ser recuperada.':'Excluir este link pendente? Ele deixa de funcionar para quem receber.';
+  if(!confirm(msg)) return;
+  const fs=teFs();
+  fs.collection('testes_links').doc(cod).delete().then(()=>{
+    _teLinks=_teLinks.filter(x=>x.codigo!==cod); teRenderFicha(); try{teAtualizarBadge();}catch(e){}
+    if(resp) fs.collection('testes_respostas').doc(cod).delete().catch(e=>console.warn('resposta não apagada',e&&e.code));
+    toast('Teste excluído');
+  }).catch(e=>toast('Não foi possível excluir: '+(e&&e.code||'erro')));
 }
 // ── Correção automática (onde há chave de correção) ──
 const TE_SCARED={ total:{min:25,txt:'Total ≥ 25 pode indicar transtorno de ansiedade (acima de 30 é mais específico)'},
