@@ -80,7 +80,7 @@ p{margin:0}
 .item .n{font-family:var(--font-display); font-size:12px; font-weight:600; letter-spacing:.06em; color:var(--teal); text-transform:uppercase}
 .item.done .n::after{content:" ✓"}
 .item .q{font-size:16px; line-height:1.45; margin-top:4px}
-.choices{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px}
+.choices{display:grid; grid-template-columns:repeat(var(--cols,3), minmax(0,1fr)); gap:8px; margin-top:12px}
 .choices label{position:relative; display:block; min-width:0}
 .choices input{position:absolute; opacity:0; inset:0; width:100%; height:100%; margin:0; cursor:pointer}
 .opt{
@@ -88,7 +88,13 @@ p{margin:0}
   border:1.5px solid var(--line); border-radius:10px; background:var(--bg); text-align:center; pointer-events:none;
 }
 .opt b{font-family:var(--font-display); font-size:20px; line-height:1.1}
-.opt span{font-size:11.5px; line-height:1.2; color:var(--muted)}
+.opt span{font-size:10.5px; line-height:1.2; color:var(--muted); max-width:100%; overflow-wrap:break-word; hyphens:auto; -webkit-hyphens:auto; letter-spacing:-.01em}
+@media (max-width:360px){ .opt span{font-size:9.5px} }
+/* 4 ou mais opções: lista vertical, um botão por linha (cabe em qualquer tela) */
+.choices.many{grid-template-columns:1fr; gap:6px}
+.choices.many .opt{flex-direction:row; justify-content:flex-start; gap:12px; min-height:48px; padding:6px 14px; text-align:left}
+.choices.many .opt b{min-width:1.2em; text-align:center}
+.choices.many .opt span{font-size:14px; color:inherit; letter-spacing:0}
 .choices input:checked + .opt{background:var(--primary); color:var(--on-primary); border-color:var(--primary)}
 .choices input:checked + .opt span{color:inherit}
 .choices input:checked + .opt b::after{content:" ✓"; font-size:14px}
@@ -106,7 +112,7 @@ p{margin:0}
 .btn.block{width:100%}
 .stack{display:grid; gap:10px; margin-top:16px}
 
-.counts{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; margin-top:12px}
+.counts{display:grid; grid-template-columns:repeat(auto-fit, minmax(84px,1fr)); gap:8px; margin-top:12px}
 .counts div{background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 6px; text-align:center}
 .counts b{display:block; font-family:var(--font-display); font-size:24px; font-variant-numeric:tabular-nums; color:var(--primary)}
 .counts span{font-size:12px; color:var(--muted)}
@@ -121,13 +127,11 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
 </head><body>
 <div class="app">
   <header class="top">
-    <div class="top-row"><div class="brand">BRIEF-2 · PAIS</div><div class="stat" id="stat"></div></div>
+    <div class="top-row"><div class="brand" id="brand"></div><div class="stat" id="stat"></div></div>
     <div class="bar" aria-hidden="true"><i id="bar" style="width:0%"></i></div>
   </header>
   <main id="main"></main>
-  <footer class="foot">
-    O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica. Baseado no BRIEF-2 (Gioia, Isquith, Guy e Kenworthy).
-  </footer>
+  <footer class="foot" id="rodape"></footer>
 </div>
 
 <script>
@@ -136,76 +140,536 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   var CLINIC_WHATSAPP = '5511994027759';
   var LOGO_LIGHT = 'https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png', LOGO_DARK = 'https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png';
 
-  var ITEMS = [
-    'É inquieto',
-    'Resiste ou tem problema em aceitar uma forma diferente de resolver um problema com trabalho escolar, amigos, trabalhos domésticos, etc.',
-    'Quando são dadas três tarefas para fazer, só se lembra da primeira ou da última',
-    'Não é consciente de quanto seu comportamento afeta ou incomoda outros',
-    'O trabalho é desleixado',
-    'Tem reações explosivas, bravas',
-    'Não se planeja com antecedência para obrigações escolares',
-    'Não acha coisas na sala ou na carteira escolar',
-    'Não toma iniciativa',
-    'Não pensa antes de fazer as coisas (é impulsivo)',
-    'Tem problemas para se acostumar a novas situações (aulas, grupos, amigos)',
-    'Tem um período curto de atenção',
-    'Tem problemas de compreensão de suas próprias forças e fraquezas',
-    'Tem explosões por pequenos motivos',
-    'Apega-se a detalhes e perde a visão geral',
-    'Perde o controle com mais frequência que os amigos',
-    'Fica preso em um tópico ou atividade',
-    'Esquece o seu nome',
-    'Tem problemas com tarefas que têm mais de um passo',
-    'Não percebe que certas ações incomodam outros',
-    'Tem escrita manual ruim',
-    'Pequenos eventos geram grandes reações',
-    'Tem boas ideias, mas não termina os trabalhos (não dá continuidade)',
-    'Fala em hora errada',
-    'Tem problemas em terminar tarefas (tarefas, trabalho de casa)',
-    'Não percebe quando seus comportamentos causam reações negativas',
-    'Reage mais fortemente a situações do que outras crianças',
-    'Tem problemas para se lembrar de fatos, mesmo que em poucos minutos',
-    'Comete erros por descuido',
-    'Fica fora do lugar em horas erradas',
-    'Torna-se angustiado/preocupado com situações novas',
-    'Tem problemas em concentrar em tarefas, lição de casa, etc.',
-    'Tem escrita manual ruim',
-    'Muda de humor frequentemente',
-    'Tem boas ideias, mas não as coloca no papel',
-    'Tem problemas em contar até três',
-    'Deixa bagunças que outros têm de limpar',
-    'Precisa receber uma ordem para iniciar uma tarefa mesmo quando tem vontade',
-    'Age muito agressivo ou “fora de controle”',
-    'Pensa muito sobre o mesmo tópico',
-    'Esquece-se do que ele/ela estava fazendo',
-    'Não verifica erros no trabalho',
-    'Explosões de bravura ou de choro são intensas mas terminam repentinamente',
-    'Torna-se oprimido por grandes atribuições',
-    'Perde a lancheira, o dinheiro do lanche, bilhetes autorização, lição de casa, etc.',
-    'Precisa de ajuda de um adulto para permanecer em uma tarefa',
-    'Esquece-se de entregar a lição de casa, mesmo quando completa',
-    'Tem problemas em colocar freios em suas ações',
-    'Resiste a mudanças de rotina, comidas, lugares, etc.',
-    'Tem problemas para iniciar lições de casa ou obrigações',
-    'O temperamento é facilmente influenciado pela situação',
-    'Subestima o tempo necessário para terminar tarefas',
-    'Não traz para casa lição de casa, folhas de anotações, materiais, etc.',
-    'Não é capaz de achar a porta da frente de casa',
-    'Não toma iniciativa',
-    'Torna-se angustiado facilmente',
-    'Começa tarefas ou obrigações no último minuto',
-    'Tem problemas em mudar de uma atividade para outra',
-    'Tem problemas em executar ações necessárias para alcançar objetivos (economizar dinheiro para um item especial, estudar para obter uma boa nota)',
-    'É perturbado por mudança de professora ou de aula',
-    'Tem problemas para organizar atividades com amigos',
-    'Parece infantilizado',
-    'Deixa uma trilha de pertences onde quer que vá'
+  /* ===== Escalas disponíveis (chave = parâmetro ?e= do link) ===== */
+  var NAF = [['N','Nunca','Se o comportamento for <b style="min-width:0">Nunca</b> um problema'],['A','Às vezes','Se o comportamento for <b style="min-width:0">Algumas vezes</b> um problema'],['F','Frequentemente','Se o comportamento for <b style="min-width:0">Frequentemente</b> um problema']];
+  var SDQ_OPTS = [['0','Falso','Falso'],['1','Mais ou menos verdadeiro','Mais ou menos verdadeiro'],['2','Verdadeiro','Verdadeiro']];
+  var BRIEF_PERG = 'Nos últimos 6 meses, o quanto isto foi um problema?';
+  var BRIEF_RODAPE = 'O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica. Baseado no BRIEF-2 (Gioia, Isquith, Guy e Kenworthy).';
+  var GEN_RODAPE = 'O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica.';
+  var SDQ_INTRO_PAIS = ['<p>Por favor, em cada item, marque a opção que <b>melhor descreve a criança</b>. Responda todas as perguntas da melhor maneira possível, mesmo que não tenha certeza absoluta ou que a pergunta pareça estranha.</p>','<p>Baseie suas respostas no comportamento da criança nos <b>últimos seis meses</b> ou durante o ano escolar em curso.</p>'];
+  var SDQ_RODAPE = 'O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica. Questionário de Capacidades e Dificuldades (SDQ-Por), © Robert Goodman, 2005.';
+
+  var SDQ_COMUM_A = [
+    "Tem consideração pelos sentimentos de outras pessoas",
+    "Não consegue parar sentado quando tem que fazer a lição ou comer; mexe-se muito, esbarrando em coisas, derrubando coisas",
+    "Muitas vezes se queixa de dor de cabeça, dor de barriga ou enjôo",
+    "Tem boa vontade em compartilhar doces, brinquedos, lápis ... com outras crianças",
+    "Frequentemente tem acessos de raiva ou crises de birra",
+    "É solitário, prefere brincar sozinho",
+    "Geralmente é obediente e faz normalmente o que os adultos lhe pedem",
+    "Tem muitas preocupações, muitas vezes parece preocupado com tudo",
+    "Tenta ser atencioso se alguém parece magoado, aflito ou se sentindo mal",
+    "Está sempre agitado, balançando as pernas ou mexendo as mãos",
+    "Tem pelo menos um bom amigo ou amiga",
+    "Frequentemente briga com outras crianças ou as amedronta",
+    "Frequentemente parece triste, desanimado ou choroso",
+    "Em geral, é querido por outras crianças",
+    "Facilmente perde a concentração",
+    "Fica inseguro quando tem que fazer alguma coisa pela primeira vez, facilmente perde a confiança em si mesmo",
+    "É gentil com crianças mais novas"
   ];
-  var OPTS = [['N','Nunca'],['A','Às vezes'],['F','Frequentemente']];
+  var SDQ_417 = SDQ_COMUM_A.concat([
+    "Frequentemente engana ou mente",
+    "Outras crianças \"pegam no pé\" ou atormentam-no",
+    "Frequentemente se oferece para ajudar outras pessoas (pais, professores, outras crianças)",
+    "Pensa nas coisas antes de fazê-las",
+    "Rouba coisas de casa, da escola ou de outros lugares",
+    "Se dá melhor com adultos do que com outras crianças",
+    "Tem muitos medos, assusta-se facilmente",
+    "Completa as tarefas que começa, tem boa concentração"
+  ]);
+  var SDQ_24 = SDQ_COMUM_A.concat([
+    "Geralmente discute com os adultos",
+    "Outras crianças \"pegam no pé\" ou atormentam-no",
+    "Frequentemente se oferece para ajudar outras pessoas (pais, professores, outras crianças)",
+    "Consegue parar e pensar nas coisas antes de fazê-las",
+    "Às vezes é malicioso",
+    "Se dá melhor com adultos do que com outras crianças",
+    "Tem muitos medos, assusta-se facilmente",
+    "Completa as tarefas que começa, tem boa concentração"
+  ]);
+  var SDQ_AUTO = [
+    "Eu tento ser legal com as outras pessoas. Eu me preocupo com os sentimentos dos outros",
+    "Não consigo parar sentado quando tenho que fazer a lição ou comer; me mexo muito, esbarrando em coisas, derrubando coisas",
+    "Muitas vezes tenho dor de cabeça, dor de barriga ou enjôo",
+    "Tenho boa vontade para dividir, emprestar minhas coisas (comida, jogos, canetas)",
+    "Eu fico muito bravo e geralmente perco a paciência",
+    "Eu estou quase sempre sozinho. Eu geralmente jogo sozinho ou fico na minha",
+    "Geralmente sou obediente e normalmente faço o que os adultos me pedem",
+    "Tenho muitas preocupações, muitas vezes pareço preocupado com tudo",
+    "Tento ajudar se alguém parece magoado, aflito ou sentindo-se mal",
+    "Estou sempre agitado, balançando as pernas ou mexendo as mãos",
+    "Eu tenho pelo menos um bom amigo ou amiga",
+    "Eu brigo muito. Eu consigo fazer com que as pessoas façam o que eu quero",
+    "Frequentemente estou chateado, desanimado ou choroso",
+    "Em geral, os outros jovens gostam de mim",
+    "Facilmente perco a concentração",
+    "Fico nervoso quando tenho que fazer alguma coisa diferente, facilmente perco a confiança em mim mesmo",
+    "Sou legal com crianças mais novas",
+    "Geralmente eu sou acusado de mentir ou trapacear",
+    "Os outros jovens me perturbam, \"pegam no pé\"",
+    "Frequentemente me ofereço para ajudar outras pessoas (pais, professores, crianças)",
+    "Eu penso antes de fazer as coisas",
+    "Eu pego coisas que não são minhas, de casa, da escola ou de outros lugares",
+    "Eu me dou melhor com os adultos do que com pessoas da minha idade",
+    "Eu sinto muito medo, eu me assusto facilmente",
+    "Eu consigo terminar as atividades que começo. Eu consigo prestar atenção"
+  ];
+
+  var BRIEF2_PAIS_ITEMS = [
+    "É inquieto",
+    "Resiste ou tem problema em aceitar uma forma diferente de resolver um problema com trabalho escolar, amigos, trabalhos domésticos, etc.",
+    "Quando são dadas três tarefas para fazer, só se lembra da primeira ou da última",
+    "Não é consciente de quanto seu comportamento afeta ou incomoda outros",
+    "O trabalho é desleixado",
+    "Tem reações explosivas, bravas",
+    "Não se planeja com antecedência para obrigações escolares",
+    "Não acha coisas na sala ou na carteira escolar",
+    "Não toma iniciativa",
+    "Não pensa antes de fazer as coisas (é impulsivo)",
+    "Tem problemas para se acostumar a novas situações (aulas, grupos, amigos)",
+    "Tem um período curto de atenção",
+    "Tem problemas de compreensão de suas próprias forças e fraquezas",
+    "Tem explosões por pequenos motivos",
+    "Apega-se a detalhes e perde a visão geral",
+    "Perde o controle com mais frequência que os amigos",
+    "Fica preso em um tópico ou atividade",
+    "Esquece o seu nome",
+    "Tem problemas com tarefas que têm mais de um passo",
+    "Não percebe que certas ações incomodam outros",
+    "Tem escrita manual ruim",
+    "Pequenos eventos geram grandes reações",
+    "Tem boas ideias, mas não termina os trabalhos (não dá continuidade)",
+    "Fala em hora errada",
+    "Tem problemas em terminar tarefas (tarefas, trabalho de casa)",
+    "Não percebe quando seus comportamentos causam reações negativas",
+    "Reage mais fortemente a situações do que outras crianças",
+    "Tem problemas para se lembrar de fatos, mesmo que em poucos minutos",
+    "Comete erros por descuido",
+    "Fica fora do lugar em horas erradas",
+    "Torna-se angustiado/preocupado com situações novas",
+    "Tem problemas em concentrar em tarefas, lição de casa, etc.",
+    "Tem escrita manual ruim",
+    "Muda de humor frequentemente",
+    "Tem boas ideias, mas não as coloca no papel",
+    "Tem problemas em contar até três",
+    "Deixa bagunças que outros têm de limpar",
+    "Precisa receber uma ordem para iniciar uma tarefa mesmo quando tem vontade",
+    "Age muito agressivo ou “fora de controle”",
+    "Pensa muito sobre o mesmo tópico",
+    "Esquece-se do que ele/ela estava fazendo",
+    "Não verifica erros no trabalho",
+    "Explosões de bravura ou de choro são intensas mas terminam repentinamente",
+    "Torna-se oprimido por grandes atribuições",
+    "Perde a lancheira, o dinheiro do lanche, bilhetes autorização, lição de casa, etc.",
+    "Precisa de ajuda de um adulto para permanecer em uma tarefa",
+    "Esquece-se de entregar a lição de casa, mesmo quando completa",
+    "Tem problemas em colocar freios em suas ações",
+    "Resiste a mudanças de rotina, comidas, lugares, etc.",
+    "Tem problemas para iniciar lições de casa ou obrigações",
+    "O temperamento é facilmente influenciado pela situação",
+    "Subestima o tempo necessário para terminar tarefas",
+    "Não traz para casa lição de casa, folhas de anotações, materiais, etc.",
+    "Não é capaz de achar a porta da frente de casa",
+    "Não toma iniciativa",
+    "Torna-se angustiado facilmente",
+    "Começa tarefas ou obrigações no último minuto",
+    "Tem problemas em mudar de uma atividade para outra",
+    "Tem problemas em executar ações necessárias para alcançar objetivos (economizar dinheiro para um item especial, estudar para obter uma boa nota)",
+    "É perturbado por mudança de professora ou de aula",
+    "Tem problemas para organizar atividades com amigos",
+    "Parece infantilizado",
+    "Deixa uma trilha de pertences onde quer que vá"
+  ];
+
+  var BRIEF2_PROF_ITEMS = [
+    "É inquieto",
+    "Resiste ou tem problema em aceitar uma forma diferente de resolver um problema com trabalho escolar, amigos, trabalhos domésticos, etc.",
+    "Quando são dadas três tarefas para fazer, só se lembra da primeira ou da última",
+    "Não é consciente de quanto seu comportamento afeta ou incomoda outros",
+    "O trabalho é desleixado",
+    "Tem reações explosivas, bravas",
+    "Não se planeja com antecedência para obrigações escolares",
+    "Não acha coisas na carteira escolar",
+    "Não toma iniciativa",
+    "Não pensa antes de fazer as coisas (é impulsivo)",
+    "Tem problemas para se acostumar a novas situações (aulas, grupos, amigos)",
+    "Tem um período curto de atenção",
+    "Tem problemas de compreensão de suas próprias forças e fraquezas",
+    "Tem explosões por pequenos motivos",
+    "Apega-se a detalhes e perde a visão geral",
+    "Perde o controle com mais frequência que os amigos",
+    "Fica preso em um tópico ou atividade",
+    "Esquece o seu nome",
+    "Tem problemas com tarefas que têm mais de um passo",
+    "Não percebe que certas ações incomodam outros",
+    "Tem escrita manual ruim",
+    "Pequenos eventos geram grandes reações",
+    "Tem boas ideias, mas não termina os trabalhos (não dá continuidade)",
+    "Fala em hora errada",
+    "Tem problemas em terminar tarefas (tarefas, trabalho de casa)",
+    "Não percebe quando seus comportamentos causam reações negativas",
+    "Reage mais fortemente a situações que outras crianças",
+    "Tem problemas para se lembrar de fatos, mesmo que em poucos minutos",
+    "Comete erros por descuido",
+    "Fica fora do lugar em horas erradas",
+    "Torna-se angustiado/preocupado com situações novas",
+    "Tem problemas em concentrar na lição, etc.",
+    "Tem escrita manual ruim",
+    "Muda de humor frequentemente",
+    "Tem boas ideias, mas não as coloca no papel",
+    "Tem problemas em contar até três",
+    "Deixa bagunças que outros têm de limpar",
+    "Precisa receber uma ordem para iniciar uma tarefa mesmo quando tem vontade",
+    "Age muito agressivo ou “fora de controle”",
+    "Pensa muito sobre o mesmo tópico",
+    "Esquece-se do que ele/ela estava fazendo",
+    "Não verifica erros no trabalho",
+    "Explosões de bravura ou de choro são intensas mas terminam repentinamente",
+    "Torna-se oprimido por grandes atribuições",
+    "Perde a lancheira, o dinheiro do lanche, bilhetes autorização, lição de casa, etc.",
+    "Precisa de ajuda de um adulto para permanecer em uma tarefa",
+    "Esquece-se de entregar a lição de casa, mesmo quando completa",
+    "Tem problemas em colocar freios em suas ações",
+    "Resiste a mudanças de rotina, comidas, lugares, etc.",
+    "Tem problemas para iniciar lições de casa ou obrigações",
+    "O temperamento é facilmente influenciado pela situação",
+    "Subestima o tempo necessário para terminar tarefas",
+    "Não traz para casa lição de casa, folhas de anotações, materiais, etc.",
+    "Não é capaz de achar a porta da frente da escola",
+    "Não toma iniciativa",
+    "Torna-se angustiado facilmente",
+    "Começa tarefas no último minuto",
+    "Não pensa nas consequências antes de agir",
+    "Não tem consciência de seu comportamento quando está no grupo",
+    "Tem dificuldades para chegar em maneiras diferentes de solucionar um problema",
+    "Testa pouco, mesmo quando sabe as respostas corretas",
+    "Deixa os trabalhos incompletos",
+    "Tem dificuldades para pensar de forma diferente para resolver um problema, quando estagnado"
+  ];
+
+  var BRIEF2_AUTO_ITEMS = [
+    "Eu tenho problemas em permanecer sentado",
+    "Eu tenho problemas para aceitar diferentes maneiras de resolver problemas com lições de casa, amigos, ou tarefas",
+    "Quando tenho três coisas para fazer, me lembro somente da primeira ou da última",
+    "Eu não percebo como meu comportamento afeta ou incomoda os outros",
+    "Meu trabalho é desleixado",
+    "Eu tenho explosões de raiva",
+    "Eu não planejo com antecedência as tarefas escolares",
+    "Tenho dificuldades de achar minhas coisas (como roupas, óculos, sapatos, livros ou canetas)",
+    "Tenho problemas em começar por conta própria",
+    "Sou impulsivo (Eu não penso antes de agir)",
+    "Eu tenho dificuldades de me acostumar com novas situações (seja na classe, em grupos, ou amigos)",
+    "Eu tenho um curto período de atenção",
+    "Eu tenho um pobre entendimento das minhas fraquezas e habilidades (Eu tento coisas que são muito fáceis ou muito difíceis)",
+    "Eu tenho explosões por pequenos motivos",
+    "Eu me pego em detalhes e perco a ideia central",
+    "Eu perco o controle mais que meus amigos",
+    "Fico preso em um tópico ou atividade",
+    "Eu esqueço meu nome",
+    "Eu tenho dificuldades com tarefas ou trabalhos que tenham mais de um passo",
+    "Eu não sei quando minhas ações incomodam os outros",
+    "Eu tenho problemas em organizar meu trabalho escrito",
+    "Eu fico chateado com pequenas situações",
+    "Eu tenho boas ideias, mas não realizo o trabalho (me falta continuidade)",
+    "Eu falo nos momentos errados",
+    "Eu tenho problemas em finalizar as atividades (como tarefas ou lições de casa)",
+    "Eu não noto quando meu comportamento causa reações negativas, até que seja tarde demais",
+    "Eu exagero",
+    "Eu tenho problemas em lembrar as coisas, mesmo que por um curto período (como um número de telefone ou instruções)",
+    "Eu cometo erros por descuido",
+    "Eu tenho dificuldades de esperar minha vez",
+    "Me incomoda quando eu tenho que lidar com mudanças (como as de rotina, comida, ou lugares)",
+    "Eu esqueço de entregar minha lição de casa, mesmo quando está completa",
+    "Eu sou mais lento que os outros quando completo o meu trabalho",
+    "Eu me sobrecarrego facilmente",
+    "Eu não me planejo com antecedência para situações futuras",
+    "Eu tenho dificuldade de contar até três",
+    "Eu não penso com antecedência sobre possíveis problemas",
+    "Eu tenho dificuldades de finalizar as tarefas por conta própria",
+    "Eu interrompo as pessoas",
+    "Eu tento a mesma abordagem de um problema, repetidamente, mesmo quando isto não funciona (Eu fico estagnado)",
+    "Eu esqueço instruções facilmente",
+    "Eu demoro mais para completar meu trabalho",
+    "Meus olhos se enchem de lágrimas rapidamente frente a pequenas coisas",
+    "Eu tenho problemas para completar o meu trabalho",
+    "Eu tenho dificuldade em pensar de uma maneira diferente para resolver um problema, quando estou estagnado",
+    "Sou distraído, esquecido",
+    "Tenho dificuldades de priorizar (ordenar) minhas atividades",
+    "Eu penso ou falo em voz alta quando estou trabalhando",
+    "Eu não penso nas consequências antes de agir",
+    "Eu não tenho consciência do meu comportamento quando estou em grupo",
+    "Eu tenho problema em mudar de uma atividade para outra",
+    "Eu tenho problemas em realizar as coisas que são necessárias para atingir um objetivo (como poupar dinheiro para a compra de algo especial ou estudar para ter boas notas)",
+    "Eu tenho dificuldades de encontrar diferentes maneiras de resolver um problema",
+    "Eu não consigo achar a porta da frente da minha casa",
+    "Eu tenho dificuldade de terminar projetos de longo prazo (como trabalhos ou relatórios)"
+  ];
+
+  var BRIEFP_ITEMS = [
+    "Reage exageradamente para pequenos problemas",
+    "Quando são dadas três tarefas para fazer, só se lembra da primeira ou da última",
+    "Não é consciente de quanto seu comportamento afeta ou incomoda outros",
+    "Quando instruído a limpar, coloca as coisas desorganizadas e de maneira aleatória",
+    "Se torna aborrecido com novas situações",
+    "Tem reações explosivas, bravas",
+    "Tem dificuldade com ações necessárias para completar uma tarefa (como tentando uma peça do quebra-cabeça por vez, ou limpando para ganhar uma recompensa)",
+    "Não para de rir de coisas engraçadas ou de situações, quando os outros param",
+    "Precisa ser avisado para começar uma tarefa, mesmo quando motivado para fazê-la",
+    "Tem dificuldades para se adaptar com novas pessoas (como uma babá, professor, amigo)",
+    "Fica chateado com muita facilidade",
+    "Tem dificuldades para se concentrar em jogos, quebra-cabeça, ou atividades lúdicas",
+    "Precisa ser supervisionado mais de perto que outras crianças",
+    "Quando enviado para obter algo, esquece o que deveria pegar",
+    "Fica chateado com mudanças de planos ou rotinas (como por exemplo a ordem das atividades, adicionar recados de última hora na programação)",
+    "Tem explosão de raiva por pequenas coisas",
+    "Repete os mesmos erros várias vezes, mesmo depois de ter recebido ajuda",
+    "Age de forma mais agressiva ou tola que outros no grupo (como numa festa de aniversário)",
+    "Não é capaz de achar roupas, sapatos, brinquedos ou livros, mesmo quando recebe instruções específicas",
+    "Leva um tempo longo para se sentir confortável em novos locais ou situações (como visitar um familiar distante ou novos amigos)",
+    "O humor muda frequentemente",
+    "Comete erros bobos em coisas que ela/ele consegue fazer",
+    "É inquieto(a), agitado(a), ou se contorce",
+    "Tem dificuldades em seguir rotinas estabelecidas, para dormir, comer ou brincar",
+    "Se incomoda com barulhos altos, luzes brilhantes ou certos cheiros",
+    "Pequenos acontecimentos desencadeiam reações intensas",
+    "Tem dificuldades com atividades ou tarefas que tenham mais de um passo",
+    "É impulsivo",
+    "Tem dificuldade de pensar em maneiras diferentes para resolver ou completar uma atividade, quando estagnado(a)",
+    "Se incomoda com mudanças no ambiente (como a mobília, mudança na posição de objetos no quarto, ou roupas novas)",
+    "Crises de raiva ou choro são intensas, mas terminam subitamente",
+    "Precisa de ajuda de um adulto para permanecer em uma tarefa",
+    "Não percebe quando seu comportamento causa reações negativas",
+    "Deixa bagunças que outros têm de limpar",
+    "Tem dificuldades com mudanças de atividade",
+    "Reage mais intensamente em algumas situações que outras crianças",
+    "Esquece-se do que ele/ela estava fazendo, no meio da atividade",
+    "Não compreende que certas ações incomodam os outros",
+    "Fica preso em pequenos detalhes da tarefa e esquece a ideia central",
+    "Tem dificuldades de participar de eventos fora da família (como festas de aniversário, piqueniques, encontros de final de semana)",
+    "É facilmente sobrecarregado ou superestimulado por uma atividade típica diária",
+    "Tem dificuldades para terminar tarefas (como jogos, quebra-cabeça, jogos de imaginação)",
+    "Perde o controle mais que as outras crianças",
+    "Não consegue achar coisas na casa, mesmo quando é dada uma instrução específica",
+    "Resiste a mudanças de rotina, comidas, lugares, etc.",
+    "Após ter um problema, permanece desapontado por um longo tempo",
+    "Não consegue se manter em um mesmo tema enquanto está falando",
+    "Fala alto ou brinca de forma muito barulhenta",
+    "Não consegue completar a tarefa, mesmo após receber instruções",
+    "Atua de maneira retraída ou superestimulado em locais cheios (com muito barulho, atividades ou pessoas)",
+    "Tem dificuldades para começar uma atividade ou tarefa, mesmo após instruções",
+    "Age de maneira agressiva ou fica fora de controle",
+    "Não tenta realizar uma tarefa tanto quanto sua habilidade permita",
+    "Tem dificuldades em colocar freio em suas ações mesmo depois de ser solicitado",
+    "Incapaz de finalizar a descrição de um evento, de uma pessoa ou de uma estória",
+    "Completa tarefas muito rapidamente",
+    "Não percebe quando faz certo ou errado",
+    "Facilmente se desvia durante uma ação",
+    "Tem dificuldade para lembrar coisas, mesmo depois de um curto período",
+    "Torna-se muito bobo",
+    "Tem um curto período de atenção",
+    "Brinca de forma descuidada ou imprudente em situações que possa se machucar (como em um playground, ou piscina)",
+    "Não tem consciência quando sua performance em uma tarefa é certa ou errada"
+  ];
+
+  var MASC_ITEMS = [
+    "Eu me sinto tenso ou nervoso",
+    "Eu costumo pedir permissão para fazer as coisas",
+    "Eu me preocupo que as outras pessoas dêem risada de mim",
+    "Eu fico com medo quando os meus pais saem",
+    "Sinto falta de ar",
+    "Eu fico atento se há algum perigo",
+    "A idéia de ficar longe de casa me assusta",
+    "Eu fico tremendo ou inquieto",
+    "Eu me esforço para obedecer meus pais e professores",
+    "Eu tenho medo que os outros meninos (ou meninas) gozem de mim",
+    "Eu tento ficar perto da minha mãe ou meu pai",
+    "Eu tenho tontura ou sensação de desmaio",
+    "Eu verifico as coisas antes de fazê-las",
+    "Eu me preocupo em ser chamado na classe",
+    "Eu me sinto desassossegado (sobressaltado)",
+    "Eu tenho medo que os outros achem que eu sou bobo",
+    "Eu deixo as luzes acesas à noite",
+    "Eu sinto dores no peito",
+    "Eu evito sair sem minha família",
+    "Eu me sinto estranho, esquisito, ou fora da realidade",
+    "Eu tento fazer coisas que vão agradar aos outros",
+    "Eu me preocupo com o que os outros pensam de mim",
+    "Eu evito assistir filmes ou programas de TV que assustam",
+    "Meu coração dispara ou “falha”",
+    "Eu evito as coisas que me aborrecem",
+    "Eu durmo junto de alguém da minha família",
+    "Eu me sinto inquieto e nervoso",
+    "Eu tento fazer tudo exatamente do jeito certo",
+    "Eu me preocupo em fazer alguma coisa boba ou que me deixe sem graça",
+    "Eu fico com medo quando ando de carro ou de ônibus",
+    "Eu sinto mal-estar no estômago",
+    "Se eu fico aborrecido ou com medo, eu conto logo para alguém",
+    "Eu fico nervoso se eu tenho que fazer alguma coisa em público",
+    "Tenho medo de tempo ruim, escuridão, altura, animais ou insetos",
+    "Minhas mãos tremem",
+    "Eu preciso ter certeza que as coisas estão seguras",
+    "Eu tenho dificuldade em chamar outros meninos (ou meninas) para brincar comigo",
+    "Minhas mãos ficam suadas ou frias",
+    "Eu sinto vergonha"
+  ];
+
+  var SCARED_PAIS_ITEMS = [
+    "Quando meu/minha filho(a) fica com medo, ele/ela tem dificuldades para respirar.",
+    "Meu/minha filho(a) sente dor de cabeça quando está na escola.",
+    "Meu/minha filho(a) não gosta de estar com pessoas que não conhece bem.",
+    "Meu/minha filho(a) fica com medo quando dorme fora de casa.",
+    "Meu/minha filho(a) se preocupa se as outras pessoas gostam dele/dela.",
+    "Quando meu/minha filho(a) fica com medo, ele/ela se sente como se fosse desmaiar.",
+    "Meu/minha filho(a) é nervoso(a).",
+    "Meu/minha filho(a) me segue aonde quer que eu vá.",
+    "As pessoas me dizem que meu/minha filho(a) parece nervoso(a).",
+    "Meu/minha filho(a) fica nervoso(a) com pessoas que ele não conhece bem.",
+    "Meu/minha filho(a) tem dor de barriga na escola.",
+    "Quando meu/minha filho(a) fica com medo, ele acha que vai enlouquecer.",
+    "Meu/minha filho(a) tem medo de dormir sozinho(a).",
+    "Meu/minha filho(a) se preocupa em ser tão bom quanto as outras crianças.",
+    "Quando meu/minha filho(a) fica com medo, ele/ela tem a impressão de que as coisas não são reais.",
+    "Meu/minha filho(a) tem pesadelos com coisas ruins acontecendo com os seus pais.",
+    "Meu/minha filho(a) fica preocupado quando tem que ir à escola.",
+    "Quando meu/minha filho(a) fica com medo, o seu coração bate rápido.",
+    "Quando meu/minha filho(a) fica nervoso, ele treme de medo.",
+    "Meu/minha filho(a) tem pesadelos com alguma coisa ruim acontecendo com ele.",
+    "Meu/minha filho(a) fica preocupado se as coisas vão dar certo para ele/ela.",
+    "Quando meu/minha filho(a) fica com medo, ele sua muito.",
+    "Meu/minha filho(a) é muito preocupado(a).",
+    "Meu/minha filho(a) fica com muito medo sem nenhum motivo.",
+    "Meu/minha filho(a) tem medo de ficar sozinho(a) em casa.",
+    "Meu/minha filho(a) tem dificuldade para falar com pessoas que não conhece bem.",
+    "Quando meu/minha filho(a) fica com medo, ele se sente sufocado(a).",
+    "As pessoas me dizem que meu/minha filho(a) se preocupa demais.",
+    "Meu/minha filho(a) não gosta de ficar longe de sua família.",
+    "Meu/minha filho(a) tem medo de ter ataques de ansiedade (ou ataques de pânico).",
+    "Meu/minha filho(a) tem medo de que alguma coisa ruim possa acontecer comigo ou com o pai / a mãe dele/dela.",
+    "Meu/minha filho(a) fica com vergonha na frente de pessoas que não conhece bem.",
+    "Meu/minha filho(a) se preocupa muito com o que vai acontecer no futuro.",
+    "Quando meu/minha filho(a) fica com medo, ele tem vontade de vomitar.",
+    "Meu/minha filho(a) se preocupa muito em fazer as coisas bem feitas.",
+    "Meu/minha filho(a) tem medo de ir à escola.",
+    "Meu/minha filho(a) se preocupa com as coisas que já aconteceram.",
+    "Quando meu/minha filho(a) fica com medo, ele se sente tonto(a).",
+    "Meu/minha filho(a) fica nervoso(a) quando está com outras crianças ou adultos e tem que fazer algo enquanto eles lhe olham (por exemplo, ler em voz alta, falar, jogar um jogo ou praticar um esporte).",
+    "Meu/minha filho(a) fica nervoso(a) quando vai a festas, bailes ou qualquer lugar onde estejam pessoas que ele não conhece bem.",
+    "Meu/minha filho(a) é tímido(a)."
+  ];
+
+  var SCARED_CRIANCA_ITEMS = [
+    "Quando estou com medo é difícil respirar.",
+    "Tenho dor de cabeça quando estou na escola.",
+    "Eu não gosto de estar com pessoas que não conheço direito.",
+    "Fico com medo se durmo fora de casa.",
+    "Preocupo-me em relação aos outros gostarem de mim.",
+    "Quando estou assustado/a parece que vou desmaiar.",
+    "Eu sou nervoso/a.",
+    "Sigo meu pai ou minha mãe aonde quer que eles vão.",
+    "As pessoas me dizem que eu pareço nervoso/a.",
+    "Sinto-me nervoso/a com pessoas que não conheço direito.",
+    "Tenho dor de estômago na escola.",
+    "Quando me assusto, parece que vou enlouquecer.",
+    "Preocupo-me em ter que dormir sozinho/a.",
+    "Preocupo-me em ser tão bom/a quanto as outras crianças.",
+    "Quando me assusto, parece que as coisas não são reais.",
+    "Tenho pesadelos de que algo ruim aconteça com meus pais.",
+    "Preocupo-me sobre ir à escola.",
+    "Quando me assusto, meu coração bate rápido.",
+    "Fico trêmulo/a.",
+    "Tenho pesadelos de que algo ruim possa me acontecer.",
+    "Eu me preocupo sobre as coisas darem certo para mim.",
+    "Quando me assusto, suo bastante.",
+    "Eu vivo preocupado/a.",
+    "Eu fico muito assustado/a sem motivo algum.",
+    "Fico com medo de ficar em casa sozinho/a.",
+    "Tenho dificuldade para falar com pessoas que não conheço.",
+    "Quando me assusto, parece que vou sufocar.",
+    "As pessoas me dizem que eu me preocupo demais.",
+    "Não gosto de estar longe da família.",
+    "Tenho medo de ter crises de ansiedade (ou de pânico).",
+    "Preocupo-me que algo ruim possa acontecer com meus pais.",
+    "Sinto-me tímido/a com pessoas que não conheço direito.",
+    "Preocupo-me com o que vai acontecer no futuro.",
+    "Quando fico assustado/a, parece que vou vomitar.",
+    "Preocupo-me com quão bem faço as coisas.",
+    "Tenho medo de ir à escola.",
+    "Preocupo-me com coisas que já aconteceram.",
+    "Quando me assusto, fico tonto.",
+    "Fico nervoso/a quando estou com outras crianças ou adultos e tenho que fazer alguma coisa com eles me olhando (ex. falar, ler, jogar alguma coisa, praticar algum esporte).",
+    "Fico nervoso/a quando vou a festas, bailes ou qualquer lugar onde haja pessoas que não conheço.",
+    "Sou tímido/a."
+  ];
+
+  var PSDQ_ITEMS = [
+    "Eu respondo aos sentimentos ou necessidades do(a) meu(minha) filho(a).",
+    "Eu uso castigos físicos como forma de disciplinar meu(minha) filho(a).",
+    "Eu levo em conta a vontade do(a) meu(minha) filho(a) antes de lhe pedir para fazer alguma coisa.",
+    "Quando meu(minha) filho(a) pergunta por que tem que obedecer, eu digo: \"Porque eu disse que sim\" ou \"Porque eu sou seu(sua) pai/mãe e eu quero assim\".",
+    "Eu explico ao(à) meu(minha) filho(a) como me sinto em relação ao seu bom e ao seu mau comportamento.",
+    "Quando meu(minha) filho(a) é desobediente, eu dou uma palmada nele(a).",
+    "Eu encorajo meu(minha) filho(a) a conversar sobre seus problemas.",
+    "Eu acho difícil disciplinar meu(minha) filho(a).",
+    "Eu encorajo meu(minha) filho(a) a se expressar abertamente, mesmo quando eu não concordo com ele(a).",
+    "Eu castigo meu(minha) filho(a) lhe tirando privilégios com pouca ou nenhuma explicação.",
+    "Eu explico os motivos para as regras.",
+    "Eu dou conforto e compreensão ao(à) meu(minha) filho(a) quando ele(a) está chateado(a).",
+    "Eu grito ou berro quando meu(minha) filho(a) se comporta mal.",
+    "Eu parabenizo meu(minha) filho(a) quando ele(a) se comporta bem.",
+    "Eu acabo cedendo quando meu(minha) filho(a) faz birra por alguma coisa.",
+    "Eu tenho explosões de raiva com meu(minha) filho(a).",
+    "Eu ameaço castigar meu(minha) filho(a) mais vezes do que realmente o(a) castigo.",
+    "Eu levo em consideração as preferências do(a) meu(minha) filho(a) ao fazer planos para a família.",
+    "Eu seguro com força meu(minha) filho(a) quando ele(a) é desobediente.",
+    "Eu determino castigos para meu(minha) filho(a), mas não os cumpro realmente.",
+    "Eu mostro respeito pelas opiniões do(a) meu(minha) filho(a) lhe encorajando a expressá-las.",
+    "Eu permito que meu(minha) filho(a) dê opiniões nas regras da família.",
+    "Eu repreendo e critico duramente meu(minha) filho(a) para fazê-lo(a) melhorar.",
+    "Eu mimo meu(minha) filho(a).",
+    "Eu explico ao(à) meu(minha) filho(a) as razões pelas quais as regras devem ser obedecidas.",
+    "Eu uso ameaças como forma de castigo com pouca ou nenhuma justificativa.",
+    "Eu tenho momentos calorosos e especiais com o(a) meu(minha) filho(a).",
+    "Como uma forma de castigo, eu coloco meu(minha) filho(a) em algum lugar sozinho(a), mas sem dar muita explicação.",
+    "Eu ajudo meu(minha) filho(a) a entender o impacto do seu comportamento lhe encorajando a falar sobre as consequências de suas ações.",
+    "Eu repreendo e critico duramente meu(minha) filho(a) quando seu comportamento não atinge minhas expectativas.",
+    "Eu explico ao(à) meu(minha) filho(a) as consequências do seu comportamento.",
+    "Eu dou uma palmada no(a) meu(minha) filho(a) quando ele(a) se comporta mal."
+  ];
+
+  var SCALES = {
+    BRIEF2PAIS:{ titulo:'BRIEF-2 para Pais', brand:'BRIEF-2 · PAIS', resp:'pais', items:BRIEF2_PAIS_ITEMS, opts:NAF, per:7, lbl:'Frase', perg:BRIEF_PERG, tempo:'10 minutos', rodape:BRIEF_RODAPE, neuro:true,
+      intro:['<p>Nas próximas telas há uma lista de afirmações que descrevem crianças. Nós gostaríamos de saber se sua criança teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>','<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense sobre sua criança conforme você ler cada afirmação.</p>'] },
+    BRIEF2PROF:{ titulo:'BRIEF-2 para Professores', brand:'BRIEF-2 · PROFESSOR(A)', resp:'prof', items:BRIEF2_PROF_ITEMS, opts:NAF, per:7, lbl:'Frase', perg:BRIEF_PERG, tempo:'10 minutos', rodape:BRIEF_RODAPE, neuro:true,
+      intro:['<p>Nas próximas telas há uma lista de afirmações que descrevem crianças. Nós gostaríamos de saber se o(a) aluno(a) teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>','<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense no(a) aluno(a) conforme você ler cada afirmação.</p>'] },
+    BRIEF2AUTO:{ titulo:'BRIEF-2 Autorrelato', brand:'BRIEF-2 · AUTORRELATO', resp:'self', items:BRIEF2_AUTO_ITEMS, opts:NAF, per:7, lbl:'Frase', perg:BRIEF_PERG, tempo:'10 minutos', rodape:BRIEF_RODAPE, neuro:true,
+      intro:['<p>Nas próximas telas há uma lista de afirmações que descrevem jovens. Nós gostaríamos de saber se <b>você</b> teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>','<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense sobre você conforme ler cada afirmação.</p>'] },
+    BRIEFP:{ titulo:'BRIEF-P · Versão Pré-escolar', brand:'BRIEF-P · PRÉ-ESCOLAR', resp:'pais', items:BRIEFP_ITEMS, opts:NAF, per:7, lbl:'Frase', perg:BRIEF_PERG, tempo:'10 minutos', rodape:'O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica. Baseado no BRIEF-P (Gioia, Espy e Isquith).', neuro:true,
+      intro:['<p>Nas próximas telas há uma lista de afirmações que descrevem crianças pequenas. Nós gostaríamos de saber se sua criança teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>','<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense sobre sua criança conforme você ler cada afirmação.</p>'] },
+    MASC:{ titulo:'MASC · Ansiedade (criança)', brand:'MASC · CRIANÇA', resp:'self', items:MASC_ITEMS, opts:[['0','Nunca','Nunca é verdade sobre mim'],['1','Raramente','Raramente é verdade sobre mim'],['2','Às vezes','Às vezes é verdade sobre mim'],['3','Frequentemente','Frequentemente é verdade sobre mim']], per:8, lbl:'Frase', perg:'Recentemente, o quanto isto é verdade sobre você?', tempo:'10 minutos', rodape:'O CINPSI usa este questionário como parte da avaliação. Ele não dá diagnóstico: a interpretação é feita pela equipe clínica. Escala Multidimensional de Ansiedade para Crianças (MASC).',
+      intro:['<p>Este questionário pergunta como você vem se sentindo, o que tem pensado e como tem agido <b>recentemente</b>.</p>','<p>Não há respostas certas ou erradas: responda apenas como você vem se sentindo. Escolha o número que mostra com que frequência a frase é verdadeira para você.</p>'] },
+    SCARED_PAIS:{ titulo:'SCARED · Pais/Cuidadores', brand:'SCARED · PAIS', resp:'pais', items:SCARED_PAIS_ITEMS, opts:[['0','Nunca ou raramente','Nunca ou raramente verdadeiro'],['1','Algumas vezes','Algumas vezes verdadeiro'],['2','Frequentemente','Bastante ou frequentemente verdadeiro']], per:8, lbl:'Frase', perg:'Nos últimos 3 meses, o quanto isto descreve seu(sua) filho(a)?', tempo:'8 minutos', rodape:GEN_RODAPE + ' Escala de Transtornos Relacionados à Ansiedade Infantil (SCARED).',
+      intro:['<p>Abaixo há uma lista de frases que descrevem como as pessoas se sentem em algumas situações. Para cada frase, escolha a resposta que melhor descreve seu(sua) filho(a) nos <b>últimos 3 meses</b>.</p>'] },
+    SCARED_CRIANCA:{ titulo:'SCARED · Criança', brand:'SCARED · CRIANÇA', resp:'self', items:SCARED_CRIANCA_ITEMS, opts:[['0','Não verdadeiro','Não verdadeiro'],['1','Às vezes verdadeiro','Às vezes verdadeiro'],['2','Verdadeiro','Verdadeiro']], per:8, lbl:'Frase', perg:'Nos últimos 3 meses, o quanto isto descreve você?', tempo:'8 minutos', rodape:GEN_RODAPE + ' Escala de Transtornos Relacionados à Ansiedade Infantil (SCARED).',
+      intro:['<p>Abaixo há uma lista de frases que descrevem como as pessoas se sentem. Leia cada uma e decida se ela é “não verdadeira”, “às vezes verdadeira” ou “verdadeira” em relação a você.</p>','<p>Responda como foi com você nos <b>últimos 3 meses</b>.</p>'] },
+    SDQ417:{ titulo:'SDQ · 4 a 17 anos (Pais/Professores)', brand:'SDQ · 4–17 ANOS', resp:'pais', items:SDQ_417, opts:SDQ_OPTS, per:7, lbl:'Pergunta', perg:'Nos últimos seis meses, a criança:', tempo:'5 minutos', rodape:SDQ_RODAPE, intro:SDQ_INTRO_PAIS },
+    SDQ24:{ titulo:'SDQ · 2 a 4 anos (Pais/Professores)', brand:'SDQ · 2–4 ANOS', resp:'pais', items:SDQ_24, opts:SDQ_OPTS, per:7, lbl:'Pergunta', perg:'Nos últimos seis meses, a criança:', tempo:'5 minutos', rodape:SDQ_RODAPE, intro:SDQ_INTRO_PAIS },
+    SDQAUTO:{ titulo:'SDQ · Autorrelato 11 a 17 anos', brand:'SDQ · AUTORRELATO', resp:'self', items:SDQ_AUTO, opts:SDQ_OPTS, per:7, lbl:'Pergunta', perg:'Nos últimos seis meses:', tempo:'5 minutos', rodape:SDQ_RODAPE,
+      intro:['<p>Por favor, em cada item, marque <b>falso</b>, <b>mais ou menos verdadeiro</b> ou <b>verdadeiro</b>. Ajuda se você responder a todos os itens da melhor maneira possível, mesmo que não tenha certeza absoluta ou que a pergunta pareça estranha.</p>','<p>Responda com base em como as coisas têm sido nos <b>últimos seis meses</b>.</p>'] },
+    PSDQ:{ titulo:'Estilos e Dimensões Parentais (PSDQ)', brand:'ESTILOS PARENTAIS', resp:'pais', items:PSDQ_ITEMS, opts:[['1','Nunca','Nunca'],['2','Poucas vezes','Poucas vezes'],['3','Algumas vezes','Algumas vezes'],['4','Muitas vezes','Muitas vezes'],['5','Sempre','Sempre']], per:8, lbl:'Frase', perg:'Com que frequência VOCÊ age assim com seu(sua) filho(a)?', tempo:'8 minutos', rodape:GEN_RODAPE + ' Questionário de Estilos e Dimensões Parentais (versão brasileira de Oliveira, 2017, a partir de Robinson et al., 1995).',
+      intro:['<p>Leia cada frase e responda <b>com que frequência você age desse modo</b> com seu(sua) filho(a).</p>','<p>Não há respostas certas ou erradas. Responda como você realmente age no dia a dia.</p>'] }
+  };
+
+  var ESC = (new URLSearchParams(location.search).get('e')||'BRIEF2PAIS').toUpperCase().replace(/[^A-Z0-9_]/g,'');
+  var CFG = SCALES[ESC] || SCALES.BRIEF2PAIS; if (!SCALES[ESC]) ESC = 'BRIEF2PAIS';
+  var ITEMS = CFG.items, OPTS = CFG.opts.map(function(o){ return [o[0], o[1]]; });
+  document.title = CFG.titulo + ' · CINPSI';
+  document.getElementById('brand').textContent = CFG.brand;
+  document.getElementById('rodape').textContent = CFG.rodape;
   // Telas: 0 instruções, 1 identificação, 2..LAST frases, REVIEW revisão.
-  var PER = 7, TOTAL = ITEMS.length, NPAGES = Math.ceil(TOTAL / PER), LAST = NPAGES + 1, REVIEW = NPAGES + 2;
+  var PER = CFG.per, TOTAL = ITEMS.length, NPAGES = Math.ceil(TOTAL / PER), LAST = NPAGES + 1, REVIEW = NPAGES + 2;
   var CODE = (new URLSearchParams(location.search).get('c')||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,12);
-  var KEY = 'cinpsi:teste:BRIEF2PAIS:' + (CODE || 'sem-codigo');
+  var KEY = 'cinpsi:teste:' + ESC + ':' + (CODE || 'sem-codigo');
   var FB_KEY = 'AIzaSyBX5voXFH6oURfXUdSa_PxsNNFYldhmFKo';
     var API = 'https://firestore.googleapis.com/v1/projects/clinica-gestao/databases/(default)/documents/testes_respostas?key=';
 
@@ -256,9 +720,11 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   function applyPre(){
     if (!PRE) return;
     S.id.nome = PRE.n; S.id.nasc = fmt(PRE.b);
-    S.id.relacao = PRE.r || 'Outro'; S.id.informante = PRE.r || 'Responsável'; if (!PRE.r) S.id.relacaoOutro = 'Responsável';
     S.id.data = todayBR();
     if (PRE.s) S.id.sexo = PRE.s;
+    if (CFG.resp === 'self') { S.id.informante = PRE.n; S.id.relacao = 'Outro'; S.id.relacaoOutro = 'Paciente'; }
+    else if (CFG.resp === 'prof') { S.id.relacao = 'Outro'; S.id.relacaoOutro = 'Professor(a)'; }
+    else { S.id.relacao = PRE.r || 'Outro'; S.id.informante = PRE.r || 'Responsável'; if (!PRE.r) S.id.relacaoOutro = 'Responsável'; }
   }
   applyPre();
   function save(){ try { localStorage.setItem(KEY, JSON.stringify(S)); } catch(e) {} }
@@ -289,19 +755,13 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   }
 
   function renderIntro(){
+    var how = CFG.opts.map(function(o){ return '<li><b>' + esc(o[0]) + '</b><span>' + o[2] + '</span></li>'; }).join('');
     main.innerHTML =
       logoHTML() +
       '<h1>Instruções</h1>' +
-      '<div class="doc" style="margin-top:12px">' +
-        '<p>Nas próximas telas há uma lista de afirmações que descrevem crianças. Nós gostaríamos de saber se sua criança teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>' +
-        '<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense sobre sua criança conforme você ler cada afirmação.</p>' +
-      '</div>' +
-      '<div class="how"><ul>' +
-        '<li><b>N</b><span>Se o comportamento for <b style="min-width:0">Nunca</b> um problema</span></li>' +
-        '<li><b>A</b><span>Se o comportamento for <b style="min-width:0">Algumas vezes</b> um problema</span></li>' +
-        '<li><b>F</b><span>Se o comportamento for <b style="min-width:0">Frequentemente</b> um problema</span></li>' +
-      '</ul></div>' +
-      '<p class="hint" style="margin-top:14px">Leva cerca de 10 minutos. Suas respostas ficam salvas neste aparelho enquanto você responde, então você pode parar e continuar depois. Use sempre o mesmo aparelho e o mesmo link.</p>' +
+      '<div class="doc" style="margin-top:12px">' + CFG.intro.join('') + '</div>' +
+      '<div class="how"><ul>' + how + '</ul></div>' +
+      '<p class="hint" style="margin-top:14px">Leva cerca de ' + esc(CFG.tempo) + '. Suas respostas ficam salvas neste aparelho enquanto você responde, então você pode parar e continuar depois. Use sempre o mesmo aparelho e o mesmo link.</p>' +
       '<div class="nav" style="margin-top:20px"><button class="btn" id="go1" type="button">Continuar</button></div>';
     document.getElementById('go1').addEventListener('click', function(){ go(1); });
   }
@@ -312,13 +772,13 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
       '<h1>Identificação</h1>' +
       '<p class="lead">Antes de começar, preencha os dados abaixo.</p>' +
       (PRE ? '<div class="how" style="margin-top:12px"><b style="min-width:0">' + esc(PRE.n) + '</b><br><span class="hint">Nascimento: ' + esc(fmt(PRE.b)) + (PRE.r ? ' · Respondendo: ' + esc(PRE.r) : '') + '</span></div>' : '') +
-      '<h2>' + (PRE ? 'Só mais dois dados' : 'Sobre a criança') + '</h2>' +
+      '<h2>' + (PRE ? (CFG.resp === 'prof' ? 'Só mais alguns dados' : 'Só mais dois dados') : 'Sobre ' + (CFG.resp === 'self' ? 'você' : 'a criança')) + '</h2>' +
       '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-nome">Nome da criança</label><input id="f-nome" data-k="nome" autocomplete="off" autocapitalize="words"></div>' +
       '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-nasc">Data de nascimento</label><input id="f-nasc" data-k="nasc" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"><span class="hint">Digite só os números. Exemplo: 18072012</span></div>' +
-      '<div class="field"' + (PRE && PRE.s ? ' hidden' : '') + '><label for="f-sexo">Sexo da criança</label><select id="f-sexo" data-k="sexo"><option value="">Selecione</option><option>Feminino</option><option>Masculino</option></select></div>' +
-      '<div class="field"><label for="f-serie">Série ou ano escolar</label><input id="f-serie" data-k="serie" autocomplete="off" placeholder="Ex.: 5º ano"></div>' +
-      '<h2' + (PRE ? ' hidden' : '') + '>Quem está respondendo</h2>' +
-      '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-informante">Seu nome</label><input id="f-informante" data-k="informante" autocomplete="name" autocapitalize="words"></div>' +
+      '<div class="field"' + (PRE && PRE.s ? ' hidden' : '') + '><label for="f-sexo">' + (CFG.resp === 'self' ? 'Seu sexo' : 'Sexo da criança') + '</label><select id="f-sexo" data-k="sexo"><option value="">Selecione</option><option>Feminino</option><option>Masculino</option></select></div>' +
+      '<div class="field"><label for="f-serie">' + (CFG.resp === 'self' ? 'Sua série ou ano escolar' : 'Série ou ano escolar') + '</label><input id="f-serie" data-k="serie" autocomplete="off" placeholder="Ex.: 5º ano"></div>' +
+      '<h2' + (PRE && CFG.resp !== 'prof' ? ' hidden' : '') + '>Quem está respondendo</h2>' +
+      '<div class="field"' + (PRE && CFG.resp !== 'prof' ? ' hidden' : '') + '><label for="f-informante">' + (CFG.resp === 'prof' ? 'Seu nome (professor(a))' : 'Seu nome') + '</label><input id="f-informante" data-k="informante" autocomplete="name" autocapitalize="words"></div>' +
       '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-relacao">Relação com a criança</label><select id="f-relacao" data-k="relacao"><option value="">Selecione</option><option>Mãe</option><option>Pai</option><option>Madrasta</option><option>Padrasto</option><option>Avó</option><option>Avô</option><option value="Outro">Outro responsável</option></select></div>' +
       '<div class="field" id="w-outro" hidden><label for="f-outro">Qual a relação?</label><input id="f-outro" data-k="relacaoOutro" autocomplete="off"></div>' +
       '<div class="field"' + (PRE ? ' hidden' : '') + '><label for="f-data">Data de hoje</label><input id="f-data" data-k="data" data-date="1" type="text" inputmode="numeric" autocomplete="off" placeholder="dd/mm/aaaa" maxlength="10"></div>' +
@@ -327,7 +787,7 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
 
     var fields = main.querySelectorAll('[data-k]');
     Array.prototype.forEach.call(fields, function(el){ el.value = S.id[el.getAttribute('data-k')] || ''; });
-    function toggleOutro(){ document.getElementById('w-outro').hidden = S.id.relacao !== 'Outro'; }
+    function toggleOutro(){ document.getElementById('w-outro').hidden = !!PRE || S.id.relacao !== 'Outro'; }
     toggleOutro();
     Array.prototype.forEach.call(fields, function(el){
       el.addEventListener('input', function(){
@@ -367,8 +827,8 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   function itemHTML(i){
     var cur = S.ans[i], name = 'q' + (i + 1), html =
       '<div class="item' + (cur ? ' done' : '') + '" id="it' + i + '" role="radiogroup" aria-labelledby="q' + i + '">' +
-      '<div class="n">Frase ' + (i + 1) + '</div><div class="q" id="q' + i + '">' + esc(ITEMS[i]) + '</div>' +
-      '<div class="choices">';
+      '<div class="n">' + CFG.lbl + ' ' + (i + 1) + '</div><div class="q" id="q' + i + '">' + esc(ITEMS[i]) + '</div>' +
+      '<div class="choices' + (OPTS.length >= 4 ? ' many' : '') + '" style="--cols:' + OPTS.length + '">';
     OPTS.forEach(function(o){
       html += '<label><input type="radio" name="' + name + '" value="' + o[0] + '" data-i="' + i + '"' + (cur === o[0] ? ' checked' : '') +
         ' aria-label="' + esc(o[1]) + '"><span class="opt"><b>' + o[0] + '</b><span>' + o[1] + '</span></span></label>';
@@ -377,8 +837,8 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   }
 
   function renderItems(){
-    var r = pageRange(S.page), html = '<h1>Frases ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
-      '<p class="lead">Nos últimos 6 meses, o quanto isto foi um problema?</p>';
+    var r = pageRange(S.page), html = '<h1>' + CFG.lbl + 's ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
+      '<p class="lead">' + esc(CFG.perg) + '</p>';
     for (var i = r[0]; i < r[1]; i++) html += itemHTML(i);
     html += '<p class="msg" id="msg" role="alert"></p><div class="nav">' +
       '<button class="btn ghost" id="back" type="button">Voltar</button>' +
@@ -406,7 +866,7 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
       for (var i = r[0]; i < r[1]; i++) if (!S.ans[i]) miss.push(i);
       if (miss.length) {
         miss.forEach(function(i){ document.getElementById('it' + i).classList.add('missing'); });
-        document.getElementById('msg').textContent = miss.length === 1 ? 'Falta responder 1 frase nesta parte.' : 'Faltam ' + miss.length + ' frases nesta parte.';
+        document.getElementById('msg').textContent = miss.length === 1 ? 'Falta responder 1 item nesta parte.' : 'Faltam ' + miss.length + ' itens nesta parte.';
         document.getElementById('it' + miss[0]).scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
         return;
       }
@@ -415,20 +875,20 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   }
 
   /* ---------- Revisão ---------- */
-  function counts(){ var c = {N:0, A:0, F:0}; S.ans.forEach(function(a){ if (c[a] !== undefined) c[a]++; }); return c; }
+  function counts(){ var c = {}; OPTS.forEach(function(o){ c[o[0]] = 0; }); S.ans.forEach(function(a){ if (c[a] !== undefined) c[a]++; }); return c; }
 
   function renderReview(){
     var c = counts(), miss = [];
     S.ans.forEach(function(a, i){ if (!a) miss.push(i); });
     var html = '<h1>Revisão</h1>';
     if (miss.length) {
-      html += '<p class="lead">Ainda faltam ' + miss.length + ' frases. Toque em uma para voltar até ela.</p><div class="jump">';
-      miss.forEach(function(i){ html += '<button type="button" data-go="' + i + '">Frase ' + (i + 1) + '</button>'; });
+      html += '<p class="lead">Ainda faltam ' + miss.length + ' itens. Toque em um para voltar até ele.</p><div class="jump">';
+      miss.forEach(function(i){ html += '<button type="button" data-go="' + i + '">' + CFG.lbl + ' ' + (i + 1) + '</button>'; });
       html += '</div>';
     } else {
-      html += '<p class="lead">Todas as 63 frases foram respondidas. Confira o resumo e conclua.</p>';
+      html += '<p class="lead">Todos os ' + TOTAL + ' itens foram respondidos. Confira o resumo e conclua.</p>';
     }
-    html += '<div class="counts"><div><b>' + c.N + '</b><span>Nunca</span></div><div><b>' + c.A + '</b><span>Às vezes</span></div><div><b>' + c.F + '</b><span>Frequentemente</span></div></div>' +
+    html += '<div class="counts">' + OPTS.map(function(o){ return '<div><b>' + c[o[0]] + '</b><span>' + esc(o[1]) + '</span></div>'; }).join('') + '</div>' +
       '<div class="nav" style="margin-top:20px"><button class="btn ghost" id="back" type="button">Voltar</button>' +
       '<button class="btn" id="finish" type="button"' + (miss.length ? ' disabled style="opacity:.45;cursor:not-allowed"' : '') + '>Concluir</button></div>';
     main.innerHTML = html;
@@ -450,19 +910,19 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   function relacaoTxt(){ return S.id.relacao === 'Outro' ? (clean(S.id.relacaoOutro) || 'Outro') : S.id.relacao; }
   function buildCode(){
     var d = S.id;
-    return ['BRIEF2PAIS','v1',clean(d.nome),parseBR(d.nasc),clean(d.sexo),clean(d.serie),clean(d.informante),relacaoTxt(),parseBR(d.data),S.ans.join('')].join('|');
+    return [ESC,'v1',clean(d.nome),parseBR(d.nasc),clean(d.sexo),clean(d.serie),clean(d.informante),relacaoTxt(),parseBR(d.data),S.ans.join('')].join('|');
   }
   function buildMessage(){
     var d = S.id, lines = [
-      'BRIEF-2 · Formulário dos Pais',
-      'Criança: ' + clean(d.nome),
+      CFG.titulo,
+      'Paciente: ' + clean(d.nome),
       'Nascimento: ' + fmt(parseBR(d.nasc)),
       'Sexo: ' + clean(d.sexo),
       'Série: ' + (clean(d.serie) || '-'),
       'Informante: ' + clean(d.informante) + ' (' + relacaoTxt() + ')',
       'Data: ' + fmt(parseBR(d.data)),
       '',
-      'Respostas (N=Nunca, A=Às vezes, F=Frequentemente)'
+      'Respostas (' + OPTS.map(function(o){ return o[0] + '=' + o[1]; }).join(', ') + ')'
     ];
     for (var a = 0; a < TOTAL; a += 10) {
       var b = Math.min(a + 10, TOTAL);
@@ -473,12 +933,12 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   }
 
   function enviar(){
-    var payload = { codigo:CODE, escala:'BRIEF2PAIS', versao:'v1',
+    var payload = { codigo:CODE, escala:ESC, versao:'v1',
       crianca:{ nome:clean(S.id.nome), nasc:parseBR(S.id.nasc), sexo:S.id.sexo, serie:clean(S.id.serie) },
       informante:{ nome:clean(S.id.informante), relacao:relacaoTxt(), data:parseBR(S.id.data) },
       respostas:S.ans.join(''), codigoNeuro:buildCode() };
     var body = { fields:{
-      escala:{stringValue:'BRIEF2PAIS'}, dados:{stringValue:JSON.stringify(payload)}, enviadoEm:{stringValue:new Date().toISOString()} } };
+      escala:{stringValue:ESC}, dados:{stringValue:JSON.stringify(payload)}, enviadoEm:{stringValue:new Date().toISOString()} } };
     return fetch(API + FB_KEY + '&documentId=' + encodeURIComponent(CODE), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
       .then(function(r){ if(!r.ok){ var e = new Error('http ' + r.status); e.status = r.status; throw e; } return r.json(); });
   }
