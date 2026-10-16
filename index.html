@@ -1676,9 +1676,31 @@ function terSyncPacientes(){
     teFs().collection('ter_pacientes').doc(r.email).set({lista,atualizadoEm:new Date().toISOString()}).then(()=>sessionStorage.setItem(k,h)).catch(e=>console.warn('terSync',e&&e.code));
   });
 }
+const TE_NAF=[['N','Nunca'],['A','Às vezes'],['F','Frequentemente']];
+const TE_SDQ=[['0','Falso'],['1','Mais ou menos verdadeiro'],['2','Verdadeiro']];
 const TE_CAT={
-  BRIEF2PAIS:{nome:'BRIEF-2 (Pais)',min:5,max:18,pagina:'teste.html',resp:['Mãe','Pai'],tempo:'10 minutos',
-    obs:'Função executiva, relato dos pais. Faixa oficial do BRIEF-2: 5 a 18 anos.'}
+  BRIEF2PAIS:{nome:'BRIEF-2 (Pais)',min:5,max:18,pagina:'teste.html',resp:['Mãe','Pai'],tempo:'10 minutos',neuro:true,ops:TE_NAF,
+    obs:'Função executiva, relato dos pais. Faixa oficial do BRIEF-2: 5 a 18 anos.'},
+  BRIEF2PROF:{nome:'BRIEF-2 (Professores)',min:5,max:18,pagina:'teste.html',resp:['Professor(a)'],tempo:'10 minutos',neuro:true,ops:TE_NAF,
+    obs:'Função executiva, relato do(a) professor(a). O link vai para a escola: a clínica envia pelo contato de quem responde.'},
+  BRIEF2AUTO:{nome:'BRIEF-2 (Autorrelato)',min:11,max:18,pagina:'teste.html',resp:['Paciente'],tempo:'10 minutos',neuro:true,ops:TE_NAF,
+    obs:'Função executiva, autorrelato do adolescente (11 a 18 anos).'},
+  BRIEFP:{nome:'BRIEF-P (Pré-escolar)',min:2,max:5,pagina:'teste.html',resp:['Mãe','Pai','Professor(a)'],tempo:'10 minutos',neuro:true,ops:TE_NAF,
+    obs:'Função executiva em crianças de 2 a 5 anos, relato dos pais ou do(a) professor(a).'},
+  MASC:{nome:'MASC (Ansiedade)',min:8,max:19,pagina:'teste.html',resp:['Paciente'],tempo:'10 minutos',ops:[['0','Nunca'],['1','Raramente'],['2','Às vezes'],['3','Frequentemente']],
+    obs:'Escala Multidimensional de Ansiedade para Crianças, autorrelato (39 itens). O app soma o total; a correção por fatores fica com a terapeuta.'},
+  SCARED_PAIS:{nome:'SCARED (Pais)',min:8,max:18,pagina:'teste.html',resp:['Mãe','Pai'],tempo:'8 minutos',ops:[['0','Nunca ou raramente'],['1','Algumas vezes'],['2','Frequentemente']],
+    obs:'Ansiedade infantil, relato dos pais (41 itens). O app calcula total e subescalas.'},
+  SCARED_CRIANCA:{nome:'SCARED (Criança)',min:8,max:18,pagina:'teste.html',resp:['Paciente'],tempo:'8 minutos',ops:[['0','Não verdadeiro'],['1','Às vezes verdadeiro'],['2','Verdadeiro']],
+    obs:'Ansiedade infantil, autorrelato (41 itens). O app calcula total e subescalas.'},
+  SDQ24:{nome:'SDQ (2 a 4 anos)',min:2,max:4,pagina:'teste.html',resp:['Mãe','Pai','Professor(a)'],tempo:'5 minutos',ops:TE_SDQ,
+    obs:'Capacidades e Dificuldades, 2 a 4 anos, pais ou professores (25 itens).'},
+  SDQ417:{nome:'SDQ (4 a 17 anos)',min:4,max:17,pagina:'teste.html',resp:['Mãe','Pai','Professor(a)'],tempo:'5 minutos',ops:TE_SDQ,
+    obs:'Capacidades e Dificuldades, 4 a 17 anos, pais ou professores (25 itens).'},
+  SDQAUTO:{nome:'SDQ (Autorrelato)',min:11,max:17,pagina:'teste.html',resp:['Paciente'],tempo:'5 minutos',ops:TE_SDQ,
+    obs:'Capacidades e Dificuldades, autorrelato de 11 a 17 anos (25 itens).'},
+  PSDQ:{nome:'Estilos Parentais (PSDQ)',min:2,max:18,pagina:'teste.html',resp:['Mãe','Pai'],tempo:'8 minutos',ops:[['1','Nunca'],['2','Poucas vezes'],['3','Algumas vezes'],['4','Muitas vezes'],['5','Sempre']],
+    obs:'Questionário de Estilos e Dimensões Parentais (32 itens), respondido pelo pai ou pela mãe. O app mostra a média por dimensão.'}
 };
 const TE_ALFA='ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 function teCodigo(){
@@ -1688,7 +1710,7 @@ function teCodigo(){
   return c;
 }
 function teUrl(cod,esc_){
-  const base=new URL((TE_CAT[esc_]||{pagina:'teste.html'}).pagina+'?c='+cod,location.href).href;
+  const base=new URL((TE_CAT[esc_]||{pagina:'teste.html'}).pagina+'?c='+cod+'&e='+encodeURIComponent(esc_||'BRIEF2PAIS'),location.href).href;
   const l=_teLinks.find(x=>x.codigo===cod);
   if(!l||!l.nasc) return base;
   try{
@@ -1786,7 +1808,7 @@ function teHtmlTestes(p,id){
   const botoes=k=>TE_CAT[k].resp.map(r=>`<button class="btn-primary" style="padding:6px 12px;font-size:12px" onclick="teGerar('${k}','${q(r)}')">🔗 Gerar link — ${esc(r)}</button>`).join(' ');
   const sugHtml=sug.length?sug.map(k=>`<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:600;font-size:13px">${esc(TE_CAT[k].nome)} <span style="font-weight:400;color:var(--text3)">· ${TE_CAT[k].tempo}</span></div><div style="font-size:12px;color:var(--text3);margin:2px 0 8px">${esc(TE_CAT[k].obs)}</div>${botoes(k)}</div>`).join(''):`<p style="font-size:13px;color:var(--text3)">${id===null?'Sem data de nascimento no cadastro: não dá para sugerir por idade.':'Nenhum teste cadastrado para '+id+' anos.'} Use "Outro teste" abaixo.</p>`;
   const outros=Object.keys(TE_CAT).filter(k=>!sug.includes(k));
-  const avulso=`<div style="margin-top:6px;font-size:13px"><b>Outro teste</b> (qualquer paciente, mesmo fora da trilha):<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><select class="form-input" id="te-avulso" style="max-width:240px">${Object.keys(TE_CAT).map(k=>`<option value="${k}">${esc(TE_CAT[k].nome)}${(id!==null&&(id<TE_CAT[k].min||id>TE_CAT[k].max))?' (fora da faixa '+TE_CAT[k].min+'-'+TE_CAT[k].max+')':''}</option>`).join('')}</select><select class="form-input" id="te-avulso-r" style="max-width:140px"><option>Mãe</option><option>Pai</option><option>Outro</option></select><button class="btn-ghost" onclick="teGerarAvulso()">🔗 Gerar link</button></div></div>`;
+  const avulso=`<div style="margin-top:6px;font-size:13px"><b>Outro teste</b> (qualquer paciente, mesmo fora da trilha):<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><select class="form-input" id="te-avulso" style="max-width:240px" onchange="teAvulsoResp()">${Object.keys(TE_CAT).map(k=>`<option value="${k}">${esc(TE_CAT[k].nome)}${(id!==null&&(id<TE_CAT[k].min||id>TE_CAT[k].max))?' (fora da faixa '+TE_CAT[k].min+'-'+TE_CAT[k].max+')':''}</option>`).join('')}</select><select class="form-input" id="te-avulso-r" style="max-width:150px">${TE_CAT[Object.keys(TE_CAT)[0]].resp.map(r=>`<option>${esc(r)}</option>`).join('')}</select><button class="btn-ghost" onclick="teGerarAvulso()">🔗 Gerar link</button></div></div>`;
   const lista=ls.length?ls.map(l=>teHtmlLink(l,p)).join(''):'<p style="font-size:13px;color:var(--text3)">Nenhum link gerado ainda.</p>';
   return `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Sugeridos pela idade</div>${sugHtml}${avulso}
     <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:20px 0 8px">Links e respostas</div>${lista}`;
@@ -1794,7 +1816,7 @@ function teHtmlTestes(p,id){
 function teHtmlLink(l,p){
   const url=teUrl(l.codigo,l.escala), ok=l.status==='respondido';
   const msg=`Olá! Segue o link do questionário ${l.escalaNome} referente a ${l.pacNome}. Quem responde: ${l.respondente||'responsável'}. Leva cerca de ${(TE_CAT[l.escala]||{}).tempo||'10 minutos'}.\n${url}\nEquipe CINPSI`;
-  const tel=String(p.telefone||'').replace(/\D/g,''); const wa='https://wa.me/'+(tel&&tel.length<=11?'55'+tel:tel)+'?text='+encodeURIComponent(msg);
+  const tel=l.respondente==='Professor(a)'?'':String(p.telefone||'').replace(/\D/g,''); const wa='https://wa.me/'+(tel&&tel.length<=11?'55'+tel:tel)+'?text='+encodeURIComponent(msg);
   return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;background:${ok?'#f0fdf4':'var(--surface)'}">
     <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="font-size:13px"><b>${esc(l.escalaNome)}</b> · ${esc(l.respondente||'—')} · código <code>${esc(l.codigo)}</code></div>
     <div style="font-size:12px;color:${ok?'#15803d':'#b45309'}">${ok?'✅ Respondido em '+new Date(l.respondidoEm).toLocaleString('pt-BR'):'⏳ Pendente · gerado em '+(l.criado||'').split('-').reverse().join('/')}</div></div>
@@ -1811,6 +1833,10 @@ function teGerar(escala,resp){
     criado:new Date().toISOString().slice(0,10),criadoPor:CU.nome||'',status:'pendente',visto:true};
   _teLinks.push(obj); teRenderFicha();
   teFs().collection('testes_links').doc(obj.codigo).set(obj).then(()=>toast('Link gerado ✅')).catch(e=>{ _teLinks=_teLinks.filter(x=>x.codigo!==obj.codigo); teRenderFicha(); toast('Não foi possível gerar o link: '+(e&&e.code||'erro')); });
+}
+function teAvulsoResp(){
+  const k=document.getElementById('te-avulso').value, r=document.getElementById('te-avulso-r'); if(!r||!TE_CAT[k]) return;
+  r.innerHTML=TE_CAT[k].resp.map(x=>`<option>${esc(x)}</option>`).join('');
 }
 function teGerarAvulso(){
   const k=document.getElementById('te-avulso').value, r=document.getElementById('te-avulso-r').value;
@@ -1829,17 +1855,54 @@ function teExcluir(cod){
   if(!confirm('Excluir este link pendente? Ele deixa de funcionar para quem receber.')) return;
   teFs().collection('testes_links').doc(cod).delete().then(()=>{ _teLinks=_teLinks.filter(l=>l.codigo!==cod); teRenderFicha(); }).catch(e=>toast('Não foi possível excluir: '+(e&&e.code||'erro')));
 }
+// ── Correção automática (onde há chave de correção) ──
+const TE_SCARED={ total:{min:25,txt:'Total ≥ 25 pode indicar transtorno de ansiedade (acima de 30 é mais específico)'},
+  sub:[['Pânico / sintomas somáticos',[1,6,9,12,15,18,19,22,24,27,30,34,38],7],['Ansiedade generalizada',[5,7,14,21,23,28,33,35,37],9],['Ansiedade de separação',[4,8,13,16,20,25,29,31],5],['Ansiedade social',[3,10,26,32,39,40,41],8],['Evitação escolar',[2,11,17,36],3]] };
+const TE_SDQ_ESC=[['Sintomas emocionais',[3,8,13,16,24]],['Problemas de conduta',[5,7,12,18,22]],['Hiperatividade',[2,10,15,21,25]],['Problemas com colegas',[6,11,14,19,23]],['Comportamento pró-social',[1,4,9,17,20]]];
+const TE_SDQ_REV=[7,11,14,21,25];
+// pontos de corte [limite normal, limite limítrofe] (acima = anormal); pró-social é invertido
+const TE_SDQ_CORTE={ pais:{tot:[13,16],es:[3,4],cd:[2,3],hi:[5,6],cp:[2,3],ps:[6,5]}, auto:{tot:[15,19],es:[5,6],cd:[3,4],hi:[5,6],cp:[3,5],ps:[6,5]} };
+function teClass(v,c,inv){ if(inv) return v>=c[0]?'Normal':(v>=c[1]?'Limítrofe':'Anormal'); return v<=c[0]?'Normal':(v<=c[1]?'Limítrofe':'Anormal'); }
+function teScoreHtml(esc_,a){
+  const A=String(a||'').split(''), n=i=>+A[i-1];
+  if(esc_==='SCARED_PAIS'||esc_==='SCARED_CRIANCA'){
+    const tot=A.reduce((x,y)=>x+(+y||0),0);
+    const lin=[['Total',tot,tot>=TE_SCARED.total.min?(tot>30?'acima de 30 (mais específico)':'≥ 25 (indicativo)'):'abaixo de 25']].concat(TE_SCARED.sub.map(([nm,its,cut])=>{const v=its.reduce((x,i)=>x+(n(i)||0),0);return [nm,v,v>=cut?'≥ '+cut+' (indicativo)':'abaixo de '+cut];}));
+    return {titulo:'Correção automática (SCARED)',linhas:lin};
+  }
+  if(esc_==='SDQ417'||esc_==='SDQ24'||esc_==='SDQAUTO'){
+    const pts=i=>{const v=n(i); return TE_SDQ_REV.includes(i)?2-v:v;};
+    const sc=TE_SDQ_ESC.map(([nm,its])=>[nm,its.reduce((x,i)=>x+pts(i),0)]);
+    const tot=sc.slice(0,4).reduce((x,y)=>x+y[1],0), c=TE_SDQ_CORTE[esc_==='SDQAUTO'?'auto':'pais'], k=['es','cd','hi','cp','ps'];
+    const lin=[['Total de dificuldades',tot,teClass(tot,c.tot)]].concat(sc.map((x,i)=>[x[0],x[1],teClass(x[1],c[k[i]],i===4)]));
+    return {titulo:'Correção automática (SDQ)',linhas:lin,nota:'Pontos de corte do SDQ original (Goodman). A classificação orienta, não diagnostica.'};
+  }
+  if(esc_==='PSDQ'){
+    const m=its=>its.reduce((x,i)=>x+(n(i)||0),0)/its.length, f=v=>v.toFixed(2).replace('.',',');
+    const D={con:m([1,7,12,14,27]),reg:m([5,11,25,29,31]),aut:m([3,9,18,21,22]),fis:m([2,6,19,32]),ver:m([13,16,23,30]),pun:m([4,10,26,28]),per:m([8,15,17,20,24])};
+    return {titulo:'Médias por dimensão (PSDQ, escala de 1 a 5)',linhas:[
+      ['Autoritativo (média)',f((D.con+D.reg+D.aut)/3),''],['· Conexão / afeto',f(D.con),''],['· Regulação / explicação das regras',f(D.reg),''],['· Concessão de autonomia',f(D.aut),''],
+      ['Autoritário (média)',f((D.fis+D.ver+D.pun)/3),''],['· Coerção física',f(D.fis),''],['· Hostilidade verbal',f(D.ver),''],['· Punição sem explicação',f(D.pun),''],
+      ['Permissivo',f(D.per),'']],nota:'Sem pontos de corte: compare as dimensões entre si e com a avaliação clínica.'};
+  }
+  if(esc_==='MASC'){ const tot=A.reduce((x,y)=>x+(+y||0),0); return {titulo:'Pontuação (MASC)',linhas:[['Total bruto (0 a 117)',tot,'']],nota:'Pontuação por fatores e escore T devem ser feitos pela terapeuta com a tabela do instrumento.'}; }
+  return null;
+}
 function teVerResposta(cod){
   const box=document.getElementById('te-resp-'+cod); if(!box) return;
   if(box.innerHTML){ box.innerHTML=''; return; }
   const l=loadTestes().links.find(x=>x.codigo===cod); if(!l||!l.resposta) return;
-  const r=l.resposta, a=r.respostas||'', n={N:0,A:0,F:0}; a.split('').forEach(ch=>{ if(n[ch]!==undefined) n[ch]++; });
+  const r=l.resposta, a=r.respostas||'', cat=TE_CAT[l.escala]||TE_CAT.BRIEF2PAIS, ops=cat.ops||TE_NAF;
+  const n={}; ops.forEach(o=>n[o[0]]=0); a.split('').forEach(ch=>{ if(n[ch]!==undefined) n[ch]++; });
   const fm=iso=>iso?iso.split('-').reverse().join('/'):'—';
+  const sc=teScoreHtml(l.escala,a);
+  const scHtml=sc?`<div style="margin:8px 0;border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:#f8fafc"><div style="font-weight:600;margin-bottom:4px">${esc(sc.titulo)}</div><table style="width:100%;font-size:12px">${sc.linhas.map(x=>`<tr><td>${esc(x[0])}</td><td style="text-align:right;font-weight:600">${esc(String(x[1]))}</td><td style="padding-left:10px;color:var(--text3)">${esc(x[2]||'')}</td></tr>`).join('')}</table>${sc.nota?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${esc(sc.nota)}</div>`:''}</div>`:'';
   box.innerHTML=`<div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;font-size:13px">
-    <div><b>Criança:</b> ${esc(r.crianca.nome||'')} · nasc. ${fm(r.crianca.nasc)} · ${esc(r.crianca.sexo||'')} · série: ${esc(r.crianca.serie||'—')}</div>
+    <div><b>Paciente:</b> ${esc(r.crianca.nome||'')} · nasc. ${fm(r.crianca.nasc)} · ${esc(r.crianca.sexo||'')} · série: ${esc(r.crianca.serie||'—')}</div>
     <div><b>Informante:</b> ${esc(r.informante.nome||'')} (${esc(r.informante.relacao||'')}) · data ${fm(r.informante.data)}</div>
-    <div style="margin:6px 0"><b>Resumo:</b> Nunca ${n.N} · Às vezes ${n.A} · Frequentemente ${n.F} · total ${a.length}</div>
-    <div style="margin-top:6px"><b>Código para lançar no Neurocortex</b> (N=Nunca, A=Às vezes, F=Frequentemente):</div>
+    <div style="margin:6px 0"><b>Resumo:</b> ${ops.map(o=>esc(o[1])+' '+n[o[0]]).join(' · ')} · total ${a.length}</div>
+    ${scHtml}
+    <div style="margin-top:6px"><b>${cat.neuro?'Código para lançar no Neurocortex':'Respostas em sequência'}</b> (${ops.map(o=>esc(o[0])+'='+esc(o[1])).join(', ')}):</div>
     <textarea readonly style="width:100%;font-family:monospace;font-size:12px;min-height:64px;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px">${esc(a)}</textarea>
     <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiarTexto('${esc(a)}')">📋 Copiar respostas</button><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiarTexto(loadTestes().links.find(x=>x.codigo==='${cod}').resposta.codigoNeuro)">📋 Copiar código completo</button></div></div>`;
 }
