@@ -1712,14 +1712,16 @@ function teCodigo(){
 function teUrl(cod,esc_){
   const base=new URL((TE_CAT[esc_]||{pagina:'teste.html'}).pagina+'?c='+cod+'&e='+encodeURIComponent(esc_||'BRIEF2PAIS'),location.href).href;
   const l=_teLinks.find(x=>x.codigo===cod);
-  if(!l||!l.nasc) return base;
+  if(!l||!l.pacNome) return base;
   try{
-    const j=JSON.stringify({n:l.pacNome,b:String(l.nasc).slice(0,10),r:l.respondente||''});
+    const nb=teNascISO(l.nasc);
+    const j=JSON.stringify(nb?{n:l.pacNome,b:nb,r:l.respondente||''}:{n:l.pacNome,r:l.respondente||''});
     const b=btoa(unescape(encodeURIComponent(j))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
     return base+'#d='+b;
   }catch(e){ return base; }
 }
-function teIdade(p){ const n=p&&(p.nascimento||p.nasc); if(!n||!/^\d{4}-\d{2}-\d{2}/.test(n)) return null; const d=new Date(n.slice(0,10)+'T12:00:00'),h=new Date(); let a=h.getFullYear()-d.getFullYear(); const m=h.getMonth()-d.getMonth(); if(m<0||(m===0&&h.getDate()<d.getDate())) a--; return a; }
+function teNascISO(v){ const s=String(v||'').trim(); let m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s); if(m) return m[1]+'-'+m[2]+'-'+m[3]; m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(s); return m?m[3]+'-'+m[2]+'-'+m[1]:''; }
+function teIdade(p){ const n=teNascISO(p&&(p.nascimento||p.nasc)); if(!n) return null; const d=new Date(n.slice(0,10)+'T12:00:00'),h=new Date(); let a=h.getFullYear()-d.getFullYear(); const m=h.getMonth()-d.getMonth(); if(m<0||(m===0&&h.getDate()<d.getDate())) a--; return a; }
 function teSugeridos(idade){ if(idade===null) return []; return Object.keys(TE_CAT).filter(k=>idade>=TE_CAT[k].min&&idade<=TE_CAT[k].max); }
 function tePacientes(){
   const vistos=new Set(); const out=[];
@@ -1829,7 +1831,7 @@ function teGerar(escala,resp){
   const nome=teNomeAtual, p=tePacientes().find(x=>tePacNome(x).toLowerCase()===nome.toLowerCase())||{};
   const ja=_teLinks.find(l=>(l.pacNome||'').toLowerCase()===nome.toLowerCase()&&l.escala===escala&&l.respondente===resp&&l.status==='pendente');
   if(ja&&!confirm('Já existe um link pendente deste teste para '+resp+'. Gerar outro mesmo assim?')) return;
-  const obj={codigo:teCodigo(),escala,escalaNome:TE_CAT[escala].nome,pacNome:nome,pacId:String(p.id||''),nasc:String(p.nascimento||'').slice(0,10),terapeuta:p.terapeuta||CU.nome||'',terapeutaEmail:teEmailDoTer(p.terapeuta),respondente:resp,
+  const obj={codigo:teCodigo(),escala,escalaNome:TE_CAT[escala].nome,pacNome:nome,pacId:String(p.id||''),nasc:teNascISO(p.nascimento),terapeuta:p.terapeuta||CU.nome||'',terapeutaEmail:teEmailDoTer(p.terapeuta),respondente:resp,
     criado:new Date().toISOString().slice(0,10),criadoPor:CU.nome||'',status:'pendente',visto:true};
   _teLinks.push(obj); teRenderFicha();
   teFs().collection('testes_links').doc(obj.codigo).set(obj).then(()=>toast('Link gerado ✅')).catch(e=>{ _teLinks=_teLinks.filter(x=>x.codigo!==obj.codigo); teRenderFicha(); toast('Não foi possível gerar o link: '+(e&&e.code||'erro')); });
