@@ -1659,9 +1659,23 @@ async function teChecarRespostas(){
     }
   } finally { window._teChecando=false; }
 }
+// Nome único da profissional no módulo Testes (junta variações: "Nayra Vieira Neri" = "Nayra Vieira"; "Licença ClinPsi" = Leticia)
+const TE_TER_FILTRO=['Adriana','Erika','Juliana Callef','Leticia','Mayara','Nayra Vieira','Tatiane'];
+function teTerCanon(t){
+  const n=String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+  if(!n) return '';
+  if(n.includes('licenca')||n.startsWith('leticia')) return 'Leticia';
+  if(n.startsWith('nayra')) return 'Nayra Vieira';
+  if(n.startsWith('tatiane')) return 'Tatiane';
+  if(n.startsWith('adriana')) return 'Adriana';
+  if(n.startsWith('erika')) return 'Erika';
+  if(n.startsWith('mayara')) return 'Mayara';
+  if(n.startsWith('juliana')) return 'Juliana Callef';
+  return String(t).trim();
+}
 function teEmailDoTer(nome){
-  const n=(typeof normTer==='function'?normTer(nome||''):String(nome||'')).toLowerCase();
-  const r=(typeof ROSTER!=='undefined'?ROSTER:[]).find(x=>x.role!=='admin'&&(typeof normTer==='function'?normTer(x.nome):x.nome).toLowerCase()===n);
+  const n=teTerCanon(nome).toLowerCase();
+  const r=(typeof ROSTER!=='undefined'?ROSTER:[]).find(x=>x.role!=='admin'&&teTerCanon(x.nome).toLowerCase()===n);
   return r?r.email:(CU&&CU.email)||'';
 }
 // Admin: espelha a lista de pacientes de cada terapeuta (só nome, nascimento, telefone) para ela ler só a sua
@@ -1669,8 +1683,8 @@ function terSyncPacientes(){
   if(window._terMode||!CU||CU.role!=='admin'||typeof firebase==='undefined') return;
   const all=getConvertidos().filter(p=>p.ativo!==false);
   ROSTER.filter(r=>r.role!=='admin').forEach(r=>{
-    const alvo=normTer(r.nome).toLowerCase();
-    const lista=all.filter(p=>normTer(p.terapeuta||'').toLowerCase()===alvo).map(p=>({id:String(p.id||''),paciente:(p.paciente||p.responsavel||'').trim(),nascimento:String(p.nascimento||'').slice(0,10),telefone:p.telefone||'',terapeuta:p.terapeuta||r.nome})).filter(p=>p.paciente);
+    const alvo=teTerCanon(r.nome).toLowerCase();
+    const lista=all.filter(p=>teTerCanon(p.terapeuta).toLowerCase()===alvo).map(p=>({id:String(p.id||''),paciente:(p.paciente||p.responsavel||'').trim(),nascimento:String(p.nascimento||'').slice(0,10),telefone:p.telefone||'',terapeuta:teTerCanon(p.terapeuta)||r.nome})).filter(p=>p.paciente);
     const h=JSON.stringify(lista), k='te_sync_'+r.email;
     if(sessionStorage.getItem(k)===h) return;
     teFs().collection('ter_pacientes').doc(r.email).set({lista,atualizadoEm:new Date().toISOString()}).then(()=>sessionStorage.setItem(k,h)).catch(e=>console.warn('terSync',e&&e.code));
@@ -1744,13 +1758,13 @@ function teAtualizarBadge(){
 }
 
 // ── Tela principal ──
-let teFiltroTer='', teBusca='';
+let teFiltroTer='', teBusca='', teFiltroSt='';
 function renderTestes(c){
   try{terSyncPacientes();}catch(e){}
   const pacs=tePacientes();
   const todos=loadTestes().links;
-  const terap=[...new Set(getConvertidos().map(p=>p.terapeuta).filter(Boolean))].sort();
-  const lista=pacs.filter(p=>(!teBusca||tePacNome(p).toLowerCase().includes(teBusca.toLowerCase()))&&(!teFiltroTer||(p.terapeuta||'')===teFiltroTer));
+  const terap=TE_TER_FILTRO;
+  const lista=pacs.filter(p=>(!teBusca||tePacNome(p).toLowerCase().includes(teBusca.toLowerCase()))&&(!teFiltroTer||teTerCanon(p.terapeuta)===teFiltroTer));
   const pend=todos.filter(l=>l.status==='pendente').length, resp=todos.filter(l=>l.status==='respondido').length, novos=teRespondidosNovos();
   c.innerHTML=`
   <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:18px">
@@ -1761,6 +1775,7 @@ function renderTestes(c){
   <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
     <input class="form-input" style="max-width:260px" placeholder="Buscar paciente..." value="${esc(teBusca)}" oninput="teBusca=this.value;teRenderLinhas()">
     ${CU.role==='admin'?`<select class="form-input" style="max-width:220px" onchange="teFiltroTer=this.value;teRenderLinhas()"><option value="">Todas as terapeutas</option>${terap.map(t=>`<option${t===teFiltroTer?' selected':''}>${esc(t)}</option>`).join('')}</select>`:''}
+    <select class="form-input" style="max-width:220px" onchange="teFiltroSt=this.value;teRenderLinhas()"><option value="">Todos os status</option><option value="pend"${teFiltroSt==='pend'?' selected':''}>⏳ Aguardando resposta</option><option value="resp"${teFiltroSt==='resp'?' selected':''}>✅ Respondidos</option></select>
   </div>
   <div class="data-table"><table>
     <thead><tr><th>Paciente</th><th>Idade</th>${CU.role==='admin'?'<th>Terapeuta</th>':''}<th>Sugestão</th><th>Testes</th><th></th></tr></thead>
@@ -1771,12 +1786,12 @@ function renderTestes(c){
 }
 function teRenderLinhas(){
   const tb=document.getElementById('te-linhas'); if(!tb) return;
-  const lista=tePacientes().filter(p=>(!teBusca||tePacNome(p).toLowerCase().includes(teBusca.toLowerCase()))&&(!teFiltroTer||(p.terapeuta||'')===teFiltroTer));
+  const lista=tePacientes().filter(p=>(!teBusca||tePacNome(p).toLowerCase().includes(teBusca.toLowerCase()))&&(!teFiltroTer||teTerCanon(p.terapeuta)===teFiltroTer)&&(!teFiltroSt||teLinksDe(tePacNome(p)).some(l=>teFiltroSt==='pend'?l.status==='pendente':l.status==='respondido')));
   if(!lista.length){ tb.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:24px">Nenhum paciente encontrado.</td></tr>'; return; }
   tb.innerHTML=lista.map(p=>{
     const nome=tePacNome(p), id=teIdade(p), sug=teSugeridos(id), ls=teLinksDe(nome);
     const pend=ls.filter(l=>l.status==='pendente').length, rsp=ls.filter(l=>l.status==='respondido').length, nv=ls.filter(l=>l.status==='respondido'&&!l.visto).length;
-    return `<tr><td><strong>${esc(nome)}</strong></td><td>${id===null?'—':id+' anos'}</td>${CU.role==='admin'?`<td>${esc(p.terapeuta||'—')}</td>`:''}
+    return `<tr><td><strong>${esc(nome)}</strong></td><td>${id===null?'—':id+' anos'}</td>${CU.role==='admin'?`<td>${esc(teTerCanon(p.terapeuta)||'—')}</td>`:''}
       <td>${sug.length?sug.map(k=>`<span style="font-size:11px;background:#e0f2fe;color:#075985;border-radius:10px;padding:2px 8px">${esc(TE_CAT[k].nome)}</span>`).join(' '):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="font-size:12px">${pend?`⏳ ${pend} pendente(s) `:''}${rsp?`✅ ${rsp} respondido(s)`:''}${nv?` <span style="background:#15803d;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">novo</span>`:''}${!pend&&!rsp?'—':''}</td>
       <td><button class="btn-ghost" onclick="teAbrir('${esc(nome).replace(/'/g,"\\'")}')">Abrir</button></td></tr>`;
