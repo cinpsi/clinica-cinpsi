@@ -58,7 +58,7 @@ const CX_EMO=/^[\p{Extended_Pictographic}️‍\s]+/u;
 function cxCleanNode(root){
   try{
     root.querySelectorAll('input[placeholder],textarea[placeholder]').forEach(i=>{const p=i.getAttribute('placeholder');if(p&&CX_EMO.test(p)){const n=p.replace(CX_EMO,'');if(n)i.setAttribute('placeholder',n);}});
-    root.querySelectorAll('.section-title,.modal-title,.fin-section-title,.fin-dre-title,.stat-label,.fin-card-label').forEach(el=>{const t=el.firstChild;if(t&&t.nodeType===3&&CX_EMO.test(t.nodeValue)){const n=t.nodeValue.replace(CX_EMO,'');if(n)t.nodeValue=n;}});
+    root.querySelectorAll('.section-title,.modal-title,.fin-section-title,.fin-dre-title,.stat-label,.fin-card-label,.fin-tab,.fat-tab,.btn-ghost,.btn-primary,.btn-purple,.btn-save').forEach(el=>{const t=el.firstChild;if(t&&t.nodeType===3&&CX_EMO.test(t.nodeValue)){const n=t.nodeValue.replace(CX_EMO,'');if(n)t.nodeValue=n;}});
   }catch(e){}
 }
 function cxCleanInit(){
@@ -771,6 +771,18 @@ body.view-dash #lembrete-banner{display:none!important}
 /* lembretes recolhidos por padrão */
 .lembrete-header{cursor:pointer}
 .lembrete-header:hover{background:#FBFAF7}
+@media(max-width:640px){
+  .topbar{flex-wrap:wrap;row-gap:10px}
+  .cx-tb-left{flex:1;min-width:0}
+  .cx-tb-right{display:contents}
+  .cx-tb-right>.topbar-actions{order:10;width:100%;overflow-x:auto;padding-bottom:2px}
+  .cx-tb-right>.topbar-actions:empty{display:none}
+  .cx-date{display:none}
+  .filters>*{flex:1 1 100%}
+  .fin-summary-grid,.fin-pro-grid{grid-template-columns:1fr 1fr!important}
+  .fin-tabs{width:100%;overflow-x:auto;flex-wrap:nowrap}
+  .fin-tab{white-space:nowrap}
+}
 .sidebar-footer>[onclick^="forceSyncAll"]{grid-column:1/-1}
 </style>
 </head>
