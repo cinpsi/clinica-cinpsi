@@ -6206,6 +6206,7 @@ function renderFinanceiro(c){
         <button class="btn-ghost" onclick="finOpenGestaoFornecedores()" style="margin-right:6px">🏢 Fornecedores</button>
         <button class="btn-ghost" onclick="finImportarExtrato()" style="margin-right:6px">🏦 Importar extrato</button>
         <button class="btn-ghost" onclick="finImportarFatura()" style="margin-right:6px">📄 Importar fatura</button>
+        <button class="btn-ghost" onclick="finImportarDespesasJson()" style="margin-right:6px" title="Importa despesas de um arquivo JSON, ignorando as que já existem">Importar JSON</button>
         <button class="btn-primary" onclick="finOpenModal('despesa')">+ Nova Despesa</button>
       </div>
     </div>
@@ -11099,6 +11100,34 @@ function finParseExtrato(texto){
   return transacoes;
 }
 
+function finImportarDespesasJson(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json';
+  inp.onchange=function(e){
+    const f=e.target.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=function(ev){
+      try{
+        const j=JSON.parse(ev.target.result);
+        const arr=Array.isArray(j)?j:(j.despesas||(j.financeiro&&j.financeiro.despesas));
+        if(!Array.isArray(arr)||!arr.length) throw new Error('arquivo sem despesas');
+        const atual=finLoad(FK.DESP);
+        const chave=x=>[String(x.desc||'').toLowerCase().trim(),Number(x.valor).toFixed(2),x.data,x.parcelaAtual||1,x.totalParcelas||1].join('|');
+        const ids=new Set(atual.map(x=>String(x.id))),chaves=new Set(atual.map(chave));
+        const novas=arr.filter(x=>x&&x.desc&&Number(x.valor)>0&&x.data&&!ids.has(String(x.id))&&!chaves.has(chave(x)));
+        const dup=arr.length-novas.length;
+        if(!novas.length){toast('Nenhuma despesa nova: todas já existem.');return;}
+        const tot=novas.reduce((s,x)=>s+Number(x.valor),0);
+        if(!confirm('Importar '+novas.length+' despesas novas (soma '+finFmt(tot)+')?\n'+dup+' já existem e serão ignoradas.')) return;
+        novas.forEach(x=>atual.push(x));
+        finSave(FK.DESP,atual);
+        fin_refresh();
+        toast('✅ '+novas.length+' despesas importadas.');
+      }catch(err){toast('❌ Erro ao importar: '+err.message);}
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+}
 function finImportarFatura(){
   document.getElementById('modal-importar-fatura')?.remove();
   const mo=document.createElement('div');
