@@ -7543,7 +7543,7 @@ function finRenderDespesas(){
     return `<tr style="${d.pago?'opacity:0.45':''}">
       <td>${finFmtDate(d.data)}</td>
       <td>${finFmtDate(d.vencimento)||'—'}${tag}</td>
-      <td style="font-size:13px">${esc(d.desc||'—')}</td>
+      <td style="font-size:13px">${esc(d.desc||'—')}${d.apelido?` <span style="display:inline-block;margin-left:6px;padding:1px 8px;border-radius:999px;background:#FBF3E4;color:#B2680E;font-size:11px;font-weight:600;white-space:nowrap">${esc(d.apelido)}</span>`:''}</td>
       <td><span class="fin-expense-cat">${esc(d.cat)}</span></td>
       <td>${badge}</td>
       <td style="color:var(--red);font-weight:500">− ${finFmt(d.valor)}</td>
@@ -7603,6 +7603,8 @@ function finEditDesp(id){
       <div class="form-grid">
         <div class="form-group full"><label class="form-label">Descrição</label>
           <input class="form-input" id="ed-desc" value="${esc(d.desc||'')}"></div>
+        <div class="form-group full"><label class="form-label">Apelido <span style="font-weight:400;color:var(--text3)">(opcional)</span></label>
+          <input class="form-input" id="ed-apelido" value="${esc(d.apelido||'')}" placeholder="Sua referência para este gasto"></div>
         <div class="form-group"><label class="form-label">Categoria</label>
           <select class="form-select" id="ed-cat">
             ${cats.map(c=>`<option${d.cat===c?' selected':''}>${c}</option>`).join('')}
@@ -7648,6 +7650,7 @@ function finSaveEditDesp(id){
   const d=desps[idx];
 
   const desc=document.getElementById('ed-desc').value.trim();
+  const apelido=(document.getElementById('ed-apelido')?.value||'').trim();
   const cat=document.getElementById('ed-cat').value;
   const valor=parseFloat(document.getElementById('ed-valor').value)||0;
   const data=document.getElementById('ed-data').value;
@@ -7658,7 +7661,7 @@ function finSaveEditDesp(id){
     // Parcela de uma série: altera só este lançamento, em qualquer outro
     // fica intacto (data, ordem e valor). Nada de tipo/grupoId/parcelaAtual
     // muda aqui — só os campos simples do formulário.
-    desps[idx]={...d, desc, cat, valor, data, vencimento:venc};
+    desps[idx]={...d, desc, apelido, cat, valor, data, vencimento:venc};
     finSave(FK.DESP,desps);
     document.getElementById('modal-edit-desp').remove();
     fin_refresh();
@@ -7670,7 +7673,7 @@ function finSaveEditDesp(id){
 
   if(novoTipo==='unica'){
     // Atualiza só este lançamento
-    desps[idx]={...d, desc, cat, valor, data, vencimento:venc, tipo:'unica', grupoId:d.grupoId||('g_'+Date.now()), totalParcelas:1, parcelaAtual:1};
+    desps[idx]={...d, desc, apelido, cat, valor, data, vencimento:venc, tipo:'unica', grupoId:d.grupoId||('g_'+Date.now()), totalParcelas:1, parcelaAtual:1};
     finSave(FK.DESP,desps);
 
   } else if(novoTipo==='recorrente'){
@@ -7684,7 +7687,7 @@ function finSaveEditDesp(id){
       const dt=new Date(data+'T12:00:00'); dt.setMonth(dt.getMonth()+i);
       const vc=venc?new Date(venc+'T12:00:00'):null; if(vc) vc.setMonth(vc.getMonth()+i);
       novos.push({
-        id:Date.now()+i, desc, cat, valor,
+        id:Date.now()+i, desc, apelido, cat, valor,
         data:dt.toISOString().split('T')[0],
         vencimento:vc?vc.toISOString().split('T')[0]:null,
         tipo:'recorrente', grupoId, parcelaAtual:i+1, totalParcelas:meses
@@ -7702,7 +7705,7 @@ function finSaveEditDesp(id){
       const dt=new Date(data+'T12:00:00'); dt.setMonth(dt.getMonth()+i);
       const vc=venc?new Date(venc+'T12:00:00'):null; if(vc) vc.setMonth(vc.getMonth()+i);
       novos.push({
-        id:Date.now()+i, desc, cat, valor,
+        id:Date.now()+i, desc, apelido, cat, valor,
         data:dt.toISOString().split('T')[0],
         vencimento:vc?vc.toISOString().split('T')[0]:null,
         tipo:'parcelada', grupoId, parcelaAtual:i+1, totalParcelas:n
@@ -11100,6 +11103,67 @@ function finParseExtrato(texto){
   return transacoes;
 }
 
+function finPlanoCalc(p){
+  const atual=finLoad(FK.DESP);
+  const byId=new Map(atual.map(x=>[String(x.id),x]));
+  const chave=x=>[String(x.desc||'').toLowerCase().trim(),Number(x.valor).toFixed(2),x.data,x.parcelaAtual||1,x.totalParcelas||1].join('|');
+  const chaves=new Set(atual.map(chave));
+  const upd=(p.atualizar||[]).filter(u=>byId.has(String(u.id)));
+  const semId=(p.atualizar||[]).length-upd.length;
+  const cri=(p.criar||[]).filter(x=>x&&x.desc&&Number(x.valor)>0&&x.data&&!byId.has(String(x.id))&&!chaves.has(chave(x)));
+  const exIds=new Set((p.excluirIds||[]).map(String));
+  const regras=p.excluirDescContem||[];
+  const exc=atual.filter(x=>exIds.has(String(x.id))||regras.some(r=>String(x.desc||'').toLowerCase().includes(r.texto)&&String(x.data)>=r.desde));
+  return {atual,byId,upd,semId,cri,exc};
+}
+function finPlanoRevisar(p){
+  const c=finPlanoCalc(p);
+  const rows={};
+  const R=k=>rows[k]||(rows[k]={a:0,n:0,out:0});
+  c.upd.forEach(u=>{const r=R(u.rotulo||'—');r.a++;});
+  c.cri.forEach(x=>{const r=R(x._r||x.desc||'—');r.n++;});
+  [...c.upd.map(u=>{const x=c.byId.get(String(u.id));return [u.rotulo||'—',Object.assign({},x,u.set)];}),...c.cri.map(x=>[x._r||x.desc||'—',x])]
+    .forEach(([k,x])=>{if(String(x.data).slice(0,7)==='2026-10') R(k).out+=Number(x.valor)||0;});
+  const linhas=Object.keys(rows).sort().map(k=>`<tr><td style="padding:5px 8px">${esc(k)}</td><td style="text-align:center">${rows[k].a||'—'}</td><td style="text-align:center">${rows[k].n||'—'}</td><td style="text-align:right;padding-right:8px">${rows[k].out?finFmt(rows[k].out):'—'}</td></tr>`).join('');
+  const excTxt=c.exc.length?c.exc.map(x=>`${esc(x.desc)} (${finFmt(x.valor)}, ${finFmtDate(x.data)})`).join('<br>'):'Nada a excluir.';
+  document.getElementById('modal-plano-desp')?.remove();
+  const mo=document.createElement('div');mo.className='modal-overlay';mo.id='modal-plano-desp';
+  mo.onclick=e=>{if(e.target===mo)mo.remove();};
+  mo.innerHTML=`<div class="modal" style="max-width:720px">
+    <div class="modal-header"><div class="modal-title">Revisar ajustes de despesas</div><button class="modal-close" onclick="document.getElementById('modal-plano-desp').remove()">×</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px;background:#EEF4FA;border-radius:12px;padding:10px 14px"><div style="font-size:11px;color:var(--text3)">ATUALIZAR</div><div style="font-size:22px;font-weight:700;color:#15558A">${c.upd.length}</div></div>
+        <div style="flex:1;min-width:140px;background:#EAF6EE;border-radius:12px;padding:10px 14px"><div style="font-size:11px;color:var(--text3)">CRIAR</div><div style="font-size:22px;font-weight:700;color:#1C7C45">${c.cri.length}</div></div>
+        <div style="flex:1;min-width:140px;background:#FBEDEC;border-radius:12px;padding:10px 14px"><div style="font-size:11px;color:var(--text3)">EXCLUIR</div><div style="font-size:22px;font-weight:700;color:#B3261E">${c.exc.length}</div></div>
+      </div>
+      <div style="max-height:300px;overflow:auto;border:1px solid var(--border2);border-radius:10px">
+        <table style="width:100%;font-size:12.5px;border-collapse:collapse"><thead><tr style="background:#F6F8FB;position:sticky;top:0"><th style="text-align:left;padding:6px 8px">Lançamento / série</th><th>Atualiza</th><th>Cria</th><th style="text-align:right;padding-right:8px">Out/26</th></tr></thead><tbody>${linhas}</tbody></table>
+      </div>
+      <div style="font-size:12.5px;margin-top:12px;line-height:1.6"><strong>A excluir:</strong><br>${excTxt}</div>
+      ${c.semId?`<div style="font-size:12px;color:#B3261E;margin-top:8px">${c.semId} lançamento(s) do plano não foram encontrados neste sistema e serão ignorados.</div>`:''}
+      <div style="font-size:12px;color:var(--text3);margin-top:10px">Ao aplicar, um backup das despesas atuais é baixado automaticamente.</div>
+    </div>
+    <div class="modal-footer"><button class="btn-ghost" onclick="document.getElementById('modal-plano-desp').remove()">Cancelar</button><button class="btn-save-purple" id="btn-plano-aplicar">Aplicar ajustes</button></div>
+  </div>`;
+  document.body.appendChild(mo);setTimeout(()=>mo.classList.add('open'),10);
+  document.getElementById('btn-plano-aplicar').onclick=()=>finPlanoAplicar(p);
+}
+function finPlanoAplicar(p){
+  try{
+    const c=finPlanoCalc(p);
+    const bk=new Blob([JSON.stringify({tipo:'backup_despesas',em:new Date().toISOString(),despesas:c.atual})],{type:'application/json'});
+    const a=document.createElement('a');a.href=URL.createObjectURL(bk);a.download='backup_despesas_antes_dos_ajustes_'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();
+    const exIds=new Set(c.exc.map(x=>String(x.id)));
+    const updMap=new Map(c.upd.map(u=>[String(u.id),u.set]));
+    let lista=c.atual.filter(x=>!exIds.has(String(x.id))).map(x=>updMap.has(String(x.id))?Object.assign({},x,updMap.get(String(x.id))):x);
+    c.cri.forEach(x=>{const o=Object.assign({},x);delete o._r;lista.push(o);});
+    finSave(FK.DESP,lista);
+    document.getElementById('modal-plano-desp')?.remove();
+    fin_refresh();
+    toast('✅ '+c.upd.length+' atualizados, '+c.cri.length+' criados, '+c.exc.length+' excluídos.');
+  }catch(err){toast('❌ Erro ao aplicar: '+err.message);console.error(err);}
+}
 function finImportarDespesasJson(){
   const inp=document.createElement('input');inp.type='file';inp.accept='.json';
   inp.onchange=function(e){
@@ -11108,6 +11172,7 @@ function finImportarDespesasJson(){
     r.onload=function(ev){
       try{
         const j=JSON.parse(ev.target.result);
+        if(j&&j.tipo==='cinpsi_despesas_plano'){ finPlanoRevisar(j); return; }
         const arr=Array.isArray(j)?j:(j.despesas||(j.financeiro&&j.financeiro.despesas));
         if(!Array.isArray(arr)||!arr.length) throw new Error('arquivo sem despesas');
         const atual=finLoad(FK.DESP);
@@ -11729,6 +11794,7 @@ function _finInjectModals(){
           <div class="form-group"><label class="form-label">Categoria</label>
             <select class="form-select" id="find-cat"><option value="">Selecione...</option><option>Aluguel / Condomínio</option><option>Utilidades</option><option>Impostos e Taxas</option><option>Pessoal</option><option>Serviços Terceirizados</option><option>Equipamentos</option><option>Empréstimo / Financiamento</option><option>Manutenção e Limpeza</option><option>Reforma</option><option>Cartão Crédito Empresa</option><option>Cartão Crédito Pessoal</option><option>Marketing</option><option>Consumo</option><option>Outras Despesas</option></select></div>
           <div class="form-group full"><label class="form-label">Descrição</label><input class="form-input" type="text" id="find-desc" placeholder="Ex: Fatura EDP março, Mensalidade Doctoralia..."></div>
+          <div class="form-group full"><label class="form-label">Apelido <span style="font-weight:400;color:var(--text3)">(opcional)</span></label><input class="form-input" type="text" id="find-apelido" placeholder="Sua referência para este gasto"></div>
           <div class="form-group"><label class="form-label" id="find-valor-label">Valor (R$)</label><input class="form-input" type="number" id="find-valor" placeholder="0,00" step="0.01"></div>
         </div>
         <div id="fin-bloco-recorrente" style="display:none;margin-top:12px">
@@ -11772,7 +11838,7 @@ function finOpenModal(type){
   } else {
     document.getElementById('find-data').value=today;
     document.getElementById('find-vencimento').value=today;
-    ['find-valor','find-desc','find-total'].forEach(id=>document.getElementById(id).value='');
+    ['find-valor','find-desc','find-apelido','find-total'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
     document.getElementById('find-cat').value='';
     document.getElementById('find-data-final').value=new Date().getFullYear()+'-12-31';
     document.getElementById('find-parcelas').value='12';
@@ -11982,13 +12048,14 @@ function finSaveDesp(){
   const venc=document.getElementById('find-vencimento').value;
   const valor=parseFloat(document.getElementById('find-valor').value)||0;
   const desc=document.getElementById('find-desc').value;
+  const apelido=(document.getElementById('find-apelido')?.value||'').trim();
   const cat=document.getElementById('find-cat').value;
   const fornId=document.getElementById('find-forn')?.value||null;
   if(!data||!valor||!cat||!desc){toast('Preencha todos os campos.');return;}
   const desps=finLoad(FK.DESP);
   const gid='g_'+Date.now();
   if(_finTipo==='unica'){
-    desps.push({id:Date.now(),data,vencimento:venc,valor,desc,cat,fornId,tipo:'unica',grupoId:gid});
+    desps.push({id:Date.now(),data,vencimento:venc,valor,desc,apelido,cat,fornId,tipo:'unica',grupoId:gid});
   } else if(_finTipo==='recorrente'){
     const dataFinalRec=document.getElementById('find-data-final').value;
     const meses=finContarMesesAteData(data,dataFinalRec);
@@ -11996,7 +12063,7 @@ function finSaveDesp(){
     for(let i=0;i<meses;i++){
       const d=new Date(data+'T12:00:00'); d.setMonth(d.getMonth()+i);
       const v=new Date(venc+'T12:00:00'); v.setMonth(v.getMonth()+i);
-      desps.push({id:Date.now()+i,data:d.toISOString().split('T')[0],vencimento:v.toISOString().split('T')[0],valor,desc,cat,fornId,tipo:'recorrente',grupoId:gid,parcelaAtual:i+1,totalParcelas:meses});
+      desps.push({id:Date.now()+i,data:d.toISOString().split('T')[0],vencimento:v.toISOString().split('T')[0],valor,desc,apelido,cat,fornId,tipo:'recorrente',grupoId:gid,parcelaAtual:i+1,totalParcelas:meses});
     }
   } else {
     const total=parseFloat(document.getElementById('find-total').value)||0;
@@ -12005,7 +12072,7 @@ function finSaveDesp(){
     for(let i=0;i<n;i++){
       const d=new Date(data+'T12:00:00'); d.setMonth(d.getMonth()+i);
       const v=new Date(venc+'T12:00:00'); v.setMonth(v.getMonth()+i);
-      desps.push({id:Date.now()+i,data:d.toISOString().split('T')[0],vencimento:v.toISOString().split('T')[0],valor:parcela,valorTotal:total,desc,cat,fornId,tipo:'parcelada',grupoId:gid,parcelaAtual:i+1,totalParcelas:n});
+      desps.push({id:Date.now()+i,data:d.toISOString().split('T')[0],vencimento:v.toISOString().split('T')[0],valor:parcela,valorTotal:total,desc,apelido,cat,fornId,tipo:'parcelada',grupoId:gid,parcelaAtual:i+1,totalParcelas:n});
     }
   }
   finSave(FK.DESP,desps); finCloseModal('despesa'); fin_refresh();
