@@ -112,7 +112,7 @@ function cxDashTop(){
     +`</div>`;
   const nomeL=l=>esc(l.responsavel||l.paciente||'—')+(l.paciente&&l.responsavel?` <span>/ ${esc(l.paciente)}</span>`:'');
   const rows=lem.lista.map(l=>{const at=l.prox_contato<lem.hoje;const ini=(l.responsavel||l.paciente||'?').trim()[0].toUpperCase();
-    return `<div class="cx-lr ${at?'late':'today'}" onclick="openLeadModal('${l.id}')"><div class="cx-lav">${esc(ini)}</div><div class="cx-lm"><div class="cx-ln">${nomeL(l)}</div><div class="cx-ls">${esc(l.servico||'—')} · ${esc(l.telefone||'—')}</div></div><span class="cx-bd">${at?'Atrasado: '+fmtDate(l.prox_contato):'Hoje'}</span>${cxIco('chev')}</div>`;}).join('');
+    return `<div class="cx-lr ${at?'late':'today'}" onclick="openLeadModal('${l.id}')"><div class="cx-lav">${esc(ini)}</div><div class="cx-lm"><div class="cx-ln">${nomeL(l)}</div><div class="cx-ls">${esc([l.servico,l.telefone].filter(Boolean).join(' · ')||'Sem informações de contato')}</div></div><span class="cx-bd">${at?'Atrasado: '+fmtDate(l.prox_contato):'Hoje'}</span>${cxIco('chev')}</div>`;}).join('');
   const lemb=`<div class="cx-card"><div class="cx-card-h">${cxIco('bell')}<h2>Lembretes de contato · ${lem.lista.length}</h2><button class="cx-lk cx-sp" onclick="showView('leads')">Ver todos</button></div>`
     +(rows?`<div class="cx-lb">${rows}</div>`:'<div class="cx-empty">Nenhum contato pendente para hoje.</div>')+`</div>`;
   const ret=calcRetencao();
@@ -555,7 +555,7 @@ button,input,select,textarea,.btn-primary,.btn-purple,.btn-ghost,.btn-save,.btn-
 /* ── Menu lateral ── */
 .sidebar{width:252px;min-width:252px;background:var(--navy);border-right:none;color:#fff;transition:width .2s,min-width .2s,transform .25s;z-index:60}
 .sidebar-logo{padding:20px 18px 16px;border-bottom:1px solid rgba(255,255,255,.08);display:flex;align-items:center;justify-content:space-between;gap:8px}
-.sb-brand-full{height:40px;width:auto;max-width:170px;display:block}
+.sb-brand-full{width:176px;height:auto;display:block}
 .sb-brand-sym{height:34px;width:34px;display:none}
 .sb-toggle{background:rgba(255,255,255,.07);border:none;color:rgba(255,255,255,.75);width:30px;height:30px;border-radius:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sb-toggle:hover{background:rgba(255,255,255,.14);color:#fff}
@@ -676,6 +676,11 @@ button,input,select,textarea,.btn-primary,.btn-purple,.btn-ghost,.btn-save,.btn-
 }
 @media(max-width:640px){.cx-kpis{grid-template-columns:1fr}.cx-search{display:none!important}.topbar-sub{display:none}.cx-rings{gap:4px}.cx-ring,.cx-ring svg{width:84px;height:84px}.cx-ring b{font-size:18px}}
 body.view-dash #lembrete-banner{display:none!important}
+
+.sidebar-footer button{padding:6px 8px!important;margin:0 0 4px!important;font-size:11px!important}
+.sidebar-footer #btn-backup,.sidebar-footer #btn-restore{margin-top:0!important}
+.sidebar-footer .user-chip{margin-bottom:6px}
+.sidebar-footer #fb-status{margin-bottom:6px!important}
 </style>
 </head>
 <body>
