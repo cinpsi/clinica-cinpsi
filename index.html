@@ -51,6 +51,20 @@ function cxInit(){
   document.getElementById('sidebar-nav').addEventListener('click',()=>document.body.classList.remove('cx-open'));
   document.addEventListener('click',e=>{const r=document.getElementById('cx-res');if(r&&!e.target.closest('#cx-search'))r.classList.remove('open');});
   cxBell();
+  try{cxCleanInit();}catch(e){}
+}
+/* limpeza de emojis iniciais em títulos/placeholder (padroniza ícones) */
+const CX_EMO=/^[\p{Extended_Pictographic}️‍\s]+/u;
+function cxCleanNode(root){
+  try{
+    root.querySelectorAll('input[placeholder],textarea[placeholder]').forEach(i=>{const p=i.getAttribute('placeholder');if(p&&CX_EMO.test(p)){const n=p.replace(CX_EMO,'');if(n)i.setAttribute('placeholder',n);}});
+    root.querySelectorAll('.section-title,.modal-title,.fin-section-title,.fin-dre-title,.stat-label,.fin-card-label').forEach(el=>{const t=el.firstChild;if(t&&t.nodeType===3&&CX_EMO.test(t.nodeValue)){const n=t.nodeValue.replace(CX_EMO,'');if(n)t.nodeValue=n;}});
+  }catch(e){}
+}
+function cxCleanInit(){
+  cxCleanNode(document);
+  let tm=null;
+  new MutationObserver(()=>{clearTimeout(tm);tm=setTimeout(()=>cxCleanNode(document),60);}).observe(document.body,{childList:true,subtree:true});
 }
 function cxToggleSide(){
   if(window.innerWidth<=900){document.body.classList.toggle('cx-open');return;}
@@ -681,6 +695,83 @@ body.view-dash #lembrete-banner{display:none!important}
 .sidebar-footer #btn-backup,.sidebar-footer #btn-restore{margin-top:0!important}
 .sidebar-footer .user-chip{margin-bottom:6px}
 .sidebar-footer #fb-status{margin-bottom:6px!important}
+
+/* ═══════════ TEMA CINPSI 2026 — ETAPA 2 (demais módulos) ═══════════ */
+.filters{gap:12px;margin-bottom:20px}
+.filter-input{border-radius:10px;border-color:var(--border2);padding:10px 14px;font-family:'Inter','DM Sans',sans-serif;background:#fff}
+.filter-input:focus{border-color:var(--accent-mid);box-shadow:0 0 0 3px rgba(47,122,185,.14);outline:none}
+.data-table{border-radius:16px;overflow-x:auto;border-color:var(--border);box-shadow:var(--shadow)}
+.data-table th{background:#F8FAFC;color:var(--text3);font-size:11px;letter-spacing:.07em;padding:13px 16px;border-bottom:1px solid var(--border);white-space:nowrap}
+.data-table td{padding:13px 16px;border-bottom:1px solid #EEF1F6}
+.data-table tr:hover td{background:#F8FAFC}
+.data-table td>strong{color:var(--navy);font-weight:600}
+.td-act{display:flex;gap:6px;justify-content:flex-end;align-items:center}
+.status-pill{font-weight:600;padding:4px 11px;letter-spacing:.01em}
+.kanban-col{background:#F1F4F8;border-radius:16px;border-color:var(--border);padding:12px}
+.kanban-col-title{color:var(--navy);letter-spacing:.06em}
+.kanban-card{border-radius:12px;border-color:var(--border);padding:12px 13px}
+.kanban-card:hover{border-color:var(--accent-mid);box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.kc-name{font-weight:600;color:var(--navy)}
+.modal-overlay{background:rgba(4,37,61,.5);backdrop-filter:blur(2px)}
+.modal{border-radius:18px;box-shadow:0 24px 64px rgba(4,37,61,.28)}
+.modal-header{padding:20px 24px 16px}
+.modal-title{font-family:'Inter',sans-serif!important;font-size:17px!important;font-weight:700!important;color:var(--navy)}
+.modal-body{padding:22px 24px}
+.modal-footer{padding:16px 24px;background:#F8FAFC;border-radius:0 0 18px 18px}
+.modal-close{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--surface2)}
+.section-title{color:var(--navy);font-size:11.5px;letter-spacing:.08em;border-bottom-color:var(--border)}
+.form-label{color:var(--text2);font-weight:600;font-size:12px}
+.form-input,.form-select,.form-textarea{border-color:var(--border2);border-radius:10px;padding:10px 12px;font-family:'Inter','DM Sans',sans-serif}
+.form-input:focus,.form-select:focus,.form-textarea:focus{border-color:var(--accent-mid);box-shadow:0 0 0 3px rgba(47,122,185,.14);outline:none}
+.btn-purple,.btn-save-purple{background:var(--accent);border-radius:10px;font-weight:600;font-family:'Inter','DM Sans',sans-serif}
+.btn-purple:hover,.btn-save-purple:hover{background:var(--navy2)}
+.btn-delete{border-radius:10px;border-color:#F3D0CC;color:#B42318;font-family:'Inter','DM Sans',sans-serif}
+.btn-delete:hover{background:#FEF3F2}
+.btn-ghost,.btn-primary,.btn-save{font-family:'Inter','DM Sans',sans-serif}
+.empty-state{padding:64px 20px}
+.record-card,.detail-header,.detail-topic,.form-card,.funil-wrap,.hist-card{border-radius:16px;border-color:var(--border)}
+.rec-patient,.detail-patient{font-family:'Inter',sans-serif;font-weight:700;color:var(--navy)}
+.record-card:hover{border-color:var(--accent-mid)}
+.record-card::before{background:var(--gold)}
+.lembrete-banner{border-radius:16px;border:1px solid var(--border);background:#fff;box-shadow:var(--shadow);margin-bottom:20px}
+.lembrete-header{background:#fff;color:var(--navy);border-left:4px solid var(--gold);padding:13px 18px;font-weight:700;font-size:13.5px}
+.lembrete-body{background:#fff;border:none;border-top:1px solid var(--border);border-radius:0}
+.lembrete-item{padding:12px 18px;border-bottom:1px solid #EEF1F6}
+.lembrete-atrasado{background:#FDF0EE}
+.lembrete-hoje{background:#FDF5E6}
+.lembrete-atrasado .lembrete-badge{background:#B42318;font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px}
+.lembrete-hoje .lembrete-badge{background:var(--gold);font-size:11px;font-weight:700;padding:4px 10px;border-radius:8px}
+.fat-tab{font-family:'Inter','DM Sans',sans-serif;font-weight:600}
+.fat-tab-active{color:var(--accent);border-bottom-color:var(--gold)}
+.fat-table th{background:#F8FAFC}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-thumb{background:#CBD3DF;border-radius:8px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-track{background:transparent}
+/* fontes e números */
+[style*="DM Serif"],.stat-value,.fin-card-value,.fin-pro-value,.fin-alerta-valor,.fin-section-title,.fin-dre-title,.fin-month-label,.login-logo{font-family:'Inter',sans-serif!important}
+[style*="DM Serif"],.fin-card-value,.fin-pro-value,.fin-alerta-valor,.stat-value{font-weight:700!important;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.fin-section-title,.fin-dre-title,.fin-month-label{font-weight:700!important;color:var(--navy)}
+.stat-card,.fin-card,.fin-pro-card,.fin-dre-card,.fin-table-wrap{border-radius:16px;border-color:var(--border)}
+.stat-card{padding:18px 20px}.stat-value{color:var(--navy);font-size:26px!important}
+.stat-label,.fin-card-label{font-size:11px;letter-spacing:.07em}
+.fin-card::before{height:3px;border-radius:16px 16px 0 0}
+.fin-tabs{border-radius:12px;background:#EEF2F7}.fin-tab{border-radius:9px;font-family:'Inter','DM Sans',sans-serif;font-weight:600}
+.fin-tab.active{color:var(--navy)}
+.fin-table-wrap thead th{background:#F8FAFC}
+.fin-table-wrap td{padding:13px 16px}
+.fin-alerta-banner{border-radius:16px;background:#FFF9ED;border-color:#F1DDB0}
+.fin-badge,.fin-tipo-badge{font-weight:600}
+.data-table td[style*="display:flex"]{display:table-cell!important;white-space:nowrap}
+.data-table td[style*="display:flex"]>button{margin-right:5px}
+/* menu: rodapé compacto (telas baixas) */
+.sidebar-footer{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px}
+.sidebar-footer>#fb-status,.sidebar-footer>.user-chip{grid-column:1/-1}
+.sidebar-footer>.btn-logout{grid-column:1/-1;width:100%}
+.sidebar-footer button{margin:0!important;width:100%}
+.sidebar.collapsed .sidebar-footer{display:block}
+/* lembretes recolhidos por padrão */
+.lembrete-header{cursor:pointer}
+.lembrete-header:hover{background:#FBFAF7}
+.sidebar-footer>[onclick^="forceSyncAll"]{grid-column:1/-1}
 </style>
 </head>
 <body>
@@ -1866,9 +1957,9 @@ function checkLembretes(){
   banner.innerHTML=`<div class="lembrete-banner">
     <div class="lembrete-header" onclick="toggleLembrete()">
       🔔 ${todos.length} lembrete${todos.length>1?'s':''} de contato${atrasados.length?` · <span style="font-weight:400;font-size:12px">${atrasados.length} atrasado${atrasados.length>1?'s':''}</span>`:''}
-      <span id="lembrete-chevron">▾</span>
+      <span id="lembrete-chevron">▸</span>
     </div>
-    <div class="lembrete-body" id="lembrete-body">
+    <div class="lembrete-body" id="lembrete-body" style="display:none">
       ${todos.map(l=>{
         const atrasado=l.prox_contato<hoje;
         return`<div class="lembrete-item ${atrasado?'lembrete-atrasado':'lembrete-hoje'}">
@@ -2707,7 +2798,7 @@ function refreshLeads(){
   if(leadViewMode==='tabela'){
     if(!fl.length){body.innerHTML=`<div class="empty-state"><div class="empty-icon">📥</div><p>Nenhum lead encontrado.</p></div>`;return;}
     body.innerHTML=`<div class="data-table"><table>
-      <thead><tr><th>Responsável</th><th>Paciente</th><th>Serviço</th><th>Origem</th><th>Status</th><th>Próx. contato</th><th>Terapeuta</th><th></th></tr></thead>
+      <thead><tr><th>Responsável</th><th>Paciente</th><th>Serviço</th><th>Origem</th><th>Escola</th><th>Status</th><th>Próx. contato</th><th>Terapeuta</th><th></th></tr></thead>
       <tbody>${fl.map(l=>`<tr>
         <td><strong>${esc(l.responsavel)}</strong><br><span style="font-size:11px;color:var(--text3)">${esc(l.telefone||'')}</span>${l.cadastroForm?`<br><span style="font-size:10px;background:#e7f3ec;color:#1f6b45;border-radius:8px;padding:1px 6px">📋 ${l.cadastroForm.doctoralia?'Lançado no Doctoralia':'Formulário recebido'}</span>`:''}</td>
         <td>${esc(l.paciente||'—')}</td><td>${esc(l.servico||'—')}</td><td>${esc(l.origem||'—')}</td><td>${esc(l.escola||'—')}</td>
