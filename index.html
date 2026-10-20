@@ -114,15 +114,20 @@ function cxDashTop(){
   const andamento=leads.filter(l=>l.status!=='Fechado'&&l.status!=='Perdido');
   const lem=cxLembretes();
   const ativos=getConvertidos().filter(p=>p.ativo!==false).length;
-  const convMes=loadConvAntigos().filter(p=>p.leadConvertido===true).length+leads.filter(l=>l.status==='Fechado'&&l.data&&l.data.startsWith(anoMes)).length;
-  const fech=leads.filter(l=>l.status==='Fechado').length;
-  const pct=leads.length?Math.round(fech/leads.length*100):0;
+  // Convertidos no mês = leads fechados cuja data de entrada é do mês atual.
+  // (Antes somava também TODOS os pacientes antigos marcados como "lead convertido", de qualquer mês.)
+  const leadsMes=leads.filter(l=>l.data&&l.data.startsWith(anoMes));
+  const fechMesL=leadsMes.filter(l=>l.status==='Fechado').length;
+  const convMes=fechMesL;
+  const fech=fechMesL;
+  const pct=leadsMes.length?Math.round(fechMesL/leadsMes.length*100):0;
+  const semProx=andamento.filter(l=>!l.prox_contato).length;
   const kpi=(ic,cor,bg,v,l,s,cls)=>`<div class="cx-kpi"><div class="cx-kpi-ic" style="background:${bg};color:${cor}">${cxIco(ic)}</div><div><div class="cx-kpi-v">${v}</div><div class="cx-kpi-l">${l}</div><div class="cx-kpi-s ${cls||''}">${s}</div></div></div>`;
   const kpis=`<div class="cx-kpis">`
-    +kpi('users2','#B2680E','#FBF1E2',andamento.length,'Leads em andamento',lem.atrasados?lem.atrasados+(lem.atrasados>1?' atrasados':' atrasado'):'Nenhum atrasado',lem.atrasados?'bad':'ok')
+    +kpi('users2','#B2680E','#FBF1E2',andamento.length,'Leads em andamento',lem.atrasados?lem.atrasados+(lem.atrasados>1?' atrasados':' atrasado'):(semProx?semProx+' sem próximo contato':'Nenhum atrasado'),(lem.atrasados||semProx)?'bad':'ok')
     +kpi('usercheck','#15558A','#E8F0F8',ativos,'Pacientes ativos','Em acompanhamento')
     +kpi('userplus','#1E6B3A','#EAF3EF',convMes,'Convertidos no mês',hoje.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}))
-    +kpi('percent','#6C3483','#F5EEF8',pct+'%','Taxa de conversão',fech+' de '+leads.length+' leads')
+    +kpi('percent','#6C3483','#F5EEF8',pct+'%','Taxa de conversão',fech+' de '+leadsMes.length+' leads do mês')
     +`</div>`;
   const nomeL=l=>esc(l.responsavel||l.paciente||'—')+(l.paciente&&l.responsavel?` <span>/ ${esc(l.paciente)}</span>`:'');
   const rows=lem.lista.map(l=>{const at=l.prox_contato<lem.hoje;const ini=(l.responsavel||l.paciente||'?').trim()[0].toUpperCase();
