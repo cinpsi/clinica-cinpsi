@@ -3729,13 +3729,19 @@ function syncTodosConvertidos(){
 function renderConvertidos(c){
   syncTodosConvertidos();
   const todos=getConvertidos();
-  const ters=[...new Set(todos.map(p=>p.terapeuta).filter(Boolean))].sort();
+  // Filtro de terapeutas: profissionais com pacientes ativos no topo; os demais (ex-profissionais, nomes antigos) em grupo separado.
+  const cvTerNorm=n=>{ const t=normTer(n); return /^nayra vieira/i.test(t)?'Nayra Vieira':t; };
+  const _terAtivas=new Set(todos.filter(p=>p.ativo!==false&&p.terapeuta).map(p=>cvTerNorm(p.terapeuta)));
+  const _terTodas=new Set(todos.filter(p=>p.terapeuta).map(p=>cvTerNorm(p.terapeuta)));
+  const tersAtivas=[..._terAtivas].sort((a,b)=>a.localeCompare(b));
+  const tersOutras=[..._terTodas].filter(t=>!_terAtivas.has(t)).sort((a,b)=>a.localeCompare(b));
   c.innerHTML=`
   <div class="filters">
     <input class="filter-input filter-search" type="text" placeholder="🔍  Buscar nome, terapeuta..." id="cv-s" oninput="refreshConv()">
     <select class="filter-input filter-select" id="cv-ter" onchange="refreshConv()">
       <option value="">Todas as terapeutas</option>
-      ${ters.map(t=>`<option>${esc(t)}</option>`).join('')}
+      ${tersAtivas.map(t=>`<option>${esc(t)}</option>`).join('')}
+      ${tersOutras.length?`<optgroup label="Sem pacientes ativos / outros">${tersOutras.map(t=>`<option>${esc(t)}</option>`).join('')}</optgroup>`:''}
     </select>
     <select class="filter-input filter-select" id="cv-tipo" onchange="refreshConv()">
       <option value="">Todos</option>
@@ -3767,7 +3773,7 @@ function refreshConv(){
 
   const fl=todos.filter(p=>{
     const mQ=!q||[p.paciente,p.responsavel,p.terapeuta].some(v=>(v||'').toLowerCase().includes(q));
-    const mT=!fT||(p.terapeuta||'').toLowerCase()===fT;
+    const mT=!fT||(()=>{ const t=normTer(p.terapeuta||''); return (/^nayra vieira/i.test(t)?'Nayra Vieira':t).toLowerCase()===fT; })();
     const isLead=p.leadConvertido===true;
     const mTipo=!fTipo||(fTipo==='lead'?isLead:!isLead);
     const isAtivo=p.ativo!==false;
