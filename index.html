@@ -108,6 +108,9 @@ function cxAbrir(i){
   document.getElementById('cx-q').value='';
   if(r.t==='lead') openLeadModal(r.id); else openConvModal(r.id);
 }
+function cxIrLeads(preset){ window._leadPresetNext=preset; showView('leads'); }
+function cxIrPacientes(){ showView('convertidos'); setTimeout(()=>{ const s=document.getElementById('cv-status'); if(s){ s.value='ativo'; } try{refreshConv();}catch(e){} },60); }
+function cxLimparPreset(){ window._leadPreset=null; refreshLeads(); }
 function cxDashTop(){
   const leads=loadLeads();
   const hoje=new Date(),anoMes=hoje.getFullYear()+'-'+String(hoje.getMonth()+1).padStart(2,'0');
@@ -122,12 +125,12 @@ function cxDashTop(){
   const fech=fechMesL;
   const pct=leadsMes.length?Math.round(fechMesL/leadsMes.length*100):0;
   const semProx=andamento.filter(l=>!l.prox_contato).length;
-  const kpi=(ic,cor,bg,v,l,s,cls)=>`<div class="cx-kpi"><div class="cx-kpi-ic" style="background:${bg};color:${cor}">${cxIco(ic)}</div><div><div class="cx-kpi-v">${v}</div><div class="cx-kpi-l">${l}</div><div class="cx-kpi-s ${cls||''}">${s}</div></div></div>`;
+  const kpi=(ic,cor,bg,v,l,s,cls,go,goSub)=>`<div class="cx-kpi"${go?` style="cursor:pointer" title="Clique para ver a lista" onclick="${go}"`:''}><div class="cx-kpi-ic" style="background:${bg};color:${cor}">${cxIco(ic)}</div><div><div class="cx-kpi-v">${v}</div><div class="cx-kpi-l">${l}</div><div class="cx-kpi-s ${cls||''}"${goSub?` style="text-decoration:underline" title="Ver quais são" onclick="event.stopPropagation();${goSub}"`:''}>${s}</div></div></div>`;
   const kpis=`<div class="cx-kpis">`
-    +kpi('users2','#B2680E','#FBF1E2',andamento.length,'Leads em andamento',lem.atrasados?lem.atrasados+(lem.atrasados>1?' atrasados':' atrasado'):(semProx?semProx+' sem próximo contato':'Nenhum atrasado'),(lem.atrasados||semProx)?'bad':'ok')
-    +kpi('usercheck','#15558A','#E8F0F8',ativos,'Pacientes ativos','Em acompanhamento')
-    +kpi('userplus','#1E6B3A','#EAF3EF',convMes,'Convertidos no mês',hoje.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}))
-    +kpi('percent','#6C3483','#F5EEF8',pct+'%','Taxa de conversão',fech+' de '+leadsMes.length+' leads do mês')
+    +kpi('users2','#B2680E','#FBF1E2',andamento.length,'Leads em andamento',lem.atrasados?lem.atrasados+(lem.atrasados>1?' atrasados':' atrasado'):(semProx?semProx+' sem próximo contato':'Nenhum atrasado'),(lem.atrasados||semProx)?'bad':'ok',"cxIrLeads('andamento')",(!lem.atrasados&&semProx)?"cxIrLeads('semprox')":'')
+    +kpi('usercheck','#15558A','#E8F0F8',ativos,'Pacientes ativos','Em acompanhamento','',"cxIrPacientes()")
+    +kpi('userplus','#1E6B3A','#EAF3EF',convMes,'Convertidos no mês',hoje.toLocaleDateString('pt-BR',{month:'long',year:'numeric'}),'',"cxIrLeads('fechados_mes')")
+    +kpi('percent','#6C3483','#F5EEF8',pct+'%','Taxa de conversão',fech+' de '+leadsMes.length+' leads do mês','',"cxIrLeads('mes')")
     +`</div>`;
   const nomeL=l=>esc(l.responsavel||l.paciente||'—')+(l.paciente&&l.responsavel?` <span>/ ${esc(l.paciente)}</span>`:'');
   const rows=lem.lista.map(l=>{const at=l.prox_contato<lem.hoje;const ini=(l.responsavel||l.paciente||'?').trim()[0].toUpperCase();
@@ -3420,10 +3423,11 @@ function dashImprimirConvertidos(){
 // LEADS VIEW
 // ════════════════════════════════════════════════════════════
 function renderLeadsView(c){
+  window._leadPreset=window._leadPresetNext||null; window._leadPresetNext=null;
   c.innerHTML=`
   <div class="filters">
     <input class="filter-input filter-search" type="text" placeholder="🔍  Buscar nome, telefone..." id="ls" oninput="refreshLeads()">
-    <select class="filter-input filter-select" id="lfs" onchange="refreshLeads()">
+    <select class="filter-input filter-select" id="lfs" onchange="window._leadPreset=null;refreshLeads()">
       <option value="">Todos os status</option>
       <option>Novo</option><option>Em Contato</option><option>Interessado</option>
       <option>Proposta Enviada</option><option>Aguardando</option><option>Fechado</option><option>Perdido</option>
@@ -3447,7 +3451,9 @@ function getFilteredLeads(){
     const mQ=!q||[l.responsavel,l.paciente,l.telefone,l.observacao,l.escola].some(v=>(v||'').toLowerCase().includes(q));
     const mS=!fs||(l.status||'').toLowerCase()===fs;
     const mO=!fo||(l.origem||'').toLowerCase()===fo;
-    return mQ&&mS&&mO;
+    const P=window._leadPreset, am=new Date().toISOString().slice(0,7);
+    const mP=!P||(P==='andamento'?(l.status!=='Fechado'&&l.status!=='Perdido'):P==='semprox'?(l.status!=='Fechado'&&l.status!=='Perdido'&&!l.prox_contato):P==='fechados_mes'?(l.status==='Fechado'&&(l.data||'').startsWith(am)):P==='mes'?(l.data||'').startsWith(am):true);
+    return mQ&&mS&&mO&&mP;
   }).sort((a,b)=>(b.data||'').localeCompare(a.data||''));
 }
 
@@ -3463,6 +3469,13 @@ function refreshLeads(){
   const fl=getFilteredLeads();
   const body=document.getElementById('leads-body');
   if(!body) return;
+  {
+    const LBL={andamento:'Leads em andamento',semprox:'Leads em andamento sem próximo contato',fechados_mes:'Convertidos no mês (leads fechados)',mes:'Leads do mês'};
+    let bar=document.getElementById('lead-preset-bar');
+    if(!bar){ bar=document.createElement('div'); bar.id='lead-preset-bar'; body.parentNode.insertBefore(bar,body); }
+    const P=window._leadPreset;
+    bar.innerHTML=P?`<div style="display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:8px 12px;background:var(--purple-light);border:1px solid var(--purple);border-radius:var(--radius-sm);font-size:13px;color:var(--purple)">Filtro do painel: <strong>${LBL[P]||P}</strong> · ${fl.length} lead${fl.length!==1?'s':''}<button class="btn-ghost" style="margin-left:auto;font-size:12px;padding:3px 10px" onclick="cxLimparPreset()">✕ Limpar filtro</button></div>`:'';
+  }
   if(leadViewMode==='tabela'){
     if(!fl.length){body.innerHTML=`<div class="empty-state"><div class="empty-icon">📥</div><p>Nenhum lead encontrado.</p></div>`;return;}
     body.innerHTML=`<div class="data-table"><table>
