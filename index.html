@@ -2544,25 +2544,25 @@ function rvCorrigir(s){
     const p=rvPerc(x,f.p[k]); const z=f.dp[k]>0?Math.round((x-f.m[k])/f.dp[k]*100)/100:null;
     return Object.assign({k,nm,x,m:f.m[k],dp:f.dp[k],z,g:rvGuil(p)},p);
   });
-  return {anos,faixa:f,linhas,fonte:nor.fonte};
+  return {anos,faixa:f,linhas,fonte:nor.fonte,v,rd:rvRecDet(cfg,(s.reco||{}).resp)};
 }
 function rvTabCorr(c){
   const th='style="padding:4px 6px;background:#e9eff6;border:1px solid #b9c3cf;text-align:center"', td='style="padding:3px 6px;border:1px solid #b9c3cf;text-align:center"';
   const f1=n=>n===null||n===undefined?'—':String(n).replace('.',',');
   const lin=c.linhas.map(l=>{
     if(l.x===null) return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td} colspan="6">não calculável (divisão por zero)</td></tr>`;
-    const qual=(l.k==='IP'||l.k==='IR');
+    const qual=false;
     const cl=RV_CLS[l.cls];
     return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td}><b>${f1(l.x)}</b></td><td ${td}>${f1(l.m)} (${f1(l.dp)})</td><td ${td}>${f1(l.z)}</td><td ${td}>${esc(l.lbl)}</td><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left;${qual?'':'color:'+cl[2]+';font-weight:700'}">${qual?'análise qualitativa':esc(cl[0])+' · '+esc(cl[1])}</td><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${qual?'—':esc(l.g)}</td></tr>`;
   }).join('');
-  return `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th ${th}>Medida</th><th ${th}>Bruto</th><th ${th}>Média (DP)</th><th ${th}>Z</th><th ${th}>Percentil</th><th ${th}>Classificação (manual)</th><th ${th}>Guilmette (AACN)</th></tr></thead><tbody>${lin}</tbody></table>
-  <div style="font-size:11px;color:#586374;margin-top:4px">Tabela normativa ${c.faixa.tab}: ${c.faixa.max>=200?c.faixa.min+' anos ou mais':c.faixa.min+' a '+c.faixa.max+' anos'} (n=${c.faixa.n}) · idade na aplicação: ${c.anos} anos. Classificação sugerida pelo manual (Tabela 1): &lt;P5 déficit clínico; P5–P25 possível déficit; acima disso, típico. Interferência proativa/retroativa: interpretar qualitativamente. Coluna Guilmette: rótulos de percentil do consenso da AACN (Guilmette et al., 2020, Tabela 1).</div>`;
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th ${th}>Medida</th><th ${th}>Bruto</th><th ${th}>Média (DP)</th><th ${th}>Z</th><th ${th}>Percentil</th><th ${th}>Classificação (manual)</th><th ${th}>Guilmette (AACN)</th></tr></thead><tbody>${lin}${c.rd?`<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">Falso positivo (reconhecimento)</td><td ${td}><b>${c.rd.fp.length}</b></td><td ${td} colspan="5">–</td></tr>`:''}</tbody></table>
+  <div style="font-size:11px;color:#586374;margin-top:4px">Tabela normativa ${c.faixa.tab}: ${c.faixa.max>=200?c.faixa.min+' anos ou mais':c.faixa.min+' a '+c.faixa.max+' anos'} (n=${c.faixa.n}) · idade na aplicação: ${c.anos} anos. Classificação sugerida pelo manual (Tabela 1): &lt;P5 déficit clínico; P5–P25 possível déficit; acima disso, típico. Interferências: percentil mais alto indica índice maior, não necessariamente melhor desempenho; interpretar clinicamente. Coluna Guilmette: rótulos de percentil do consenso da AACN (Guilmette et al., 2020, Tabela 1).</div>`;
 }
 function rvHtmlCorr(s){
   const c=rvCorrigir(s);
   if(c.erro==='normas') return `<div style="background:#FFF6E0;border:1px solid #F0C36D;border-radius:10px;padding:12px;font-size:13px;margin-top:12px">As normas do RAVLT ainda não foram importadas. <button class="btn-primary" style="margin-left:8px" onclick="rvImportarNormas()">📥 Importar normas</button></div>`;
   if(c.erro) return `<div style="background:#FFF6E0;border:1px solid #F0C36D;border-radius:10px;padding:12px;font-size:13px;margin-top:12px">${esc(c.erro)}</div>`;
-  return `<h3 style="font-size:14px;margin:16px 0 6px">Correção (percentil e classificação)</h3>`+rvTabCorr(c);
+  return rvBlocoCorr(s,c);
 }
 function rvImportarNormas(){
   const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
@@ -2575,6 +2575,107 @@ function rvImportarNormas(){
     }catch(err){ toast('❌ '+err.message); } };
     r.readAsText(f); };
   inp.click();
+}
+// ── Detalhes do reconhecimento, gráfico e texto interpretativo (gerado por regras a partir dos escores) ──
+const RV_CHN=['Inferior - Déficit Clínico','Médio Inferior - Possível Déficit','Médio - Típico','Médio - Típico','Médio Superior - Típico','Superior - Típico'];
+const RV_CHC=[['#FBEDEC','#B3261E'],['#FFF4D6','#9A5B00'],['#E6F4EA','#1E6B34'],['#E6F4EA','#1E6B34'],['#E3EEFB','#0F58A8'],['#E3EEFB','#0F58A8']];
+function rvRecDet(cfg,resp){
+  const d={hitsA:0,om:[],fp:[],fpB:[],sem:[],fon:[],rejOk:0};
+  cfg.reconhecimento.forEach((it,i)=>{
+    const r=(resp||{})[i]; if(!r) return;
+    if(it.t==='A'){ if(r==='S') d.hitsA++; else d.om.push(it.p); return; }
+    if(r==='N'){ d.rejOk++; return; }
+    d.fp.push(it.p);
+    if(it.t==='B') d.fpB.push(it.p);
+    else if(/S/.test(it.c||'')) d.sem.push(it.p);
+    else d.fon.push(it.p);
+  });
+  return d;
+}
+function rvChip(l){ const c=RV_CHC[l.cls]; return `<span style="display:inline-block;background:${c[0]};color:${c[1]};border:1px solid ${c[1]}55;border-radius:5px;padding:0 6px;font-size:.92em;font-weight:700;white-space:nowrap">${RV_CHN[l.cls]}</span>`; }
+function rvPt(lbl){ return lbl==='< P5'?'abaixo de 5':lbl==='> P95'?'acima de 95':lbl.startsWith('entre')?lbl.replace('entre P','entre ').replace(' e P',' e '):lbl.replace('P','').replace(' a P',' a '); }
+function rvGrafico(c,s){
+  const cats=[['A1','A1'],['A2','A2'],['A3','A3'],['A4','A4'],['A5','A5'],['B1','Interferência (B1)'],['A6','Pós-interferência (A6)'],['A7','Evocação Tardia (A7)']];
+  const L={}; c.linhas.forEach(l=>L[l.k]=l);
+  const W=720,H=330,x0=46,y0=36,pw=W-x0-16,ph=190;
+  const mx=Math.max(16,...cats.map(([k])=>Math.max(L[k].x||0,L[k].m||0)));
+  const top=Math.ceil(mx/2)*2, gw=pw/cats.length, bw=gw*0.32, yy=v=>y0+ph-(v/top)*ph;
+  let g=`<text x="${W/2}" y="20" text-anchor="middle" font-size="14" font-weight="700" fill="#333">RAVLT - Pontos Brutos vs. Média</text>`;
+  for(let t=0;t<=top;t+=2) g+=`<line x1="${x0}" x2="${W-16}" y1="${yy(t)}" y2="${yy(t)}" stroke="#e5e8ec"/><text x="${x0-6}" y="${yy(t)+3}" text-anchor="end" font-size="9" fill="#666">${t}</text>`;
+  g+=`<text transform="translate(12,${y0+ph/2}) rotate(-90)" text-anchor="middle" font-size="10" fill="#666">Pontos Brutos</text>`;
+  cats.forEach(([k,lb],i)=>{
+    const cx=x0+gw*i+gw/2, m=L[k].m, v=L[k].x;
+    g+=`<rect x="${cx-bw-1}" y="${yy(m)}" width="${bw}" height="${ph-(yy(m)-y0)}" fill="#808080"/><text x="${cx-bw/2-1}" y="${yy(m)-4}" text-anchor="middle" font-size="9" font-weight="700" fill="#333">${String(m).replace('.',',')}</text>`;
+    g+=`<rect x="${cx+1}" y="${yy(v)}" width="${bw}" height="${ph-(yy(v)-y0)}" fill="#35a0e8"/><text x="${cx+bw/2+1}" y="${yy(v)-4}" text-anchor="middle" font-size="9" font-weight="700" fill="#333">${v}</text>`;
+    g+=`<text transform="translate(${cx},${y0+ph+10}) rotate(-35)" text-anchor="end" font-size="9" fill="#555">${esc(lb)}</text>`;
+  });
+  g+=`<rect x="${W/2-90}" y="${H-24}" width="12" height="10" fill="#808080"/><text x="${W/2-74}" y="${H-15}" font-size="10" fill="#444">Média</text><rect x="${W/2-20}" y="${H-24}" width="12" height="10" fill="#35a0e8"/><text x="${W/2-4}" y="${H-15}" font-size="10" fill="#444">${esc(s.pacNome||'Paciente')}</text>`;
+  return `<div style="margin-top:14px;page-break-inside:avoid"><svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:760px;font-family:Arial,Helvetica,sans-serif">${g}</svg></div>`;
+}
+function rvNarrativa(c,s){
+  const L={}; c.linhas.forEach(l=>L[l.k]=l); const v=c.v, rd=c.rd;
+  const n1=x=>String(x).replace('.',','), ch=k=>rvChip(L[k]), nm=k=>n1(L[k].m), pc=k=>'percentil '+rvPt(L[k].lbl);
+  const pl=n=>n+(n===1?' palavra':' palavras');
+  const lista=a=>a.join(', ');
+  const fp=rd.fp.length, nIntr=['A1','A2','A3','A4','A5','B1','A6','A7'].reduce((t,k)=>t+rvTot((s.tent||{})[k]).intr,0);
+  const aq=L.ET.cls<=1, plano=v.ALT<=0||L.ALT.cls<=1, a1ok=L.A1.cls>=2, recDef=L.REC.cls<=1, fpAlto=fp/35>=0.25;
+  const maxPos=Math.max(v.A2,v.A3,v.A4,v.A5);
+  // ── Análise detalhada ──
+  const D=[];
+  let t=`A1 (${pl(v.A1)}; ${pc('A1')}) é ${ch('A1')}, ${v.A1>L.A1.m+0.5?'acima da':v.A1<L.A1.m-0.5?'abaixo da':'próxima da'} média normativa de ${nm('A1')}. `;
+  t+=`Nas tentativas seguintes: ${['A2','A3','A4','A5'].map(k=>`${k} (${v[k]}) ${ch(k)}`).join('; ')}. `;
+  t+=`O Escore Total A1–A5 (${v.ET}; média ${nm('ET')}) é ${ch('ET')} e a Aprendizagem ao Longo das Tentativas (ALT = ${v.ALT}) é ${ch('ALT')}`;
+  t+=v.ALT<0?', o que traduz curva descendente em relação ao ponto de partida (A1), sem o ganho esperado com a repetição.':L.ALT.cls<=1?', o que indica ganho com a repetição inferior ao esperado para a idade.':', compatível com ganho adequado ao longo das repetições.';
+  if(a1ok&&aq) t+=' Como A1 é típica e as demais tentativas ficam abaixo do esperado, o platô pode refletir codificação ineficiente, instabilidade atencional ou oscilação de esforço.';
+  D.push(['Aquisição e curva de aprendizagem',t]);
+  t=`B1 (${pl(v.B1)}; ${pc('B1')}) é ${ch('B1')}. `;
+  if(v.IP!==null) t+=`A interferência proativa (B1/A1 = ${n1(v.IP)}) é ${ch('IP')}${L.IP.cls<=1?', indicando que o aprendizado da lista B foi menor em relação ao de A1'+(a1ok?'; parte desse resultado decorre de A1 típica combinada com B1 baixa':''):', sem indício de prejuízo do aprendizado novo pela lista A'}. `;
+  if(v.IR!==null) t+=`A interferência retroativa (A6/A5 = ${n1(v.IR)}; ${pc('IR')}) é ${ch('IR')}: ${v.IR>=1?'A6 manteve o nível de A5 e a lista B não reduziu a evocação da lista A':L.IR.cls<=1?'A6 ficou nitidamente abaixo de A5, sugerindo vulnerabilidade à interferência retroativa':'A6 ficou discretamente abaixo de A5, dentro do esperado'}.`;
+  D.push(['Interferências',t]);
+  t=`A6 (${pl(v.A6)}) é ${ch('A6')}`+(v.A7===v.A6?' e A7 ('+pl(v.A7)+') é '+ch('A7')+', mantendo o mesmo nível. ':', e A7 ('+pl(v.A7)+') é '+ch('A7')+', com '+pc('A7')+'. ');
+  if(v.A7>v.A6) t+='A evocação tardia superior à imediata é um contraste importante: sugere acesso variável às representações, com recuperação mais eficiente em A7 do que em A6. ';
+  else if(v.A7<v.A6) t+=`Houve perda de ${pl(v.A6-v.A7)} entre A6 e A7, compatível com esquecimento após o intervalo. `;
+  if(v.VE!==null) t+=`A Velocidade de Esquecimento (A7/A6 = ${n1(v.VE)}) é ${ch('VE')}${v.VE>1?', valor que reflete recuperação em A7 maior que em A6 e não retenção excepcional':L.VE.cls<=1?', indicando perda relevante de conteúdo ao longo do intervalo':', compatível com retenção esperada'}.`;
+  D.push(['Evocação e retenção',t]);
+  t=`O escore de reconhecimento (${v.REC}) é ${ch('REC')}, ${v.REC<L.REC.m?'abaixo':'acima'} da média normativa de ${nm('REC')}. Foram reconhecidos ${rd.hitsA} dos 15 alvos${rd.hitsA<15?(rd.hitsA>=10?', acerto parcial':', acerto baixo'):''}, com ${fp} falsos positivos em 35 distratores; o escore é calculado como alvos reconhecidos menos falsos positivos (${rd.hitsA} − ${fp} = ${v.REC}). `;
+  t+=recDef&&fp>=rd.hitsA?'O reconhecimento, que deveria favorecer a recuperação, não a favoreceu: o ganho possível sobre a evocação livre foi anulado pela aceitação de itens que não estavam na lista.':recDef?'O reconhecimento ficou abaixo do esperado.':'O reconhecimento está dentro do esperado'+(aq||L.A7.cls<=1?', o que sugere que parte do conteúdo foi armazenada e que a dificuldade está na recuperação espontânea.':'.');
+  D.push(['Reconhecimento',t]);
+  t=`Houve ${rd.om.length} omissões${rd.om.length?' ('+lista(rd.om)+')':''} e ${fp} falsos positivos: ${rd.fpB.length} da lista B, ${rd.sem.length} semânticos e ${rd.fon.length} fonológicos. `;
+  t+=`A taxa de falsos alarmes é de cerca de ${Math.round(fp/35*100)}% (${fp}/35) e restaram ${rd.rejOk} rejeições corretas. `;
+  if(rd.fpB.length) t+=`A maior concentração está na lista B (${rd.fpB.length} de 15 palavras possíveis, cerca de ${Math.round(rd.fpB.length/15*100)}%)${rd.fpB.length>=5?', o que sugere falha de monitoramento da fonte (dificuldade em identificar de qual lista a palavra veio), diferente da interferência retroativa, que é medida por A6/A5':''}. `;
+  if(rd.sem.length) t+=`Os ${rd.sem.length} falsos positivos semânticos (${lista(rd.sem)}) indicam aceitação por semelhança de significado. `;
+  if(rd.fon.length) t+=`Os ${rd.fon.length} fonológicos (${lista(rd.fon)}) indicam que a semelhança sonora também levou à aceitação. `;
+  if(nIntr) t+=`Na evocação livre (A1–A7) foram registradas ${nIntr} intrusões (palavras ditas que não pertencem à lista-alvo). `;
+  if(fp/35>=0.25) t+='Em conjunto, os três tipos de erro apontam para discriminação pouco precisa em todos os níveis, com predomínio do erro de fonte.';
+  D.push(['Intrusões e erros de reconhecimento',t]);
+  // ── Impressão clínica ──
+  const it=[];
+  it.push(aq&&plano?`a ausência de ganho adequado com a repetição${a1ok?': após uma primeira tentativa típica, o avaliando não ultrapassou '+pl(maxPos)+' em nenhuma das quatro apresentações seguintes':''}`:aq?'aprendizagem abaixo do esperado ao longo das tentativas':`curva de aprendizagem compatível com o esperado (Escore Total ${ch('ET')})`);
+  it.push(v.A7>=v.A6&&L.A7.cls>=2?`a retenção, que não acompanha a dificuldade de aquisição: A7 (${pl(v.A7)}) é típica e ${v.A7>v.A6?'supera':'iguala'} A6 (${v.A6})${v.VE!==null?', com Velocidade de Esquecimento '+ch('VE'):''}`:v.A7<v.A6&&L.VE&&L.VE.cls<=1?`a perda de conteúdo entre A6 e A7 (Velocidade de Esquecimento ${n1(v.VE)}, ${ch('VE')})`:L.A7.cls<=1?`a evocação tardia rebaixada (A7 = ${v.A7}, ${ch('A7')})`:'a evocação tardia dentro do esperado');
+  it.push(recDef&&fpAlto?`o reconhecimento, com ${fp} falsos positivos em 35 distratores, que anula o benefício dos ${rd.hitsA} alvos reconhecidos e produz escore ${v.REC<0?'negativo':'rebaixado'} (${v.REC})`:recDef?`o reconhecimento rebaixado (${v.REC})`:`o reconhecimento preservado (${v.REC}; ${rd.hitsA}/15 alvos e ${fp} falsos positivos)`);
+  const ord=['primeiro','segundo','terceiro'];
+  const I=[];
+  I.push(`O perfil reúne três achados que se relacionam entre si. ${it.map((x,i)=>'O '+ord[i]+' é '+x+'.').join(' ')}`);
+  let p2;
+  if(aq&&plano&&recDef&&fpAlto) p2='A combinação de curva plana, evocações rebaixadas e reconhecimento pouco específico aponta para funcionamento instável da recuperação, mais do que para perda uniforme de armazenamento. Os dados sugerem oscilação atencional ou de esforço e estratégia de codificação e recuperação pouco eficiente, com baixo monitoramento das respostas'+(a1ok?'; a sequência de A1 típica seguida de platô é compatível com esse quadro':'')+'. Deve-se considerar também variação de engajamento na tarefa, o que limita a confiabilidade do conjunto.';
+  else if(aq&&!recDef) p2='Reconhecimento preservado diante de evocação espontânea rebaixada sugere que o conteúdo foi, ao menos em parte, armazenado, com dificuldade principal na codificação eficiente e/ou na recuperação espontânea.';
+  else if(!aq&&v.A7<v.A6&&L.VE&&L.VE.cls<=1) p2='Aprendizagem adequada seguida de perda após o intervalo sugere dificuldade de consolidação e retenção em longo prazo, devendo ser correlacionada ao contexto clínico.';
+  else if(!aq&&!recDef&&L.A7.cls>=2) p2='Não há alterações relevantes nas medidas de aprendizagem, retenção e reconhecimento, em padrão compatível com desempenho típico para a idade.';
+  else p2='Os achados são mistos entre as medidas; recomenda-se correlacionar cada uma delas com as observações do comportamento durante a tarefa e com a história clínica.';
+  I.push(p2);
+  const irTxt=L.IR&&v.IR!==null?`interferência retroativa (A6/A5 = ${n1(v.IR)}) é ${ch('IR')}`:'';
+  const ipTxt=L.IP&&v.IP!==null?`interferência proativa (B1/A1 = ${n1(v.IP)}) é ${ch('IP')}`:'';
+  I.push(`Sobre os índices de interferência: a ${[irTxt,ipTxt].filter(Boolean).join(' e a ')}. ${(v.IR!==null&&L.IR.cls<=1)?'Há sinal de vulnerabilidade à interferência retroativa.':'Não há sinal consistente de vulnerabilidade global à interferência'}${(v.IP!==null&&L.IP.cls<=1)?', mas o índice proativo reduzido deve ser lido junto com a primeira tentativa (A1) e com B1.':'.'}`);
+  I.push((aq||recDef)?'Em termos funcionais, esse padrão pode se manifestar como necessidade de repetição de informações, desempenho irregular entre momentos e erros de atribuição de fonte. A interpretação deve ser contextualizada com anamnese, observação do comportamento durante a aplicação e outros instrumentos (atenção sustentada, controle inibitório, funções executivas e medida de validade de desempenho).':'A interpretação deve ser contextualizada com anamnese e observação do comportamento durante a aplicação.');
+  return {I,D};
+}
+function rvBlocoCorr(s,c){
+  const nar=rvNarrativa(c,s);
+  const hd=t=>`<div style="display:inline-block;background:#04253D;color:#fff;border-radius:999px;padding:3px 12px;font-size:12px;font-weight:700;margin:16px 0 8px">${t}</div>`;
+  return `<h3 style="font-size:14px;margin:16px 0 6px">Correção (percentil e classificação)</h3>`+rvTabCorr(c)+rvGrafico(c,s)+
+    hd('IMPRESSÃO CLÍNICA')+nar.I.map(p=>`<p style="font-size:12px;line-height:1.55;margin:6px 0;text-align:left">${p}</p>`).join('')+
+    hd('ANÁLISE DETALHADA')+nar.D.map(d=>`<div style="page-break-inside:avoid"><div style="font-size:11px;font-weight:700;color:#04253D;letter-spacing:.04em;text-transform:uppercase;margin:10px 0 3px;border-bottom:1px solid #cdd5df">${d[0]}</div><p style="font-size:12px;line-height:1.55;margin:4px 0;text-align:left">${d[1]}</p></div>`).join('')+
+    `<p style="font-size:10.5px;color:#6b7686;margin-top:12px">Texto gerado automaticamente pelas regras do sistema a partir dos escores e das normas do manual. É apoio técnico: a interpretação clínica e a conclusão são de responsabilidade do profissional.</p>`;
 }
 // ── PDF de registro (layout CINPSI; impresso pelo navegador → "Salvar como PDF") ──
 function rvPdf(id,corr){
@@ -2610,7 +2711,7 @@ function rvPdf(id,corr){
   <h2>Reconhecimento (S = estava na lista · N = não estava)</h2>
   <div class="rg">${reco}</div>
   <p style="margin:6px 0 0"><b>Acertos:</b> ${r.ac}/50 · <b>Falsos positivos:</b> ${r.fpB+r.fpO} (lista B: ${r.fpB}) · <b>Índice (acertos − 35):</b> ${r.indice}</p>
-  ${corr?(()=>{ const c=rvCorrigir(s); return '<h2>Correção normativa</h2>'+(c.erro?'<p>'+esc(c.erro==='normas'?'Normas não importadas.':c.erro)+'</p>':rvTabCorr(c)); })():''}
+  ${corr?(()=>{ const c=rvCorrigir(s); return '<h2>Correção normativa</h2>'+(c.erro?'<p>'+esc(c.erro==='normas'?'Normas não importadas.':c.erro)+'</p>':rvBlocoCorr(s,c)); })():''}
   <h2>Observações</h2><div class="ob">${esc(s.obs||'')}</div>
   <div class="ft">Registro gerado pelo sistema CINPSI em ${esc(new Date().toLocaleString('pt-BR'))}. Contém apenas o registro das respostas (transcrição de voz conferida pelo examinador; o áudio não foi armazenado). ${corr?'Percentis conforme normas brasileiras do manual do RAVLT (De Paula &amp; Malloy-Diniz). A interpretação clínica é de responsabilidade do profissional.':'Percentil e classificação não constam neste documento.'}</div>
   </body></html>`;
