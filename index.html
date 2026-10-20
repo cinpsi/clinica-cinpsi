@@ -11535,8 +11535,14 @@ function concDias(a,b){ return Math.abs((new Date(a+'T12:00:00')-new Date(b+'T12
 function concTokD(s){ return planNorm(s).replace(/[^a-z ]/g,' ').split(/\s+/).filter(w=>w.length>2&&!/^(de|da|do|dos|das|pix|enviado|enviada|pagamento|pagto|boleto|compra|cartao|debito|credito|outros|bancos|ltda|eireli|me|sa|conta|ref|referente|parcela)$/.test(w)); }
 function concChaveIgn(desc){ return concTokD(desc).slice(0,3).join(' '); }
 
-function concDespPropor(){
-  const fx=fluxoLoad().filter(m=>m.tipo==='saida'&&m.valor>0&&!m.conc);
+function concDespPropor(dias){
+  const todosFx=fluxoLoad();
+  const limite=dias?new Date(Date.now()-dias*864e5).toISOString().slice(0,10):'0000-00-00';
+  // Transferência interna = saída numa conta com entrada de mesmo valor (±3 dias) na OUTRA conta
+  // (ex.: InfinitePay → Santander), ou texto com o CNPJ da própria clínica.
+  const entradas=todosFx.filter(m=>m.tipo==='entrada');
+  const ehInterno=m=>/56616870000144/.test(m.desc||'')||entradas.some(e=>e.origem!==m.origem&&Math.abs(e.valor-m.valor)<0.005&&concDias(e.data,m.data)<=3);
+  const fx=todosFx.filter(m=>m.tipo==='saida'&&m.valor>0&&!m.conc&&m.data>=limite);
   const desps=finLoad(FK.DESP);
   const ign=concIgnLoad();
   const usados=new Set(desps.filter(d=>d.concFx).map(d=>d.id));
@@ -11544,7 +11550,7 @@ function concDespPropor(){
   const cand=[];
   fx.forEach(m=>{
     const d=m.desc||'';
-    if(CONC_INTERNO.test(d)){ ex.interno++; return; }
+    if(CONC_INTERNO.test(d)||ehInterno(m)){ ex.interno++; return; }
     if(CONC_FATURA.test(d)){ ex.fatura++; return; }
     if(CONC_REPASSE.test(d)){ ex.repasse++; return; }
     const ch=concChaveIgn(d);
@@ -11587,13 +11593,16 @@ function concDespPropor(){
   return {casadas,novas,ex,total:cand.length};
 }
 
-function concDespAbrir(silencioso){
-  const r=concDespPropor();
+function concDespAbrir(silencioso,dias){
+  if(dias!==undefined) window._concDias=dias;
+  const dd=window._concDias===undefined?60:window._concDias;
+  const r=concDespPropor(dd);
   window._concD=r;
   if(!r.casadas.length&&!r.novas.length){
-    if(!silencioso) toast('Tudo em dia: nenhuma saída do extrato sem conciliar.');
+    if(!silencioso) toast('Tudo em dia: nenhuma saída do extrato sem conciliar nesse período.');
     return;
   }
+  const semDesc=r.novas.filter(p=>!p.m.desc||p.m.desc==='Lançamento').length;
   document.getElementById('modal-conc')?.remove();
   const catSel=(i,cat)=>`<select class="form-select" style="font-size:11.5px;padding:3px 6px" id="cd-cat-${i}">${CONC_CATS.map(c=>`<option ${c===cat?'selected':''}>${c}</option>`).join('')}</select>`;
   const lCas=r.casadas.map((p,i)=>`<tr style="border-bottom:1px solid var(--border)">
@@ -11604,7 +11613,7 @@ function concDespAbrir(silencioso){
     <td style="padding:6px 8px;font-size:12px">${esc(p.d.desc)}<div style="font-size:10.5px;color:var(--text3)">venc. ${finFmtDate(p.d.vencimento||p.d.data)}${p.d.pago?' · já estava paga':''}</div></td>
     <td style="padding:6px 8px;text-align:center"><span style="font-size:11px;background:${p.conf==='alta'?'#D1FAE5':'#FEF3C7'};color:${p.conf==='alta'?'#065F46':'#92400E'};padding:2px 8px;border-radius:20px">${p.conf}</span></td></tr>`).join('');
   const lNov=r.novas.map((p,i)=>`<tr style="border-bottom:1px solid var(--border)" id="cd-nrow-${i}">
-    <td style="padding:6px 8px"><input type="checkbox" class="cd-nov" data-i="${i}" checked></td>
+    <td style="padding:6px 8px"><input type="checkbox" class="cd-nov" data-i="${i}" ${(!p.m.desc||p.m.desc==='Lançamento')?'':'checked'}></td>
     <td style="padding:6px 8px;font-size:12px;white-space:nowrap">${finFmtDate(p.m.data)}</td>
     <td style="padding:6px 8px;font-size:12px"><input class="form-input" style="font-size:12px;padding:3px 6px" id="cd-desc-${i}" value="${esc(p.m.desc)}"></td>
     <td style="padding:6px 8px;text-align:right;font-size:12.5px;font-weight:600;color:var(--red)">${finFmt(p.m.valor)}</td>
@@ -11620,6 +11629,8 @@ function concDespAbrir(silencioso){
     <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
       <div style="padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6">
         Saídas do extrato comparadas com as despesas lançadas (mesmo valor, data até 10 dias de diferença).
+        Período: <select class="form-select" style="font-size:12px;padding:2px 6px;width:auto;display:inline-block" onchange="concDespAbrir(false,+this.value)">${[[30,'últimos 30 dias'],[60,'últimos 60 dias'],[90,'últimos 90 dias'],[0,'todo o histórico']].map(o=>`<option value="${o[0]}" ${o[0]===dd?'selected':''}>${o[1]}</option>`).join('')}</select>
+        ${semDesc?`<br><span style="color:#92400E">⚠️ ${semDesc} saída${semDesc>1?'s':''} veio${semDesc>1?'ram':''} sem descrição na leitura do PDF — por isso estão desmarcadas. Confira o extrato e informe a descrição antes de lançar.</span>`:''}
         ${exTxt?`<br><span style="color:var(--text3)">Fora da análise: ${exTxt}.</span>`:''}
       </div>
       ${r.novas.length?`<div style="padding:10px 16px 4px;font-weight:600;font-size:13px">⚠️ Pagas no banco e não lançadas (${r.novas.length})</div>
