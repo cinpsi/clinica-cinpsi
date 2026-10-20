@@ -2273,9 +2273,10 @@ function rvHtmlAba(p,id,nome){
       <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
         <button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="rvAbrir('${s.id}')">${ok?'Abrir':'Continuar'}</button>
         <button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="rvPdf('${s.id}')">📄 PDF do registro</button>
+        ${ok?`<button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="rvPdf('${s.id}',true)">📊 PDF da correção</button>`:''}
         ${CU.role==='admin'?`<button class="btn-ghost" style="padding:4px 10px;font-size:12px;color:#b91c1c" onclick="rvExcluir('${s.id}')">🗑️ Excluir</button>`:''}
       </div></div>`;}).join(''):'<p style="font-size:13px;color:var(--text3);margin-top:12px">Nenhuma aplicação do RAVLT registrada para este paciente.</p>';
-  const cfgBtn=cfg&&CU.role==='admin'?`<div style="margin-top:14px"><button class="btn-ghost" style="font-size:12px" onclick="rvImportarCfg()">⚙️ Atualizar configuração (listas e normas)</button></div>`:'';
+  const cfgBtn=cfg&&CU.role==='admin'?`<div style="margin-top:14px"><button class="btn-ghost" style="font-size:12px" onclick="rvImportarCfg()">⚙️ Atualizar listas</button> <button class="btn-ghost" style="font-size:12px" onclick="rvImportarNormas()">⚙️ Importar/atualizar normas</button></div>`:'';
   return topo+lista+cfgBtn;
 }
 function rvImportarCfg(){
@@ -2491,20 +2492,88 @@ function rvHtmlFim(cfg){
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
     <button class="btn-primary" onclick="rvFinalizar(false)">💾 Salvar registro</button>
     <button class="btn-ghost" onclick="rvFinalizar(true)">📄 Salvar e gerar PDF do registro</button>
+    <button class="btn-ghost" onclick="rvFinalizar('corr')">📊 Salvar e gerar PDF da correção</button>
   </div>
-  <p style="font-size:12px;color:var(--text3);margin-top:10px">O registro guarda as respostas. A pontuação normativa (percentil e classificação) é a etapa de correção, feita depois.</p>`;
+  ${rvHtmlCorr(RV)}`;
 }
 function rvFinalizar(pdf){
   RV.obs=(document.getElementById('rv-obs')||{value:RV.obs}).value; RV.status='registrado'; RV.registradoEm=new Date().toISOString();
   rvSalvar(); toast('✅ Registro do RAVLT salvo.');
-  if(pdf) rvPdf(RV.id); else rvRender();
+  if(pdf) rvPdf(RV.id,pdf==='corr'); else rvRender();
 }
 function rvExcluir(id){
   if(CU.role!=='admin'||!confirm('Excluir esta aplicação do RAVLT? Não pode ser desfeito.')) return;
   finSave(RV_KEY,rvSess().filter(x=>x.id!==id)); if(document.getElementById('modal-testes')) teRenderFicha();
 }
+// ── Correção normativa (percentil, classificação e escore Z). Normas importadas (cinpsi_ravlt_normas), nunca no código. ──
+const RV_NOR='cinpsi_ravlt_normas';
+const RV_MED=[['A1','A1'],['A2','A2'],['A3','A3'],['A4','A4'],['A5','A5'],['B1','B1 (lista B)'],['A6','A6 (evocação imediata)'],['A7','A7 (evocação tardia)'],['REC','Reconhecimento'],['ET','Escore total (A1–A5)'],['ALT','ALT'],['VE','Veloc. esquecimento (A7/A6)'],['IP','Interf. proativa (B1/A1)'],['IR','Interf. retroativa (A6/A5)']];
+const RV_CLS=[['Desempenho inferior','Déficit clínico','#B3261E'],['Desempenho médio inferior','Possível déficit','#C77700'],['Desempenho médio','Típico','#2E7D32'],['Desempenho médio','Típico','#2E7D32'],['Desempenho médio superior','Típico','#1565C0'],['Desempenho superior','Típico','#1565C0']];
+function rvNor(){ const v=finLoad(RV_NOR); return v&&!Array.isArray(v)&&Array.isArray(v.faixas)&&v.faixas.length?v:null; }
+function rvIdadeAnos(nasc,data){ const m=String(rvIdadeTxt(nasc,data)).match(/^(\d+) anos/); return m?+m[1]:null; }
+function rvMedidas(s,cfg){
+  const a=k=>rvTot((s.tent||{})[k]).ac, r=rvReco(cfg,(s.reco||{}).resp);
+  const v={A1:a('A1'),A2:a('A2'),A3:a('A3'),A4:a('A4'),A5:a('A5'),B1:a('B1'),A6:a('A6'),A7:a('A7'),REC:r.indice};
+  v.ET=v.A1+v.A2+v.A3+v.A4+v.A5; v.ALT=v.ET-5*v.A1;
+  const d=(x,y)=>y>0?Math.round(x/y*100)/100:null;
+  v.VE=d(v.A7,v.A6); v.IP=d(v.B1,v.A1); v.IR=d(v.A6,v.A5);
+  return v;
+}
+// arr = [P5,P25,P50,P75,P95]. Valor fora dos pontos da tabela → faixa de percentil (como orienta o manual).
+function rvPerc(x,arr){
+  const P=[5,25,50,75,95];
+  if(x<arr[0]) return {lbl:'< P5',cls:0};
+  if(x>arr[4]) return {lbl:'> P95',cls:5};
+  const k=arr.findIndex(q=>q===x);
+  if(k>=0){ let u=k; while(u+1<5&&arr[u+1]===x) u++; return {lbl:u>k?'P'+P[k]+' a P'+P[u]:'P'+P[k],cls:Math.min(k+1,4)}; }
+  let i=0; while(i<4&&!(x>arr[i]&&x<arr[i+1])) i++;
+  return {lbl:'entre P'+P[i]+' e P'+P[i+1],cls:i+1};
+}
+function rvCorrigir(s){
+  const cfg=rvCfg(); if(!cfg) return {erro:'Configuração do RAVLT não importada.'};
+  const nor=rvNor(); if(!nor) return {erro:'normas'};
+  const anos=rvIdadeAnos(s.nasc,s.data); if(anos===null) return {erro:'Data de nascimento do paciente não cadastrada.'};
+  const f=nor.faixas.find(f=>anos>=f.min&&anos<=f.max); if(!f) return {erro:'Ainda não há tabela normativa carregada para '+anos+' anos.'};
+  const v=rvMedidas(s,cfg);
+  const linhas=RV_MED.map(([k,nm])=>{
+    const x=v[k]; if(x===null||x===undefined) return {k,nm,x:null};
+    const p=rvPerc(x,f.p[k]); const z=f.dp[k]>0?Math.round((x-f.m[k])/f.dp[k]*100)/100:null;
+    return Object.assign({k,nm,x,m:f.m[k],dp:f.dp[k],z},p);
+  });
+  return {anos,faixa:f,linhas,fonte:nor.fonte};
+}
+function rvTabCorr(c){
+  const th='style="padding:4px 6px;background:#e9eff6;border:1px solid #b9c3cf;text-align:center"', td='style="padding:3px 6px;border:1px solid #b9c3cf;text-align:center"';
+  const f1=n=>n===null||n===undefined?'—':String(n).replace('.',',');
+  const lin=c.linhas.map(l=>{
+    if(l.x===null) return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td} colspan="5">não calculável (divisão por zero)</td></tr>`;
+    const qual=(l.k==='IP'||l.k==='IR');
+    const cl=RV_CLS[l.cls];
+    return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td}><b>${f1(l.x)}</b></td><td ${td}>${f1(l.m)} (${f1(l.dp)})</td><td ${td}>${f1(l.z)}</td><td ${td}>${esc(l.lbl)}</td><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left;${qual?'':'color:'+cl[2]+';font-weight:700'}">${qual?'análise qualitativa':esc(cl[0])+' · '+esc(cl[1])}</td></tr>`;
+  }).join('');
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th ${th}>Medida</th><th ${th}>Bruto</th><th ${th}>Média (DP)</th><th ${th}>Z</th><th ${th}>Percentil</th><th ${th}>Classificação</th></tr></thead><tbody>${lin}</tbody></table>
+  <div style="font-size:11px;color:#586374;margin-top:4px">Tabela normativa ${c.faixa.tab}: ${c.faixa.max>=200?c.faixa.min+' anos ou mais':c.faixa.min+' a '+c.faixa.max+' anos'} (n=${c.faixa.n}) · idade na aplicação: ${c.anos} anos. Classificação sugerida pelo manual (Tabela 1): &lt;P5 déficit clínico; P5–P25 possível déficit; acima disso, típico. Interferência proativa/retroativa: interpretar qualitativamente.</div>`;
+}
+function rvHtmlCorr(s){
+  const c=rvCorrigir(s);
+  if(c.erro==='normas') return `<div style="background:#FFF6E0;border:1px solid #F0C36D;border-radius:10px;padding:12px;font-size:13px;margin-top:12px">As normas do RAVLT ainda não foram importadas. <button class="btn-primary" style="margin-left:8px" onclick="rvImportarNormas()">📥 Importar normas</button></div>`;
+  if(c.erro) return `<div style="background:#FFF6E0;border:1px solid #F0C36D;border-radius:10px;padding:12px;font-size:13px;margin-top:12px">${esc(c.erro)}</div>`;
+  return `<h3 style="font-size:14px;margin:16px 0 6px">Correção (percentil e classificação)</h3>`+rvTabCorr(c);
+}
+function rvImportarNormas(){
+  const inp=document.createElement('input'); inp.type='file'; inp.accept='.json';
+  inp.onchange=e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+    r.onload=ev=>{ try{
+      const j=JSON.parse(ev.target.result);
+      if(j.tipo!=='ravlt_normas'||!Array.isArray(j.faixas)||!j.faixas.length) throw new Error('arquivo de normas inválido');
+      finSave(RV_NOR,j); toast('✅ Normas do RAVLT importadas ('+j.faixas.length+' faixas etárias).');
+      if(document.getElementById('modal-ravlt')) rvRender(); else if(document.getElementById('modal-testes')) teRenderFicha();
+    }catch(err){ toast('❌ '+err.message); } };
+    r.readAsText(f); };
+  inp.click();
+}
 // ── PDF de registro (layout CINPSI; impresso pelo navegador → "Salvar como PDF") ──
-function rvPdf(id){
+function rvPdf(id,corr){
   const s=(RV&&RV.id===id?RV:null)||rvSess().find(x=>x.id===id), cfg=rvCfg(); if(!s||!cfg){ toast('Registro ou configuração não encontrados.'); return; }
   const cab=['A1','A2','A3','A4','A5','B1','A6','A7'];
   const nLin=Math.max(1,...cab.map(k=>(((s.tent||{})[k]||{}).ordem||[]).length));
@@ -2524,7 +2593,7 @@ function rvPdf(id){
   .rg{display:grid;grid-template-columns:repeat(5,1fr);gap:3px}.rc{display:flex;gap:4px;border:1px solid #cdd5df;border-radius:4px;padding:2px 5px}.rc span{flex:1;text-align:left}.rc.x{background:#FBEDEC;border-color:#E3A5A0}.rc i{width:12px;font-style:normal}
   .ob{border:1px solid #cdd5df;border-radius:6px;padding:8px;min-height:50px;white-space:pre-wrap}.ft{margin-top:14px;font-size:9px;color:#6b7686;border-top:1px solid #cdd5df;padding-top:6px}
   </style></head><body>
-  <div class="hd"><img src="${RV_LOGO}"><div class="t"><h1>Registro de aplicação — RAVLT</h1><p>Teste de Aprendizagem Auditivo-Verbal de Rey · coleta de respostas</p></div></div>
+  <div class="hd"><img src="${RV_LOGO}"><div class="t"><h1>${corr?'Correção':'Registro de aplicação'} — RAVLT</h1><p>Teste de Aprendizagem Auditivo-Verbal de Rey · ${corr?'percentis e classificação':'coleta de respostas'}</p></div></div>
   <div class="id"><div><b>Paciente:</b> ${esc(s.pacNome)}</div><div><b>Nascimento:</b> ${s.nasc?esc(preCadFmtData(s.nasc.slice(0,10))):'—'}</div><div><b>Idade na aplicação:</b> ${esc(rvIdadeTxt(s.nasc,s.data)||'—')}</div>
   <div><b>Data:</b> ${esc(preCadFmtData(s.data))}</div><div><b>Sexo:</b> ${s.sexo==='F'?'Feminino':s.sexo==='M'?'Masculino':'—'}</div><div><b>Escolaridade:</b> ${esc(s.escolaridade||'—')}</div><div style="grid-column:1/-1"><b>Examinador:</b> ${esc(s.examinador||'—')}</div></div>
   <h2>Palavras evocadas por tentativa (na ordem em que a criança falou)</h2>
@@ -2537,8 +2606,9 @@ function rvPdf(id){
   <h2>Reconhecimento (S = estava na lista · N = não estava)</h2>
   <div class="rg">${reco}</div>
   <p style="margin:6px 0 0"><b>Acertos:</b> ${r.ac}/50 · <b>Falsos positivos:</b> ${r.fpB+r.fpO} (lista B: ${r.fpB}) · <b>Índice (acertos − 35):</b> ${r.indice}</p>
+  ${corr?(()=>{ const c=rvCorrigir(s); return '<h2>Correção normativa</h2>'+(c.erro?'<p>'+esc(c.erro==='normas'?'Normas não importadas.':c.erro)+'</p>':rvTabCorr(c)); })():''}
   <h2>Observações</h2><div class="ob">${esc(s.obs||'')}</div>
-  <div class="ft">Registro gerado pelo sistema CINPSI em ${esc(new Date().toLocaleString('pt-BR'))}. Contém apenas o registro das respostas (transcrição de voz conferida pelo examinador; o áudio não foi armazenado). Percentil e classificação não constam neste documento.</div>
+  <div class="ft">Registro gerado pelo sistema CINPSI em ${esc(new Date().toLocaleString('pt-BR'))}. Contém apenas o registro das respostas (transcrição de voz conferida pelo examinador; o áudio não foi armazenado). ${corr?'Percentis conforme normas brasileiras do manual do RAVLT (De Paula &amp; Malloy-Diniz). A interpretação clínica é de responsabilidade do profissional.':'Percentil e classificação não constam neste documento.'}</div>
   </body></html>`;
   const w=window.open('','_blank'); if(!w){ toast('Libere pop-ups para gerar o PDF.'); return; }
   w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },700);
