@@ -11006,6 +11006,7 @@ function finRenderFluxoCaixa(){
         <input type="checkbox" ${_fluxoTodos?'checked':''} onchange="_fluxoTodos=this.checked;finRenderFluxoCaixa()"> Ver todos os meses
       </label>
       <div style="flex:1"></div>
+      <button class="btn-ghost" style="font-size:13px" onclick="concAbrir(false)" title="Casa as entradas do extrato com receitas pendentes e dá baixa">🔗 Conciliar recebimentos</button>
       <button class="btn-ghost" style="font-size:13px" onclick="fluxoConfigSaldo()">⚙️ Saldo inicial</button>
       <button class="btn-ghost" style="font-size:13px" onclick="fluxoRemoverDuplicados()">🧹 Remover duplicados</button>
       <button class="btn-ghost" style="font-size:13px" onclick="fluxoImprimir()">🖨️ Imprimir</button>
@@ -11041,7 +11042,7 @@ function finRenderFluxoCaixa(){
         <tbody>${lista.length?lista.map(m=>`<tr>
           <td style="padding:7px 10px;font-size:12px;white-space:nowrap">${finFmtDate(m.data)}</td>
           <td style="padding:7px 10px;text-align:center">${fluxoOrigemBadge(m.origem)}</td>
-          <td style="padding:7px 10px;font-size:12.5px">${esc(m.desc)}</td>
+          <td style="padding:7px 10px;font-size:12.5px">${esc(m.desc)}${m.conc?'<span title="Conciliado com receitas" style="margin-left:6px;font-size:10.5px;background:#D1FAE5;color:#065F46;padding:1px 7px;border-radius:20px">✓ conciliado</span>':''}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:var(--green);font-weight:${m.tipo==='entrada'?'600':'400'}">${m.tipo==='entrada'?finFmt(m.valor):'—'}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12.5px;color:var(--red);font-weight:${m.tipo==='saida'?'600':'400'}">${m.tipo==='saida'?finFmt(m.valor):'—'}</td>
           <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:${acum[m.id]!=null&&acum[m.id]<0?'var(--red)':'var(--text2)'}">${acum[m.id]!=null?finFmt(acum[m.id]):'—'}</td>
@@ -11516,6 +11517,148 @@ function fluxoConfirmarImport(){
   document.getElementById('modal-fluxo-revisar')?.remove();
   finRenderFluxoCaixa();
   toast('✅ '+novos+' lançamentos importados'+(dup?' ('+dup+' já existiam)':'')+'!');
+  if(novos) setTimeout(()=>concAbrir(true),500);
+}
+
+// ═══ CONCILIAÇÃO AUTOMÁTICA — entradas do extrato × receitas pendentes ═══
+// Casa cada entrada do Fluxo de Caixa com sessões "Pendente" por VALOR (exato,
+// somando sessões do mesmo paciente quando preciso) e NOME (paciente ou
+// responsável no texto do Pix). Nada é baixado sem confirmação na tela.
+const CONC_STOP=/^(de|da|do|dos|das|pix|recebido|recebimento|transferencia|transf|ted|doc|ltda|pagamento|pagto|cartao|credito|debito|infinitepay|deposito|vendas|boleto|cpf|cnpj|remetente|enviado|conta|banco|mercado|pago|nubank|itau|bradesco|santander|inter|caixa)$/;
+function concTok(s){ return planNorm(s).replace(/[^a-z ]/g,' ').split(/\s+/).filter(w=>w.length>2&&!CONC_STOP.test(w)); }
+function concMapaResp(){
+  const m={};
+  const add=o=>{
+    if(!o) return;
+    const p=planNorm(o.paciente||o.nome||''); if(!p) return;
+    const s=(m[p]=m[p]||new Set());
+    [o.responsavelLegal,o.responsavel,o.mae,o.pai].filter(x=>x&&typeof x==='string').forEach(r=>s.add(r));
+  };
+  try{ loadPac().forEach(add); }catch(e){}
+  try{ loadConvAntigos().forEach(add); }catch(e){}
+  try{ loadLeads().forEach(add); }catch(e){}
+  return m;
+}
+// Procura um subconjunto de sessões (mais antigas primeiro) cuja soma = alvo (centavos)
+function concComb(it,alvo){
+  const v=it.map(r=>Math.round(r.valor*100)), n=v.length;
+  let s=0;
+  for(let k=0;k<n;k++){ s+=v[k]; if(s===alvo) return it.slice(0,k+1); }
+  for(let i=0;i<n;i++) if(v[i]===alvo) return [it[i]];
+  for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) if(v[i]+v[j]===alvo) return [it[i],it[j]];
+  if(n<=30) for(let i=0;i<n;i++) for(let j=i+1;j<n;j++) for(let k=j+1;k<n;k++) if(v[i]+v[j]+v[k]===alvo) return [it[i],it[j],it[k]];
+  return null;
+}
+function concPropor(){
+  const fx=fluxoLoad().filter(m=>m.tipo==='entrada'&&!m.conc&&m.valor>0&&!/dep[oó]sito de vendas|rendimento|resgate|estorno|saldo/i.test(m.desc||''));
+  const recs=finLoad(FK.REC);
+  const grupos={};
+  recs.filter(r=>r.status==='Pendente'&&r.valor>0&&r.paciente).forEach(r=>{
+    const k=planNorm(r.paciente);
+    (grupos[k]=grupos[k]||{nome:r.paciente,itens:[]}).itens.push(r);
+  });
+  Object.values(grupos).forEach(g=>g.itens.sort((a,b)=>a.data.localeCompare(b.data)));
+  const resp=concMapaResp();
+  const usados=new Set();
+  const props=[]; const feitos=new Set(); let ambiguas=0;
+  const ord=[...fx].sort((a,b)=>a.data.localeCompare(b.data));
+
+  const avaliar=m=>{
+    const dt=new Set(concTok(m.desc)), alvo=Math.round(m.valor*100), out=[];
+    Object.entries(grupos).forEach(([k,g])=>{
+      const livres=g.itens.filter(r=>!usados.has(r.id));
+      if(!livres.length) return;
+      const comb=concComb(livres,alvo); if(!comb) return;
+      let sc=0;
+      [g.nome,...(resp[k]?[...resp[k]]:[])].forEach(n=>{
+        const c=concTok(n).filter(w=>dt.has(w)).length; if(c>sc) sc=c;
+      });
+      out.push({g,comb,sc});
+    });
+    return out;
+  };
+  const aceitar=(m,x)=>{
+    x.comb.forEach(r=>usados.add(r.id)); feitos.add(m.id);
+    props.push({m,paciente:x.g.nome,itens:x.comb,conf:x.sc>=2?'alta':x.sc===1?'média':'baixa'});
+  };
+  [2,1,0].forEach(nivel=>{
+    ord.forEach(m=>{
+      if(feitos.has(m.id)) return;
+      let l=avaliar(m);
+      if(nivel===0){
+        if(l.length===1) aceitar(m,l[0]); else if(l.length>1) ambiguas++;
+        return;
+      }
+      l=l.filter(x=>nivel===2?x.sc>=2:x.sc===1).sort((a,b)=>b.sc-a.sc);
+      if(l.length) aceitar(m,l[0]);
+    });
+  });
+  props.sort((a,b)=>a.m.data.localeCompare(b.m.data));
+  return {props,ambiguas,semCorresp:fx.length-props.length-ambiguas,totalEntradas:fx.length};
+}
+function concAbrir(silencioso){
+  const r=concPropor();
+  window._concProps=r.props;
+  if(!r.props.length){
+    if(!silencioso) toast(r.totalEntradas?'Nenhuma entrada do extrato corresponde a uma receita pendente.':'Nenhuma entrada nova para conciliar.');
+    return;
+  }
+  document.getElementById('modal-conc')?.remove();
+  const cor={alta:['#D1FAE5','#065F46'],'média':['#FEF3C7','#92400E'],baixa:['#E5E7EB','#374151']};
+  const linhas=r.props.map((p,i)=>{
+    const c=cor[p.conf];
+    return `<tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:7px 8px"><input type="checkbox" class="conc-chk" data-i="${i}" ${p.conf==='alta'?'checked':''}></td>
+      <td style="padding:7px 8px;font-size:12px;white-space:nowrap">${finFmtDate(p.m.data)}</td>
+      <td style="padding:7px 8px;font-size:12px">${esc(p.m.desc)}<div style="font-size:10.5px;color:var(--text3)">${esc(p.m.origem||'')}</div></td>
+      <td style="padding:7px 8px;text-align:right;font-size:12.5px;font-weight:600;color:var(--green)">${finFmt(p.m.valor)}</td>
+      <td style="padding:7px 8px;font-size:12px"><strong>${esc(p.paciente)}</strong><div style="font-size:10.5px;color:var(--text3)">${p.itens.length} sessão${p.itens.length>1?'ões':''}: ${p.itens.map(x=>finFmtDate(x.data).slice(0,5)).join(', ')}</div></td>
+      <td style="padding:7px 8px;text-align:center"><span style="font-size:11px;background:${c[0]};color:${c[1]};padding:2px 8px;border-radius:20px">${p.conf}</span></td>
+    </tr>`;
+  }).join('');
+  const mo=document.createElement('div');
+  mo.className='modal-overlay'; mo.id='modal-conc';
+  mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:820px;max-height:90vh;display:flex;flex-direction:column">
+    <div class="modal-header"><div class="modal-title">🔗 Conciliação — ${r.props.length} recebimento${r.props.length>1?'s':''} encontrado${r.props.length>1?'s':''}</div>
+      <button class="modal-close" onclick="document.getElementById('modal-conc').remove()">×</button></div>
+    <div class="modal-body" style="overflow-y:auto;flex:1;padding:0">
+      <div style="padding:10px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;color:var(--text2);line-height:1.6">
+        Cada entrada do extrato foi casada com sessões pendentes pelo <strong>valor</strong> e pelo <strong>nome</strong> (paciente ou responsável).
+        <strong>Alta</strong> = valor e nome batem (já marcadas) · <strong>Média</strong> = valor bate e só parte do nome · <strong>Baixa</strong> = só o valor bate (confira antes de marcar).
+        ${r.ambiguas?`<br>${r.ambiguas} entrada${r.ambiguas>1?'s':''} com valor que serve para mais de um paciente ficou${r.ambiguas>1?'ram':''} de fora.`:''}
+      </div>
+      <table style="width:100%;border-collapse:collapse"><thead><tr style="background:var(--surface2);font-size:11px;color:var(--text3)">
+        <th style="padding:8px;width:30px"></th><th style="padding:8px;text-align:left">Data</th><th style="padding:8px;text-align:left">Entrada no extrato</th>
+        <th style="padding:8px;text-align:right">Valor</th><th style="padding:8px;text-align:left">Receita pendente</th><th style="padding:8px">Confiança</th></tr></thead>
+        <tbody>${linhas}</tbody></table>
+    </div>
+    <div class="modal-footer"><button class="btn-ghost" onclick="document.getElementById('modal-conc').remove()">Agora não</button>
+      <button class="btn-save-purple" onclick="concAplicar()">✓ Dar baixa nas selecionadas</button></div>
+  </div>`;
+  document.body.appendChild(mo);
+  setTimeout(()=>mo.classList.add('open'),10);
+}
+function concAplicar(){
+  const sel=[...document.querySelectorAll('.conc-chk')].filter(c=>c.checked).map(c=>window._concProps[+c.dataset.i]).filter(Boolean);
+  if(!sel.length){ toast('Selecione ao menos um recebimento.'); return; }
+  const recs=finLoad(FK.REC), fx=fluxoLoad();
+  let sess=0;
+  sel.forEach(p=>{
+    const ids=new Set(p.itens.map(x=>x.id));
+    recs.forEach(r=>{
+      if(!ids.has(r.id)||r.status!=='Pendente') return;
+      r.status='Pago'; r.dataPagamento=p.m.data; r.conciliadoFx=p.m.id;
+      if(!r.forma&&/pix/i.test(p.m.desc)) r.forma='Pix';
+      sess++;
+    });
+    const f=fx.find(x=>x.id===p.m.id);
+    if(f) f.conc=p.itens.map(x=>x.id);
+  });
+  finSave(FK.REC,recs); fluxoSave(fx);
+  document.getElementById('modal-conc')?.remove();
+  fin_refresh(); if(typeof finRenderFluxoCaixa==='function') finRenderFluxoCaixa();
+  toast('✓ '+sel.length+' recebimento'+(sel.length>1?'s':'')+' conciliado'+(sel.length>1?'s':'')+' · '+sess+' sessão'+(sess!==1?'ões':'')+' baixada'+(sess!==1?'s':'')+'.');
 }
 
 function fluxoImprimir(){
