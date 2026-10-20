@@ -2522,13 +2522,17 @@ function rvMedidas(s,cfg){
 // arr = [P5,P25,P50,P75,P95]. Valor fora dos pontos da tabela → faixa de percentil (como orienta o manual).
 function rvPerc(x,arr){
   const P=[5,25,50,75,95];
-  if(x<arr[0]) return {lbl:'< P5',cls:0};
-  if(x>arr[4]) return {lbl:'> P95',cls:5};
+  if(x<arr[0]) return {lbl:'< P5',cls:0,lo:0,hi:4.99};
+  if(x>arr[4]) return {lbl:'> P95',cls:5,lo:95.5,hi:100};
   const k=arr.findIndex(q=>q===x);
-  if(k>=0){ let u=k; while(u+1<5&&arr[u+1]===x) u++; return {lbl:u>k?'P'+P[k]+' a P'+P[u]:'P'+P[k],cls:Math.min(k+1,4)}; }
+  if(k>=0){ let u=k; while(u+1<5&&arr[u+1]===x) u++; return {lbl:u>k?'P'+P[k]+' a P'+P[u]:'P'+P[k],cls:Math.min(k+1,4),lo:P[k],hi:P[u]}; }
   let i=0; while(i<4&&!(x>arr[i]&&x<arr[i+1])) i++;
-  return {lbl:'entre P'+P[i]+' e P'+P[i+1],cls:i+1};
+  return {lbl:'entre P'+P[i]+' e P'+P[i+1],cls:i+1,lo:P[i]+0.5,hi:P[i+1]-0.5};
 }
+// Rótulos de percentil do consenso AACN (Guilmette et al., 2020, Clin Neuropsychol 34(3):437-453, Tabela 1 — distribuição normal).
+const RV_GUIL=['excepcionalmente baixa','abaixo da média','média inferior','média','média superior','acima da média','excepcionalmente alta'];
+function rvGuilIdx(p){ return p<2?0:p<9?1:p<25?2:p<75?3:p<91?4:p<98?5:6; }
+function rvGuil(p){ const a=rvGuilIdx(p.lo), b=rvGuilIdx(p.hi); return a===b?'Pontuação '+RV_GUIL[a]:'Entre pontuação '+RV_GUIL[a]+' e '+RV_GUIL[b]; }
 function rvCorrigir(s){
   const cfg=rvCfg(); if(!cfg) return {erro:'Configuração do RAVLT não importada.'};
   const nor=rvNor(); if(!nor) return {erro:'normas'};
@@ -2538,7 +2542,7 @@ function rvCorrigir(s){
   const linhas=RV_MED.map(([k,nm])=>{
     const x=v[k]; if(x===null||x===undefined) return {k,nm,x:null};
     const p=rvPerc(x,f.p[k]); const z=f.dp[k]>0?Math.round((x-f.m[k])/f.dp[k]*100)/100:null;
-    return Object.assign({k,nm,x,m:f.m[k],dp:f.dp[k],z},p);
+    return Object.assign({k,nm,x,m:f.m[k],dp:f.dp[k],z,g:rvGuil(p)},p);
   });
   return {anos,faixa:f,linhas,fonte:nor.fonte};
 }
@@ -2546,13 +2550,13 @@ function rvTabCorr(c){
   const th='style="padding:4px 6px;background:#e9eff6;border:1px solid #b9c3cf;text-align:center"', td='style="padding:3px 6px;border:1px solid #b9c3cf;text-align:center"';
   const f1=n=>n===null||n===undefined?'—':String(n).replace('.',',');
   const lin=c.linhas.map(l=>{
-    if(l.x===null) return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td} colspan="5">não calculável (divisão por zero)</td></tr>`;
+    if(l.x===null) return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td} colspan="6">não calculável (divisão por zero)</td></tr>`;
     const qual=(l.k==='IP'||l.k==='IR');
     const cl=RV_CLS[l.cls];
-    return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td}><b>${f1(l.x)}</b></td><td ${td}>${f1(l.m)} (${f1(l.dp)})</td><td ${td}>${f1(l.z)}</td><td ${td}>${esc(l.lbl)}</td><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left;${qual?'':'color:'+cl[2]+';font-weight:700'}">${qual?'análise qualitativa':esc(cl[0])+' · '+esc(cl[1])}</td></tr>`;
+    return `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${esc(l.nm)}</td><td ${td}><b>${f1(l.x)}</b></td><td ${td}>${f1(l.m)} (${f1(l.dp)})</td><td ${td}>${f1(l.z)}</td><td ${td}>${esc(l.lbl)}</td><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left;${qual?'':'color:'+cl[2]+';font-weight:700'}">${qual?'análise qualitativa':esc(cl[0])+' · '+esc(cl[1])}</td><td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:left">${qual?'—':esc(l.g)}</td></tr>`;
   }).join('');
-  return `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th ${th}>Medida</th><th ${th}>Bruto</th><th ${th}>Média (DP)</th><th ${th}>Z</th><th ${th}>Percentil</th><th ${th}>Classificação</th></tr></thead><tbody>${lin}</tbody></table>
-  <div style="font-size:11px;color:#586374;margin-top:4px">Tabela normativa ${c.faixa.tab}: ${c.faixa.max>=200?c.faixa.min+' anos ou mais':c.faixa.min+' a '+c.faixa.max+' anos'} (n=${c.faixa.n}) · idade na aplicação: ${c.anos} anos. Classificação sugerida pelo manual (Tabela 1): &lt;P5 déficit clínico; P5–P25 possível déficit; acima disso, típico. Interferência proativa/retroativa: interpretar qualitativamente.</div>`;
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th ${th}>Medida</th><th ${th}>Bruto</th><th ${th}>Média (DP)</th><th ${th}>Z</th><th ${th}>Percentil</th><th ${th}>Classificação (manual)</th><th ${th}>Guilmette (AACN)</th></tr></thead><tbody>${lin}</tbody></table>
+  <div style="font-size:11px;color:#586374;margin-top:4px">Tabela normativa ${c.faixa.tab}: ${c.faixa.max>=200?c.faixa.min+' anos ou mais':c.faixa.min+' a '+c.faixa.max+' anos'} (n=${c.faixa.n}) · idade na aplicação: ${c.anos} anos. Classificação sugerida pelo manual (Tabela 1): &lt;P5 déficit clínico; P5–P25 possível déficit; acima disso, típico. Interferência proativa/retroativa: interpretar qualitativamente. Coluna Guilmette: rótulos de percentil do consenso da AACN (Guilmette et al., 2020, Tabela 1).</div>`;
 }
 function rvHtmlCorr(s){
   const c=rvCorrigir(s);
