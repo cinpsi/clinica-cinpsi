@@ -2091,7 +2091,7 @@ const TE_CAT={
     obs:'Função executiva em crianças de 2 a 5 anos, relato dos pais ou do(a) professor(a).'},
   MASC:{nome:'MASC (Ansiedade)',min:8,max:19,pagina:'teste.html',resp:['Paciente'],tempo:'10 minutos',ops:[['0','Nunca'],['1','Raramente'],['2','Às vezes'],['3','Frequentemente']],
     obs:'Escala Multidimensional de Ansiedade para Crianças, autorrelato (39 itens). O app soma o total; a correção por fatores fica com a terapeuta.'},
-  SCARED_PAIS:{nome:'SCARED (Pais)',min:8,max:18,pagina:'teste.html',resp:['Mãe','Pai'],tempo:'8 minutos',ops:[['0','Nunca ou raramente'],['1','Algumas vezes'],['2','Frequentemente']],
+  SCARED_PAIS:{nome:'SCARED (Pais)',min:8,max:18,pagina:'teste.html',resp:['Mãe','Pai','Professor(a)'],tempo:'8 minutos',ops:[['0','Nunca ou raramente'],['1','Algumas vezes'],['2','Frequentemente']],
     obs:'Ansiedade infantil, relato dos pais (41 itens). O app calcula total e subescalas.'},
   SCARED_CRIANCA:{nome:'SCARED (Criança)',min:8,max:18,pagina:'teste.html',resp:['Paciente'],tempo:'8 minutos',ops:[['0','Não verdadeiro'],['1','Às vezes verdadeiro'],['2','Verdadeiro']],
     obs:'Ansiedade infantil, autorrelato (41 itens). O app calcula total e subescalas.'},
@@ -2747,9 +2747,9 @@ function teHtmlTestes(p,id){
   const sugHtml=sug.length?sug.map(k=>`<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px"><div style="font-weight:600;font-size:13px">${esc(TE_CAT[k].nome)} <span style="font-weight:400;color:var(--text3)">· ${TE_CAT[k].tempo}</span></div><div style="font-size:12px;color:var(--text3);margin:2px 0 8px">${esc(TE_CAT[k].obs)}</div>${botoes(k)}</div>`).join(''):`<p style="font-size:13px;color:var(--text3)">${id===null?'Sem data de nascimento no cadastro: não dá para sugerir por idade.':'Nenhum teste cadastrado para '+id+' anos.'} Use "Outro teste" abaixo.</p>`;
   const outros=Object.keys(TE_CAT).filter(k=>!sug.includes(k));
   const avulso=`<div style="margin-top:6px;font-size:13px"><b>Outro teste</b> (qualquer paciente, mesmo fora da trilha):<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><select class="form-input" id="te-avulso" style="max-width:240px" onchange="teAvulsoResp()">${Object.keys(TE_CAT).map(k=>`<option value="${k}">${esc(TE_CAT[k].nome)}${(id!==null&&(id<TE_CAT[k].min||id>TE_CAT[k].max))?' (fora da faixa '+TE_CAT[k].min+'-'+TE_CAT[k].max+')':''}</option>`).join('')}</select><select class="form-input" id="te-avulso-r" style="max-width:150px">${TE_CAT[Object.keys(TE_CAT)[0]].resp.map(r=>`<option>${esc(r)}</option>`).join('')}</select><button class="btn-ghost" onclick="teGerarAvulso()">🔗 Gerar link</button></div></div>`;
-  const lista=ls.length?ls.map(l=>teHtmlLink(l,p)).join(''):'<p style="font-size:13px;color:var(--text3)">Nenhum link gerado ainda.</p>';
+  const lista=ls.length?(()=>{ const g={}; ls.forEach(l=>{ (g[l.escalaNome]=g[l.escalaNome]||[]).push(l); }); return Object.keys(g).map(k=>`<div style="margin:16px 0 6px;padding-bottom:3px;border-bottom:2px solid var(--border);font-size:13px;font-weight:700">${esc(k)} <span style="font-weight:400;color:var(--text3)">· ${g[k].length} ${g[k].length>1?'registros':'registro'}</span></div>`+(/^SCARED/.test(k)?teScaredBtn(nome):'')+g[k].map(l=>teHtmlLink(l,p)).join('')).join(''); })():'<p style="font-size:13px;color:var(--text3)">Nenhum link gerado ainda.</p>';
   return `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Sugeridos pela idade</div>${sugHtml}${avulso}
-    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:20px 0 8px">Links e respostas</div>${teScaredBtn(nome)}${lista}`;
+    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:20px 0 8px">Links e respostas</div>${lista}`;
 }
 function teHtmlLink(l,p){
   const url=teUrl(l.codigo,l.escala), ok=l.status==='respondido';
@@ -2918,6 +2918,16 @@ function teScaredPdf(){
   const w=window.open('','_blank'); if(!w){ toast('Libere pop-ups para gerar o PDF.'); return; }
   w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },700);
 }
+function teEditarInformante(cod){
+  const l=_teLinks.find(x=>x.codigo===cod); if(!l||!l.resposta) return;
+  const inf=l.resposta.informante||{};
+  const nome=prompt('Nome de quem respondeu:',inf.nome||''); if(nome===null) return;
+  const rel=prompt('Relação / papel (ex.: Mãe, Pai, Pais, Professor(a)):',inf.relacao||l.respondente||''); if(rel===null) return;
+  const n=nome.trim(), r=rel.trim()||l.respondente||'';
+  teFs().collection('testes_links').doc(cod).update({'resposta.informante.nome':n,'resposta.informante.relacao':r,respondente:r})
+    .then(()=>{ l.resposta.informante=Object.assign({},inf,{nome:n,relacao:r}); l.respondente=r; toast('Informante atualizado ✅'); teRenderFicha(); })
+    .catch(e=>toast('Não foi possível salvar: '+(e&&e.code||'erro')));
+}
 function teVerResposta(cod){
   const box=document.getElementById('te-resp-'+cod); if(!box) return;
   if(box.innerHTML){ box.innerHTML=''; return; }
@@ -2929,7 +2939,7 @@ function teVerResposta(cod){
   const scHtml=sc?`<div style="margin:8px 0;border:1px solid var(--border);border-radius:6px;padding:8px 10px;background:#f8fafc"><div style="font-weight:600;margin-bottom:4px">${esc(sc.titulo)}</div><table style="width:100%;font-size:12px">${sc.linhas.map(x=>`<tr><td>${esc(x[0])}</td><td style="text-align:right;font-weight:600">${esc(String(x[1]))}</td><td style="padding-left:10px;color:var(--text3)">${esc(x[2]||'')}</td></tr>`).join('')}</table>${sc.nota?`<div style="font-size:11px;color:var(--text3);margin-top:4px">${esc(sc.nota)}</div>`:''}</div>`:'';
   box.innerHTML=`<div style="margin-top:10px;border-top:1px dashed var(--border);padding-top:10px;font-size:13px">
     <div><b>Paciente:</b> ${esc(r.crianca.nome||'')} · nasc. ${fm(r.crianca.nasc)} · ${esc(r.crianca.sexo||'')} · série: ${esc(r.crianca.serie||'—')}</div>
-    <div><b>Informante:</b> ${esc(r.informante.nome||'')} (${esc(r.informante.relacao||'')}) · data ${fm(r.informante.data)}</div>
+    <div><b>Informante:</b> ${esc(r.informante.nome||'')} (${esc(r.informante.relacao||'')}) · data ${fm(r.informante.data)} <button class="btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="teEditarInformante('${l.codigo}')">✏️ Corrigir informante</button></div>
     <div style="margin:6px 0"><b>Resumo:</b> ${ops.map(o=>esc(o[1])+' '+n[o[0]]).join(' · ')} · total ${a.length}</div>
     ${scHtml}
     <div style="margin-top:6px"><b>${cat.neuro?'Código para lançar no Neurocortex':'Respostas em sequência'}</b> (${ops.map(o=>esc(o[0])+'='+esc(o[1])).join(', ')}):</div>
