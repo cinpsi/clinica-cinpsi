@@ -2749,7 +2749,7 @@ function teHtmlTestes(p,id){
   const avulso=`<div style="margin-top:6px;font-size:13px"><b>Outro teste</b> (qualquer paciente, mesmo fora da trilha):<div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap"><select class="form-input" id="te-avulso" style="max-width:240px" onchange="teAvulsoResp()">${Object.keys(TE_CAT).map(k=>`<option value="${k}">${esc(TE_CAT[k].nome)}${(id!==null&&(id<TE_CAT[k].min||id>TE_CAT[k].max))?' (fora da faixa '+TE_CAT[k].min+'-'+TE_CAT[k].max+')':''}</option>`).join('')}</select><select class="form-input" id="te-avulso-r" style="max-width:150px">${TE_CAT[Object.keys(TE_CAT)[0]].resp.map(r=>`<option>${esc(r)}</option>`).join('')}</select><button class="btn-ghost" onclick="teGerarAvulso()">🔗 Gerar link</button></div></div>`;
   const lista=ls.length?ls.map(l=>teHtmlLink(l,p)).join(''):'<p style="font-size:13px;color:var(--text3)">Nenhum link gerado ainda.</p>';
   return `<div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Sugeridos pela idade</div>${sugHtml}${avulso}
-    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:20px 0 8px">Links e respostas</div>${lista}`;
+    <div style="font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin:20px 0 8px">Links e respostas</div>${teScaredBtn(nome)}${lista}`;
 }
 function teHtmlLink(l,p){
   const url=teUrl(l.codigo,l.escala), ok=l.status==='respondido';
@@ -2835,6 +2835,88 @@ function teScoreHtml(esc_,a){
   }
   if(esc_==='MASC'){ const tot=A.reduce((x,y)=>x+(+y||0),0); return {titulo:'Pontuação (MASC)',linhas:[['Total bruto (0 a 117)',tot,'']],nota:'Pontuação por fatores e escore T devem ser feitos pela terapeuta com a tabela do instrumento.'}; }
   return null;
+}
+// ── SCARED: comparação entre informantes (gráfico, tabela por ponto de corte e leitura automática) ──
+const SC_CORES=['#3B5BDB','#E03131','#2F9E44','#F08C00','#7048E8'];
+function teScaredDados(nome){
+  const ls=teLinksDe(nome).filter(l=>(l.escala==='SCARED_PAIS'||l.escala==='SCARED_CRIANCA')&&l.status==='respondido'&&l.resposta&&l.resposta.respostas)
+    .sort((a,b)=>String(a.respondidoEm||'').localeCompare(String(b.respondidoEm||'')));
+  return ls.map((l,i)=>{
+    const A=String(l.resposta.respostas).split('').map(x=>+x||0), n=k=>A[k-1]||0;
+    const sub=TE_SCARED.sub.map(([nm,its,cut])=>({nm,cut,v:its.reduce((t,k)=>t+n(k),0),q:its.length}));
+    const tot=A.reduce((t,x)=>t+x,0);
+    const inf=(l.resposta.informante||{}), auto=l.escala==='SCARED_CRIANCA';
+    const rot=auto?'Autorrelato ('+String(nome).split(' ')[0]+')':((inf.nome&&inf.relacao&&inf.nome!==inf.relacao)?inf.nome+' ('+inf.relacao+')':(inf.relacao||l.respondente||'Informante'));
+    return {rot,auto,sub,tot,cor:SC_CORES[i%SC_CORES.length],data:inf.data||''};
+  });
+}
+function teScaredGrafico(D){
+  const W=760,H=330,x0=44,y0=34,pw=W-x0-16,ph=200, nS=TE_SCARED.sub.length;
+  const mx=Math.max(14,...D.flatMap(d=>d.sub.map(s=>Math.max(s.v,s.cut)))), top=Math.ceil(mx/2)*2, yy=v=>y0+ph-(v/top)*ph;
+  const gw=pw/nS, bw=Math.min(34,(gw*0.8)/D.length);
+  let g=`<text x="${W/2}" y="20" text-anchor="middle" font-size="14" font-weight="700" fill="#333">SCARED – Pontos Brutos e Ponto de Corte</text>`;
+  for(let t=0;t<=top;t+=2) g+=`<line x1="${x0}" x2="${W-16}" y1="${yy(t)}" y2="${yy(t)}" stroke="#e5e8ec"/><text x="${x0-6}" y="${yy(t)+3}" text-anchor="end" font-size="9" fill="#666">${t}</text>`;
+  TE_SCARED.sub.forEach(([nm,its,cut],i)=>{
+    const cx=x0+gw*i+gw/2, w=bw*D.length, xs=cx-w/2;
+    g+=`<rect x="${cx-gw*0.45}" y="${y0}" width="${gw*0.9}" height="${yy(cut)-y0}" fill="#f1f3f5" opacity=".7"/>`;
+    D.forEach((d,j)=>{ const v=d.sub[i].v, x=xs+j*bw; g+=`<rect x="${x+1}" y="${yy(v)}" width="${bw-2}" height="${ph-(yy(v)-y0)}" fill="${d.cor}" fill-opacity=".55" stroke="${d.cor}"/><text x="${x+bw/2}" y="${yy(v)-4}" text-anchor="middle" font-size="9" font-weight="700" fill="#222">${v}</text>`; });
+    g+=`<line x1="${cx-gw*0.45}" x2="${cx+gw*0.45}" y1="${yy(cut)}" y2="${yy(cut)}" stroke="#555" stroke-width="1.5" stroke-dasharray="5 3"/><text x="${cx+gw*0.45}" y="${yy(cut)-3}" text-anchor="end" font-size="8" fill="#555">corte ${cut}</text>`;
+    g+=`<text x="${cx}" y="${y0+ph+16}" text-anchor="middle" font-size="10" fill="#444">${esc(nm)}</text>`;
+  });
+  let lx=x0; D.forEach(d=>{ g+=`<rect x="${lx}" y="${H-22}" width="12" height="10" fill="${d.cor}" fill-opacity=".55" stroke="${d.cor}"/><text x="${lx+16}" y="${H-13}" font-size="10" fill="#444">${esc(d.rot)}</text>`; lx+=30+d.rot.length*5.6; });
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:780px;font-family:Arial,Helvetica,sans-serif">${g}</svg>`;
+}
+function teScaredTabela(D){
+  const th='style="padding:4px 6px;background:#e9eff6;border:1px solid #b9c3cf;text-align:center"', td='style="padding:3px 6px;border:1px solid #b9c3cf;text-align:center"';
+  const cel=(v,cut)=>v>=cut?`<td style="padding:3px 6px;border:1px solid #b9c3cf;text-align:center;background:#FBEDEC;color:#B3261E;font-weight:700">${v}</td>`:`<td ${td}>${v}</td>`;
+  const lin=TE_SCARED.sub.map(([nm,its,cut],i)=>`<tr><td style="padding:3px 6px;border:1px solid #b9c3cf">${esc(nm)}</td><td ${td}>${cut}</td>${D.map(d=>cel(d.sub[i].v,cut)).join('')}</tr>`).join('')+
+    `<tr><td style="padding:3px 6px;border:1px solid #b9c3cf"><b>Total</b></td><td ${td}>25</td>${D.map(d=>cel(d.tot,25)).join('')}</tr>`;
+  return `<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th ${th}>Escala</th><th ${th}>Ponto de corte</th>${D.map(d=>`<th ${th}>${esc(d.rot)}</th>`).join('')}</tr></thead><tbody>${lin}</tbody></table>
+  <div style="font-size:11px;color:#586374;margin-top:4px">Em vermelho: pontuação igual ou acima do ponto de corte (indicativo). Total acima de 30 é mais específico. Resultado de rastreio, não diagnóstico.</div>`;
+}
+function teScaredTexto(D,nome){
+  const pn=String(nome).split(' ')[0], f=s=>s.toLowerCase();
+  const sint=D.map(d=>{
+    const acima=d.sub.filter(s=>s.v>=s.cut), abaixo=d.sub.filter(s=>s.v<s.cut);
+    const t=d.tot>=25?(d.tot>30?'acima de 30 (mais específico)':'igual ou acima de 25 (indicativo)'):'abaixo de 25';
+    return `<b>${esc(d.rot)}:</b> Total ${d.tot}, ${t}. ${acima.length?'Escalas no ou acima do ponto de corte: '+acima.map(s=>esc(f(s.nm))+' ('+s.v+' ≥ '+s.cut+')').join('; ')+'. ':'Nenhuma escala atingiu o ponto de corte. '}${abaixo.length&&acima.length?'Abaixo do corte: '+abaixo.map(s=>esc(f(s.nm))+' ('+s.v+')').join('; ')+'.':''}`;
+  });
+  const out=[];
+  if(D.length>1){
+    const conv=TE_SCARED.sub.map(([nm],i)=>({nm,n:D.filter(d=>d.sub[i].v>=d.sub[i].cut).length})), todos=conv.filter(c=>c.n===D.length), alguns=conv.filter(c=>c.n>0&&c.n<D.length);
+    const ts=D.map(d=>d.tot), dif=Math.max(...ts)-Math.min(...ts);
+    out.push(todos.length?`Há convergência entre todos os informantes em: ${todos.map(c=>esc(f(c.nm))).join(', ')}.`:'Nenhuma escala ficou no ou acima do corte em todos os informantes ao mesmo tempo.');
+    if(alguns.length) out.push(`Há divergência entre informantes em: ${alguns.map(c=>{ const quem=D.filter((d,j)=>d.sub[TE_SCARED.sub.findIndex(s=>s[0]===c.nm)].v>=d.sub[TE_SCARED.sub.findIndex(s=>s[0]===c.nm)].cut).map(d=>d.rot); return esc(f(c.nm))+' (acima do corte apenas em: '+esc(quem.join(', '))+')'; }).join('; ')}.`);
+    if(dif>=10) out.push(`A diferença entre o menor e o maior Total é de ${dif} pontos (${D.map(d=>esc(d.rot)+' '+d.tot).join('; ')}), o que indica visões bastante distintas do mesmo quadro. Isso não define qual relato é mais fiel: pode refletir sintomas pouco visíveis para outros adultos, diferenças entre contextos (casa e escola) ou na compreensão dos itens.`);
+    const auto=D.find(d=>d.auto), outros=D.filter(d=>!d.auto);
+    if(auto&&outros.length&&auto.tot>=25&&outros.every(o=>o.tot<25)) out.push(`${esc(pn)} relata mais sintomas do que os adultos observaram: sintomas internos podem não ser percebidos pelos informantes e merecem investigação na entrevista.`);
+    if(auto&&outros.length&&auto.tot<25&&outros.some(o=>o.tot>=25)) out.push('Os adultos relatam mais sintomas do que o autorrelato, o que pode refletir sintomas observáveis que a criança não reconhece ou não relata, ou diferenças entre contextos.');
+  } else out.push('Há apenas um informante registrado; a comparação entre fontes ficará disponível quando outros questionários forem respondidos.');
+  return {sint,out};
+}
+function teScaredHtml(nome){
+  const D=teScaredDados(nome); if(!D.length) return '<p>Nenhuma resposta de SCARED registrada.</p>';
+  const T=teScaredTexto(D,nome);
+  const hd=t=>`<div style="display:inline-block;background:#04253D;color:#fff;border-radius:999px;padding:3px 12px;font-size:12px;font-weight:700;margin:16px 0 8px">${t}</div>`;
+  return teScaredTabela(D)+`<div style="margin-top:14px">${teScaredGrafico(D)}</div>`+hd('LEITURA POR INFORMANTE')+T.sint.map(p=>`<p style="font-size:12px;line-height:1.55;margin:6px 0">${p}</p>`).join('')+
+    hd('INTEGRAÇÃO ENTRE INFORMANTES')+T.out.map(p=>`<p style="font-size:12px;line-height:1.55;margin:6px 0">${p}</p>`).join('')+
+    `<p style="font-size:10.5px;color:#6b7686;margin-top:12px">Texto gerado automaticamente pelas regras do sistema a partir dos pontos de corte do SCARED (Birmaher et al.). É apoio técnico para rastreio: a interpretação clínica e a conclusão são de responsabilidade do profissional. Percentis normativos do autorrelato não estão incluídos.</p>`;
+}
+function teScaredBtn(nome){
+  return teScaredDados(nome).length?`<div style="margin:0 0 10px"><button class="btn-primary" style="padding:6px 12px;font-size:12px" onclick="teScaredAbrir()">📊 SCARED: gráfico e comparação entre informantes</button></div>`:'';
+}
+function teScaredAbrir(){
+  const nome=teNomeAtual; let mo=document.getElementById('modal-scared'); if(mo) mo.remove();
+  mo=document.createElement('div'); mo.className='modal-overlay open'; mo.id='modal-scared'; mo.onclick=e=>{ if(e.target===mo) mo.remove(); };
+  mo.innerHTML=`<div class="modal" style="max-width:860px"><div class="modal-header"><div class="modal-title">📊 SCARED · ${esc(nome)}</div><button class="modal-close" onclick="document.getElementById('modal-scared').remove()">×</button></div><div style="padding:16px 20px;max-height:76vh;overflow:auto">${teScaredHtml(nome)}<div style="margin-top:14px"><button class="btn-ghost" onclick="teScaredPdf()">📄 Gerar PDF</button></div></div></div>`;
+  document.body.appendChild(mo);
+}
+function teScaredPdf(){
+  const nome=teNomeAtual, logo=(typeof RV_LOGO!=='undefined')?RV_LOGO:'';
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>SCARED - ${esc(nome)}</title><style>@page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1d2733;font-size:11px;margin:0}.hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #04253D;padding-bottom:8px;margin-bottom:10px}.hd img{height:54px}.hd h1{font-size:16px;margin:0;color:#04253D}.hd p{margin:2px 0 0;color:#586374}</style></head><body>
+  <div class="hd">${logo?`<img src="${logo}">`:'<span></span>'}<div style="text-align:right"><h1>SCARED — comparação entre informantes</h1><p>Paciente: ${esc(nome)} · emitido em ${esc(new Date().toLocaleDateString('pt-BR'))}</p></div></div>${teScaredHtml(nome)}</body></html>`;
+  const w=window.open('','_blank'); if(!w){ toast('Libere pop-ups para gerar o PDF.'); return; }
+  w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },700);
 }
 function teVerResposta(cod){
   const box=document.getElementById('te-resp-'+cod); if(!box) return;
