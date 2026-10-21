@@ -145,6 +145,7 @@ function cxDashTop(){
 }
 
 </script>
+<script src="idadi.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -2147,6 +2148,20 @@ function teUrl(cod,esc_){
 }
 function teNascISO(v){ const s=String(v||'').trim(); let m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s); if(m) return m[1]+'-'+m[2]+'-'+m[3]; m=/^(\d{2})\/(\d{2})\/(\d{4})/.exec(s); return m?m[3]+'-'+m[2]+'-'+m[1]:''; }
 function teIdade(p){ const n=teNascISO(p&&(p.nascimento||p.nasc)); if(!n) return null; const d=new Date(n.slice(0,10)+'T12:00:00'),h=new Date(); let a=h.getFullYear()-d.getFullYear(); const m=h.getMonth()-d.getMonth(); if(m<0||(m===0&&h.getDate()<d.getDate())) a--; return a; }
+TE_CAT.IDADI_4_35={nome:'IDADI 4 a 35 meses (Pais)',min:0,max:2,pagina:'teste.html',resp:['Mãe','Pai','Cuidador(a)'],tempo:'20 a 30 minutos',neuro:false,ops:[['S','Sim'],['A','Às vezes'],['N','Ainda não'],['O','Não observado']],
+  obs:'Inventário de desenvolvimento infantil, relato dos pais (4 a 35 meses). O link mostra só as frases da idade da criança. Pontuação bruta por domínio no resultado.'};
+TE_CAT.IDADI_36_72={nome:'IDADI 36 a 72 meses (Pais)',min:3,max:6,pagina:'teste.html',resp:['Mãe','Pai','Cuidador(a)'],tempo:'20 a 30 minutos',neuro:false,ops:[['S','Sim'],['A','Às vezes'],['N','Ainda não'],['O','Não observado']],
+  obs:'Inventário de desenvolvimento infantil, relato dos pais (36 a 72 meses). O link mostra só as frases da idade da criança. Pontuação bruta por domínio no resultado.'};
+function teIdadiScore(esc_,A){
+  const B=window.IDADI&&window.IDADI[esc_==='IDADI_4_35'?'F4':'F36']; if(!B) return null;
+  const D=B.doms.map(d=>({n:d.n,pts:0,max:0,S:0,A:0,N:0,O:0})), pend=[];
+  B.itens.forEach((it,i)=>{ const ch=A[i]; if(!ch||ch==='-') return; const d=D[it[0]]; d[ch]=(d[ch]||0)+1;
+    if(ch==='O') return; d.max+=2; d.pts+=ch==='S'?2:ch==='A'?1:0; if(ch==='N'||ch==='A') pend.push([ch,it[1],it[2],d.n]); });
+  const pc=(x,y)=>y?Math.round(100*x/y)+'%':'—';
+  const linhas=D.filter(d=>d.max||d.O).map(d=>[d.n+' ('+d.S+' sim · '+d.A+' às vezes · '+d.N+' ainda não · '+d.O+' não obs.)',d.pts+' / '+d.max+' ('+pc(d.pts,d.max)+')','']);
+  const sec=(tit,ch)=>{ const l=pend.filter(x=>x[0]===ch); return l.length?`<details style="margin:6px 0"><summary style="cursor:pointer;font-weight:600">${tit} (${l.length})</summary><div style="font-size:12px;margin-top:4px">${l.map(x=>`<div><b>${esc(x[1])}</b> · ${esc(x[3])}: ${esc(x[2])}</div>`).join('')}</div></details>`:''; };
+  return {titulo:'Pontuação bruta por domínio (IDADI): Sim=2, Às vezes=1, Ainda não=0',linhas,nota:'Itens "Não observado" ficam fora do cálculo. A conversão em escore padronizado/percentil deve ser feita pela terapeuta com as tabelas do manual do IDADI.',extra:sec('Itens marcados "Ainda não"','N')+sec('Itens marcados "Às vezes"','A')};
+}
 function teSugeridos(idade){ if(idade===null) return []; return Object.keys(TE_CAT).filter(k=>idade>=TE_CAT[k].min&&idade<=TE_CAT[k].max); }
 function tePacientes(){
   const vistos=new Set(); const out=[];
@@ -2856,6 +2871,7 @@ function teScoreHtml(esc_,a){
       ['Autoritário (média)',f((D.fis+D.ver+D.pun)/3),''],['· Coerção física',f(D.fis),''],['· Hostilidade verbal',f(D.ver),''],['· Punição sem explicação',f(D.pun),''],
       ['Permissivo',f(D.per),'']],nota:'Sem pontos de corte: compare as dimensões entre si e com a avaliação clínica.'};
   }
+  if(esc_==='IDADI_4_35'||esc_==='IDADI_36_72') return teIdadiScore(esc_,A);
   if(esc_==='MASC'){ const tot=A.reduce((x,y)=>x+(+y||0),0); return {titulo:'Pontuação (MASC)',linhas:[['Total bruto (0 a 117)',tot,'']],nota:'Pontuação por fatores e escore T devem ser feitos pela terapeuta com a tabela do instrumento.'}; }
   return null;
 }
@@ -2964,7 +2980,7 @@ function teVerResposta(cod){
     <div><b>Paciente:</b> ${esc(r.crianca.nome||'')} · nasc. ${fm(r.crianca.nasc)} · ${esc(r.crianca.sexo||'')} · série: ${esc(r.crianca.serie||'—')}</div>
     <div><b>Informante:</b> ${esc(r.informante.nome||'')} (${esc(r.informante.relacao||'')}) · data ${fm(r.informante.data)} <button class="btn-ghost" style="padding:2px 8px;font-size:11px;margin-left:6px" onclick="teEditarInformante('${l.codigo}')">✏️ Corrigir informante</button></div>
     <div style="margin:6px 0"><b>Resumo:</b> ${ops.map(o=>esc(o[1])+' '+n[o[0]]).join(' · ')} · total ${a.length}</div>
-    ${scHtml}
+    ${scHtml}${sc&&sc.extra||''}
     <div style="margin-top:6px"><b>${cat.neuro?'Código para lançar no Neurocortex':'Respostas em sequência'}</b> (${ops.map(o=>esc(o[0])+'='+esc(o[1])).join(', ')}):</div>
     <textarea readonly style="width:100%;font-family:monospace;font-size:12px;min-height:64px;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:6px">${esc(a)}</textarea>
     <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap"><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiarTexto('${esc(a)}')">📋 Copiar respostas</button><button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="teCopiarTexto(loadTestes().links.find(x=>x.codigo==='${cod}').resposta.codigoNeuro)">📋 Copiar código completo</button></div></div>`;
