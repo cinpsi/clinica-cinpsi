@@ -134,9 +134,10 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
   <footer class="foot" id="rodape"></footer>
 </div>
 
+<script src="idadi.js"></script>
 <script>
 (function(){
-  // Número do WhatsApp do CINPSI, só dígitos com DDI e DDD (ex.: 5511999999999). Vazio = a família escolhe o contato.
+// Número do WhatsApp do CINPSI, só dígitos com DDI e DDD (ex.: 5511999999999). Vazio = a família escolhe o contato.
   var CLINIC_WHATSAPP = '5511994027759';
   var LOGO_LIGHT = 'https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png', LOGO_DARK = 'https://cinpsi.com.br/wp-content/uploads/2024/12/6735152bc7583-e1733253502490.png';
 
@@ -637,7 +638,11 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
     "Eu dou uma palmada no(a) meu(minha) filho(a) quando ele(a) se comporta mal."
   ];
 
-  var SCALES = {
+  var IDADI_OPTS = [['S','Sim','Seu(sua) filho(a) já faz o que está escrito sem dificuldade, ou já fez (mesmo que não faça mais).','✓'],['A','Às vezes','Faz às vezes o que está escrito, mas ainda tem dificuldades.','~'],['N','Ainda não','Ainda não faz o que está escrito.','✗'],['O','Não observado','Você nunca viu seu(sua) filho(a) tentando fazer isso.','?']];
+var IDADI_INTRO = ['<p>Nas próximas telas há frases que descrevem comportamentos e habilidades esperados no desenvolvimento infantil: cognitivo, socioemocional, comunicação e linguagem, movimento e autonomia no dia a dia. Responda pensando em <b>um só filho(a)</b>, de acordo com a idade atual dele(a).</p>','<p>Não existe resposta certa: marque a que mais se aproxima da realidade. Cada criança tem o seu tempo, então evite comparações. Você verá apenas as frases da idade do(a) seu(sua) filho(a), a partir da data de nascimento informada.</p>','<p>Se você nunca viu seu(sua) filho(a) tentando fazer o que está escrito, escolha <b>Não observado</b>.</p>'];
+var IDADI_RODAPE = GEN_RODAPE + ' Inventário Dimensional de Avaliação do Desenvolvimento Infantil (IDADI).';
+function idadiItens(k){ return window.IDADI ? window.IDADI[k].itens.map(function(x){ return x[2]; }) : []; }
+var SCALES = {
     BRIEF2PAIS:{ titulo:'BRIEF-2 para Pais', brand:'BRIEF-2 · PAIS', resp:'pais', items:BRIEF2_PAIS_ITEMS, opts:NAF, per:7, lbl:'Frase', perg:BRIEF_PERG, tempo:'10 minutos', rodape:BRIEF_RODAPE, neuro:true,
       intro:['<p>Nas próximas telas há uma lista de afirmações que descrevem crianças. Nós gostaríamos de saber se sua criança teve <b>problemas</b> com estes comportamentos nos <b>últimos 6 meses</b>.</p>','<p>Por favor, responda todos os itens da melhor forma que puder. <b>Por favor, não pule nenhum item.</b> Pense sobre sua criança conforme você ler cada afirmação.</p>'] },
     BRIEF2PROF:{ titulo:'BRIEF-2 para Professores', brand:'BRIEF-2 · PROFESSOR(A)', resp:'prof', items:BRIEF2_PROF_ITEMS, opts:NAF, per:7, lbl:'Frase', perg:BRIEF_PERG, tempo:'10 minutos', rodape:BRIEF_RODAPE, neuro:true,
@@ -656,7 +661,9 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
     SDQ24:{ titulo:'SDQ · 2 a 4 anos (Pais/Professores)', brand:'SDQ · 2–4 ANOS', resp:'pais', items:SDQ_24, opts:SDQ_OPTS, per:7, lbl:'Pergunta', perg:'Nos últimos seis meses, a criança:', tempo:'5 minutos', rodape:SDQ_RODAPE, intro:SDQ_INTRO_PAIS },
     SDQAUTO:{ titulo:'SDQ · Autorrelato 11 a 17 anos', brand:'SDQ · AUTORRELATO', resp:'self', items:SDQ_AUTO, opts:SDQ_OPTS, per:7, lbl:'Pergunta', perg:'Nos últimos seis meses:', tempo:'5 minutos', rodape:SDQ_RODAPE,
       intro:['<p>Por favor, em cada item, marque <b>falso</b>, <b>mais ou menos verdadeiro</b> ou <b>verdadeiro</b>. Ajuda se você responder a todos os itens da melhor maneira possível, mesmo que não tenha certeza absoluta ou que a pergunta pareça estranha.</p>','<p>Responda com base em como as coisas têm sido nos <b>últimos seis meses</b>.</p>'] },
-    PSDQ:{ titulo:'Estilos e Dimensões Parentais (PSDQ)', brand:'ESTILOS PARENTAIS', resp:'pais', items:PSDQ_ITEMS, opts:[['1','Nunca','Nunca'],['2','Poucas vezes','Poucas vezes'],['3','Algumas vezes','Algumas vezes'],['4','Muitas vezes','Muitas vezes'],['5','Sempre','Sempre']], per:8, lbl:'Frase', perg:'Com que frequência VOCÊ age assim com seu(sua) filho(a)?', tempo:'8 minutos', rodape:GEN_RODAPE + ' Questionário de Estilos e Dimensões Parentais (versão brasileira de Oliveira, 2017, a partir de Robinson et al., 1995).',
+    IDADI_4_35:{ titulo:'IDADI · 4 a 35 meses (Pais/Cuidadores)', brand:'IDADI · 4–35 MESES', resp:'pais', idadi:'F4', items:idadiItens('F4'), opts:IDADI_OPTS, per:8, lbl:'Frase', perg:'Seu(sua) filho(a) já faz isto?', tempo:'20 a 30 minutos', rodape:IDADI_RODAPE, intro:IDADI_INTRO },
+IDADI_36_72:{ titulo:'IDADI · 36 a 72 meses (Pais/Cuidadores)', brand:'IDADI · 36–72 MESES', resp:'pais', idadi:'F36', items:idadiItens('F36'), opts:IDADI_OPTS, per:8, lbl:'Frase', perg:'Seu(sua) filho(a) já faz isto?', tempo:'20 a 30 minutos', rodape:IDADI_RODAPE, intro:IDADI_INTRO },
+PSDQ:{ titulo:'Estilos e Dimensões Parentais (PSDQ)', brand:'ESTILOS PARENTAIS', resp:'pais', items:PSDQ_ITEMS, opts:[['1','Nunca','Nunca'],['2','Poucas vezes','Poucas vezes'],['3','Algumas vezes','Algumas vezes'],['4','Muitas vezes','Muitas vezes'],['5','Sempre','Sempre']], per:8, lbl:'Frase', perg:'Com que frequência VOCÊ age assim com seu(sua) filho(a)?', tempo:'8 minutos', rodape:GEN_RODAPE + ' Questionário de Estilos e Dimensões Parentais (versão brasileira de Oliveira, 2017, a partir de Robinson et al., 1995).',
       intro:['<p>Leia cada frase e responda <b>com que frequência você age desse modo</b> com seu(sua) filho(a).</p>','<p>Não há respostas certas ou erradas. Responda como você realmente age no dia a dia.</p>'] }
   };
 
@@ -820,9 +827,10 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
         document.getElementById('msg').textContent = text;
         first.scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
         return;
-      }
-      go(2);
-    });
+}
+if (!idadiAfterIdent()) return;
+go(2);
+});
   }
 
   /* ---------- Itens ---------- */
@@ -981,8 +989,175 @@ textarea{width:100%; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,mono
     if (ed) ed.addEventListener('click', function(){ go(REVIEW); });
   }
 
-  function render(){
-    main.onchange = null;
+  /* ===== IDADI: só os itens da faixa etária (do início até o PARE de cada domínio) ===== */
+var ID = (CFG.idadi && window.IDADI) ? window.IDADI[CFG.idadi] : null;
+var VIEW = [];
+function setView(){
+VIEW = [];
+if (ID && S.act) VIEW = S.act.slice(); else if (!ID) for (var i = 0; i < TOTAL; i++) VIEW.push(i);
+NPAGES = Math.max(1, Math.ceil(VIEW.length / PER)); LAST = NPAGES + 1; REVIEW = NPAGES + 2;
+}
+function mesesEntre(n, h){
+var a = n.split('-'), b = h.split('-'), m = (+b[0] - +a[0]) * 12 + (+b[1] - +a[1]);
+if (+b[2] < +a[2]) m--;
+return m;
+}
+function idadiAfterIdent(){
+if (!ID) return true;
+var n = parseBR(S.id.nasc), h = parseBR(S.id.data) || todayISO(), m = mesesEntre(n, h);
+if (m < ID.min || m > ID.max) {
+document.getElementById('msg').textContent = 'Este questionário é para crianças de ' + ID.min + ' a ' + ID.max + ' meses, e a idade calculada é de ' + m + ' meses. Confira as datas ou peça à clínica o link da faixa correta.';
+return false;
+}
+var act = [];
+ID.itens.forEach(function(it, i){
+var num = parseInt(it[1].replace(/\D/g, ''), 10), fx = ID.faixas[ID.doms[it[0]].k] || [];
+for (var j = 0; j < fx.length; j++) if (m >= fx[j][0] && m <= fx[j][1] && num >= fx[j][2] && num <= fx[j][3]) { act.push(i); break; }
+});
+S.act = act; S.meses = m; save(); setView();
+return true;
+}
+function ansStr(){
+if (!ID) return S.ans.join('');
+var o = '';
+for (var i = 0; i < TOTAL; i++) o += (S.act && S.act.indexOf(i) >= 0 && S.ans[i]) ? S.ans[i] : '-';
+return o;
+}
+function answered(){ var c = 0; for (var p = 0; p < VIEW.length; p++) if (S.ans[VIEW[p]]) c++; return c; }
+function pageRange(pg){ var a = (pg - 2) * PER; return [a, Math.min(a + PER, VIEW.length)]; }
+function updateTop(){
+var n = answered(), tot = VIEW.length;
+bar.style.width = (tot ? Math.round(n / tot * 100) : 0) + '%';
+var label = S.done ? 'Concluído' : S.page === 0 ? 'Instruções' : S.page === 1 ? 'Identificação' : S.page === REVIEW ? 'Revisão' : 'Parte ' + (S.page - 1) + ' de ' + NPAGES;
+stat.textContent = label + (tot ? ' · ' + n + ' de ' + tot + ' respondidos' : '');
+}
+function glyph(o){ return o[3] || o[0]; }
+function itemHTML(i){
+var cur = S.ans[i], name = 'q' + (i + 1), pos = VIEW.indexOf(i) + 1, html =
+'<div class="item' + (cur ? ' done' : '') + '" id="it' + i + '" role="radiogroup" aria-labelledby="q' + i + '">' +
+'<div class="n">' + CFG.lbl + ' ' + pos + '</div><div class="q" id="q' + i + '">' + esc(ITEMS[i]) + '</div>' +
+'<div class="choices' + (OPTS.length >= 4 ? ' many' : '') + '" style="--cols:' + OPTS.length + '">';
+CFG.opts.forEach(function(o){
+html += '<label><input type="radio" name="' + name + '" value="' + o[0] + '" data-i="' + i + '"' + (cur === o[0] ? ' checked' : '') +
+' aria-label="' + esc(o[1]) + '"><span class="opt"><b>' + glyph(o) + '</b><span>' + o[1] + '</span></span></label>';
+});
+return html + '</div></div>';
+}
+function renderIntro(){
+var how = CFG.opts.map(function(o){ return '<li><b>' + esc(glyph(o)) + '</b><span>' + o[2] + '</span></li>'; }).join('');
+main.innerHTML =
+logoHTML() +
+'<h1>Instruções</h1>' +
+'<div class="doc" style="margin-top:12px">' + CFG.intro.join('') + '</div>' +
+'<div class="how"><ul>' + how + '</ul></div>' +
+'<p class="hint" style="margin-top:14px">Leva cerca de ' + esc(CFG.tempo) + '. Suas respostas ficam salvas neste aparelho enquanto você responde, então você pode parar e continuar depois. Use sempre o mesmo aparelho e o mesmo link.</p>' +
+'<div class="nav" style="margin-top:20px"><button class="btn" id="go1" type="button">Continuar</button></div>';
+document.getElementById('go1').addEventListener('click', function(){ go(1); });
+}
+function renderItems(){
+var r = pageRange(S.page), html = '<h1>' + CFG.lbl + 's ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
+'<p class="lead">' + esc(CFG.perg) + '</p>', lastDom = -1;
+for (var p = r[0]; p < r[1]; p++) {
+var i = VIEW[p];
+if (ID && ID.itens[i][0] !== lastDom) { lastDom = ID.itens[i][0]; html += '<h2>' + esc(ID.doms[lastDom].n) + '</h2>'; }
+html += itemHTML(i);
+}
+html += '<p class="msg" id="msg" role="alert"></p><div class="nav">' +
+'<button class="btn ghost" id="back" type="button">Voltar</button>' +
+'<button class="btn" id="next" type="button">' + (S.page === LAST ? 'Revisar' : 'Próxima parte') + '</button></div>';
+main.innerHTML = html;
+main.onchange = function(e){
+var t = e.target;
+if (!t || t.type !== 'radio') return;
+var i = +t.getAttribute('data-i');
+S.ans[i] = t.value; save(); updateTop();
+var row = document.getElementById('it' + i);
+row.classList.add('done'); row.classList.remove('missing');
+document.getElementById('msg').textContent = '';
+var nxt = null;
+for (var q = VIEW.indexOf(i) + 1; q < r[1]; q++) if (!S.ans[VIEW[q]]) { nxt = VIEW[q]; break; }
+if (nxt !== null) setTimeout(function(){
+var el = document.getElementById('it' + nxt);
+if (el) el.scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
+}, 200);
+};
+document.getElementById('back').addEventListener('click', function(){ go(S.page - 1); });
+document.getElementById('next').addEventListener('click', function(){
+var miss = [];
+for (var p = r[0]; p < r[1]; p++) if (!S.ans[VIEW[p]]) miss.push(VIEW[p]);
+if (miss.length) {
+miss.forEach(function(i){ document.getElementById('it' + i).classList.add('missing'); });
+document.getElementById('msg').textContent = miss.length === 1 ? 'Falta responder 1 item nesta parte.' : 'Faltam ' + miss.length + ' itens nesta parte.';
+document.getElementById('it' + miss[0]).scrollIntoView({block:'center', behavior: reduced() ? 'auto' : 'smooth'});
+return;
+}
+go(S.page + 1);
+});
+}
+function renderReview(){
+var miss = [];
+VIEW.forEach(function(i, p){ if (!S.ans[i]) miss.push(p); });
+var html = '<h1>Revisão</h1>';
+if (miss.length) {
+html += '<p class="lead">Ainda faltam ' + miss.length + ' itens. Toque em um para voltar até ele.</p><div class="jump">';
+miss.forEach(function(p){ html += '<button type="button" data-go="' + p + '">' + CFG.lbl + ' ' + (p + 1) + '</button>'; });
+html += '</div>';
+} else {
+html += '<p class="lead">Você respondeu todos os itens. Toque em Concluir para enviar.</p>';
+}
+html += '<div class="nav" style="margin-top:20px"><button class="btn ghost" id="back" type="button">Voltar</button>' +
+'<button class="btn" id="finish" type="button"' + (miss.length ? ' disabled style="opacity:.45;cursor:not-allowed"' : '') + '>Concluir</button></div>';
+main.innerHTML = html;
+document.getElementById('back').addEventListener('click', function(){ go(LAST); });
+Array.prototype.forEach.call(main.querySelectorAll('[data-go]'), function(b){
+b.addEventListener('click', function(){
+var p = +b.getAttribute('data-go');
+S.page = Math.floor(p / PER) + 2; save(); render();
+var el = document.getElementById('it' + VIEW[p]);
+if (el) { el.classList.add('missing'); el.scrollIntoView({block:'center'}); }
+});
+});
+var fin = document.getElementById('finish');
+if (!miss.length) fin.addEventListener('click', function(){ S.done = true; save(); render(); window.scrollTo(0, 0); });
+}
+function buildCode(){
+var d = S.id;
+return [ESC,'v1',clean(d.nome),parseBR(d.nasc),clean(d.sexo),clean(d.serie),clean(d.informante),relacaoTxt(),parseBR(d.data),ansStr()].join('|');
+}
+function buildMessage(){
+var d = S.id, a = ansStr(), lines = [
+CFG.titulo,
+'Paciente: ' + clean(d.nome),
+'Nascimento: ' + fmt(parseBR(d.nasc)),
+'Sexo: ' + clean(d.sexo),
+'Série: ' + (clean(d.serie) || '-'),
+'Informante: ' + clean(d.informante) + ' (' + relacaoTxt() + ')',
+'Data: ' + fmt(parseBR(d.data))
+];
+if (ID && S.meses != null) lines.push('Idade: ' + S.meses + ' meses');
+lines.push('', 'Respostas (' + OPTS.map(function(o){ return o[0] + '=' + o[1]; }).join(', ') + ')');
+for (var x = 0; x < TOTAL; x += 10) {
+var b = Math.min(x + 10, TOTAL);
+lines.push((x + 1) + '-' + b + ': ' + a.slice(x, b));
+}
+lines.push('', 'Código: ' + buildCode());
+return lines.join('\n');
+}
+function enviar(){
+var payload = { codigo:CODE, escala:ESC, versao:'v1',
+crianca:{ nome:clean(S.id.nome), nasc:parseBR(S.id.nasc), sexo:S.id.sexo, serie:clean(S.id.serie), meses:(S.meses != null ? S.meses : null) },
+informante:{ nome:clean(S.id.informante), relacao:relacaoTxt(), data:parseBR(S.id.data) },
+respostas:ansStr(), codigoNeuro:buildCode() };
+var body = { fields:{
+escala:{stringValue:ESC}, dados:{stringValue:JSON.stringify(payload)}, enviadoEm:{stringValue:new Date().toISOString()} } };
+return fetch(API + FB_KEY + '&documentId=' + encodeURIComponent(CODE), { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body) })
+.then(function(r){ if(!r.ok){ var e = new Error('http ' + r.status); e.status = r.status; throw e; } return r.json(); });
+}
+setView();
+
+
+function render(){
+main.onchange = null;
     updateTop();
     if (S.done) renderDone();
     else if (S.page === 0) renderIntro();
