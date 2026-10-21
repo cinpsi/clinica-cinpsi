@@ -1298,7 +1298,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse','cinpsi_testes','cinpsi_ravlt','cinpsi_ravlt_cfg','cinpsi_jornada','cinpsi_jornada_motivos'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse','cinpsi_testes','cinpsi_ravlt','cinpsi_ravlt_cfg','cinpsi_fdt','cinpsi_jornada','cinpsi_jornada_motivos'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -2758,6 +2758,242 @@ function rvPdf(id,corr){
   w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },700);
 }
 
+// ════════════════════════════════════════════════════════════
+// FDT (Five Digit Test) — registro com cronômetro e voz. O navegador transcreve a fala; o áudio NÃO é guardado.
+// Gabarito: as 50 respostas esperadas são as mesmas nas quatro partes (folha de registro do teste).
+// Percentis (PC) não estão no código: são digitados a partir das tabelas do manual.
+// ════════════════════════════════════════════════════════════
+const FD_KEY='cinpsi_fdt';
+const FD_GAB='14325431525423125143132543541214325415325214325314';
+const FD_PARTES=[
+  {k:'P1',n:'Parte 1 · Leitura',tipo:'Processo automático',fala:'Antes, faça o treinamento do caderno (2 fileiras). 1ª fileira: “Quero que leia um número em cada quadro: um, dois… (três, quatro, cinco)”. 2ª fileira: “Continue”. Depois: “Muito bem, agora comece aqui em cima e trabalhe o mais rápido que puder”.'},
+  {k:'P2',n:'Parte 2 · Contagem',tipo:'Processo automático',fala:'Treinamento do caderno. 1ª fileira: “Quero que conte quantos asteriscos existem em cada quadro: um, dois… (três, quatro, cinco)”. 2ª fileira: “Continue”. Depois: “Muito bem, agora comece aqui em cima e trabalhe o mais rápido que puder”.'},
+  {k:'P3',n:'Parte 3 · Escolha',tipo:'Processo controlado',fala:'Treinamento do caderno. 1ª fileira: “Agora quero que conte quantos números existem em cada quadro. Lembre-se que deve contar os números em vez de lê-los: um, dois, três… (quatro, cinco)”. 2ª fileira: “Continue”. Depois: “Muito bem, agora comece aqui em cima e trabalhe o mais rápido que puder”.'},
+  {k:'P4',n:'Parte 4 · Alternância',tipo:'Processo controlado',fala:'Treinamento do caderno. 1ª fileira: “Agora você deve contar os números como fez antes, mas quando chegar a um quadro com a borda mais grossa (mostrar), mude a regra e leia o número: um, dois, três… (quatro, cinco)”. 2ª fileira: “Continue”. Depois: “Muito bem, agora comece aqui em cima e trabalhe o mais rápido que puder”.'}
+];
+let FD=null, FD_STEP=-1, _fdRec=null, _fdOn=false, _fdBase='', _fdT0=0, _fdInt=null, _fdRun=false;
+function fdSess(){ const v=finLoad(FD_KEY); return Array.isArray(v)?v:[]; }
+const FD_NUM={zero:0,um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9};
+function fdDigitos(txt){
+  const out=[]; String(txt||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').split(/[^a-z0-9]+/).filter(Boolean).forEach(t=>{
+    if(/^\d+$/.test(t)) t.split('').forEach(c=>out.push(+c)); else if(FD_NUM[t]!==undefined) out.push(FD_NUM[t]);
+  });
+  return out;
+}
+// Alinha o que foi dito ao gabarito e marca, por posição, acerto (0) ou erro (1).
+function fdAlinhar(resp){
+  const K=FD_GAB.split('').map(Number), n=K.length, m=resp.length, D=[];
+  for(let i=0;i<=n;i++){ D[i]=[]; for(let j=0;j<=m;j++) D[i][j]=i===0?j:j===0?i:0; }
+  for(let i=1;i<=n;i++) for(let j=1;j<=m;j++) D[i][j]=Math.min(D[i-1][j]+1,D[i][j-1]+1,D[i-1][j-1]+(K[i-1]===resp[j-1]?0:1));
+  const err=Array(n).fill(0); let i=n,j=m, extras=0;
+  while(i>0||j>0){
+    if(i>0&&j>0&&D[i][j]===D[i-1][j-1]+(K[i-1]===resp[j-1]?0:1)){ if(K[i-1]!==resp[j-1]) err[i-1]=1; i--; j--; }
+    else if(i>0&&D[i][j]===D[i-1][j]+1){ err[i-1]=1; i--; }
+    else { extras++; j--; }
+  }
+  return {err,extras};
+}
+function fdNovaParte(){ return {tempo:'',erros:0,err:Array(50).fill(0),texto:'',confirmado:false,extras:0}; }
+function fdFmtT(s){ if(s===''||s==null||isNaN(s)) return '—'; s=+s; const m=Math.floor(s/60); return (m?m+'min ':'')+(s-m*60).toFixed(1).replace('.',',')+'s'; }
+function fdDerivados(s){
+  const t=k=>{ const v=parseFloat(String(((s.partes||{})[k]||{}).tempo).replace(',','.')); return isNaN(v)?null:v; };
+  const e=k=>{ const p=(s.partes||{})[k]; return p&&p.confirmado?(+p.erros||0):null; };
+  const dif=(a,b)=>a!==null&&b!==null?Math.round((a-b)*10)/10:null;
+  return {inib:dif(t('P3'),t('P1')),flex:dif(t('P4'),t('P1')),inibE:dif(e('P3'),e('P1')),flexE:dif(e('P4'),e('P1'))};
+}
+function fdCss(){
+  if(document.getElementById('fd-css')) return;
+  const s=document.createElement('style'); s.id='fd-css';
+  s.textContent='.fd-cel{width:34px;height:30px;border:1px solid var(--border);border-radius:6px;background:#EAF6EE;font-weight:700;cursor:pointer;font-size:13px}.fd-cel.x{background:#FBEDEC;border-color:#E3A5A0;color:#B3261E}'+
+  '.fd-chip{padding:5px 10px;border-radius:999px;border:1px solid var(--border);background:#fff;font-size:12px;cursor:pointer}.fd-chip.cur{background:#04253D;color:#fff;border-color:#04253D}.fd-chip.done{background:#EAF6EE;border-color:#86C9A0;color:#14653A}'+
+  '.fd-tempo{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;color:#04253D}.fd-rec-on{animation:fdp 1s infinite}@keyframes fdp{50%{opacity:.4}}';
+  document.head.appendChild(s);
+}
+function fdHtmlAba(p,id,nome){
+  const ls=fdSess().filter(x=>String(x.pacNome||'').toLowerCase()===String(nome||'').toLowerCase()).sort((a,b)=>String(b.criado||'').localeCompare(String(a.criado||'')));
+  const lista=ls.length?ls.map(s=>{
+    const ok=s.status==='registrado', d=fdDerivados(s);
+    const resumo=FD_PARTES.map(P=>{ const x=(s.partes||{})[P.k]; return P.k.replace('P','Parte ')+': '+(x&&x.confirmado?fdFmtT(x.tempo)+' / '+(x.erros||0)+' erro(s)':'—'); }).join(' · ');
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:8px;background:${ok?'#f0fdf4':'var(--surface)'}">
+      <div style="font-size:13px"><b>FDT</b> · ${esc(preCadFmtData(s.data))} · ${ok?'✅ registrado':'⏳ em andamento'}</div>
+      <div style="font-size:12px;color:var(--text3);margin-top:4px">${esc(resumo)}</div>
+      ${ok&&d.inib!==null?`<div style="font-size:12px;color:var(--text3);margin-top:2px">Inibição: ${fdFmtT(d.inib)} · Flexibilidade: ${fdFmtT(d.flex)}</div>`:''}
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap">
+        <button class="btn-primary" style="padding:4px 10px;font-size:12px" onclick="fdAbrir('${s.id}')">${ok?'Abrir':'Continuar'}</button>
+        <button class="btn-ghost" style="padding:4px 10px;font-size:12px" onclick="fdPdf('${s.id}')">📄 PDF do resultado</button>
+        ${CU.role==='admin'?`<button class="btn-ghost" style="padding:4px 10px;font-size:12px;color:#b91c1c" onclick="fdExcluir('${s.id}')">🗑️ Excluir</button>`:''}
+      </div></div>`;}).join(''):'<p style="font-size:13px;color:var(--text3);margin-top:12px">Nenhuma aplicação do FDT registrada para este paciente.</p>';
+  return `<button class="btn-primary" onclick="fdNova()">⏱️ Nova aplicação do FDT</button>`+lista;
+}
+function fdSalvar(){ const l=fdSess().filter(x=>x.id!==FD.id); l.push(JSON.parse(JSON.stringify(FD))); finSave(FD_KEY,l); }
+function fdNova(){
+  const nome=teNomeAtual, p=tePacientes().find(x=>tePacNome(x).toLowerCase()===nome.toLowerCase())||{};
+  FD={id:'fd_'+Date.now(),pacNome:nome,pacId:String(p.id||''),nasc:teNascISO(p.nascimento||p.nasc),sexo:'',escolaridade:'',examinador:(CU&&CU.nome)||'',data:new Date().toISOString().slice(0,10),consentimentoAudio:false,status:'em_andamento',partes:{},pc:{},obs:'',criado:new Date().toISOString(),criadoPor:(CU&&CU.nome)||''};
+  FD_STEP=-1; fdRender();
+}
+function fdAbrir(id){
+  const s=fdSess().find(x=>x.id===id); if(!s) return;
+  FD=JSON.parse(JSON.stringify(s));
+  if(s.status==='registrado') FD_STEP=4; else { const i=FD_PARTES.findIndex(P=>!(FD.partes[P.k]&&FD.partes[P.k].confirmado)); FD_STEP=i<0?4:i; }
+  fdRender();
+}
+function fdParaTudo(){ _fdOn=false; _fdRun=false; try{ if(_fdRec) _fdRec.stop(); }catch(e){} if(_fdInt){ clearInterval(_fdInt); _fdInt=null; } }
+function fdFechar(){ fdParaTudo(); if(FD&&FD_STEP>=0) fdSalvar(); document.getElementById('modal-fdt')?.remove(); FD=null; if(document.getElementById('modal-testes')) teRenderFicha(); }
+function fdIr(i){ fdParaTudo(); fdLerCampos(); FD_STEP=i; fdRender(); }
+function fdLerCampos(){
+  const t=document.getElementById('fd-tempo'); if(t&&FD_STEP>=0&&FD_STEP<4){ const P=FD.partes[FD_PARTES[FD_STEP].k]; if(P) P.tempo=t.value.replace(',','.'); }
+}
+function fdRender(){
+  fdCss();
+  let mo=document.getElementById('modal-fdt');
+  if(!mo){ mo=document.createElement('div'); mo.className='modal-overlay open'; mo.id='modal-fdt'; document.body.appendChild(mo); }
+  const chips=FD_PARTES.map((P,i)=>{ const d=FD.partes[P.k]&&FD.partes[P.k].confirmado; return `<button class="fd-chip ${i===FD_STEP?'cur':d?'done':''}" ${FD_STEP<0?'disabled':''} onclick="fdIr(${i})">${P.k.replace('P','Parte ')}${d&&i!==FD_STEP?' ✓':''}</button>`; }).join(' ')+` <button class="fd-chip ${FD_STEP===4?'cur':''}" ${FD_STEP<0?'disabled':''} onclick="fdIr(4)">Resultado</button>`;
+  const corpo=FD_STEP<0?fdHtmlCab():FD_STEP<4?fdHtmlParte(FD_STEP):fdHtmlFim();
+  mo.innerHTML=`<div class="modal" style="max-width:780px;max-height:94vh;overflow:auto">
+    <div class="modal-header"><div class="modal-title">⏱️ FDT — ${esc(FD.pacNome)}</div><button class="modal-close" onclick="fdFechar()">×</button></div>
+    <div style="padding:10px 20px 0;display:flex;gap:6px;flex-wrap:wrap">${chips}</div>
+    <div style="padding:14px 20px 20px">${corpo}</div></div>`;
+}
+function fdHtmlCab(){
+  return `<div class="form-grid">
+    <div class="form-group"><label class="form-label">Data da aplicação</label><input class="form-input" type="date" id="fd-data" value="${esc(FD.data)}"></div>
+    <div class="form-group"><label class="form-label">Idade</label><input class="form-input" disabled value="${esc(rvIdadeTxt(FD.nasc,FD.data)||'—')}"></div>
+    <div class="form-group"><label class="form-label">Sexo</label><select class="form-select" id="fd-sexo"><option value="">Selecione...</option><option${FD.sexo==='F'?' selected':''} value="F">Feminino</option><option${FD.sexo==='M'?' selected':''} value="M">Masculino</option></select></div>
+    <div class="form-group"><label class="form-label">Escolaridade / série</label><input class="form-input" id="fd-esc" value="${esc(FD.escolaridade)}"></div>
+    <div class="form-group full"><label class="form-label">Examinador</label><input class="form-input" id="fd-exam" value="${esc(FD.examinador)}"></div>
+  </div>
+  <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px;margin-top:12px;line-height:1.5"><input type="checkbox" id="fd-cons" ${FD.consentimentoAudio?'checked':''} style="margin-top:3px"><span>O responsável autorizou o uso de áudio para transcrição (consta no Termo de Adesão). <b>O áudio não é guardado: só o texto transcrito.</b> Sem a transcrição, você ainda pode marcar os erros manualmente.</span></label>
+  <div style="margin-top:16px;text-align:right"><button class="btn-primary" onclick="fdIniciar()">Iniciar aplicação →</button></div>`;
+}
+function fdIniciar(){
+  FD.data=document.getElementById('fd-data').value||FD.data; FD.sexo=document.getElementById('fd-sexo').value; FD.escolaridade=document.getElementById('fd-esc').value.trim(); FD.examinador=document.getElementById('fd-exam').value.trim(); FD.consentimentoAudio=document.getElementById('fd-cons').checked;
+  fdSalvar(); FD_STEP=0; fdRender();
+}
+function fdHtmlGrade(P){
+  let h='<div style="display:grid;grid-template-columns:auto repeat(5,34px);gap:4px 6px;align-items:center;justify-content:start;margin-top:6px">';
+  for(let r=0;r<10;r++){ h+=`<div style="font-size:11px;color:var(--text3);text-align:right">${r+1}</div>`; for(let c=0;c<5;c++){ const i=r*5+c; h+=`<button class="fd-cel ${P.err[i]?'x':''}" onclick="fdCel(${i})">${FD_GAB[i]}</button>`; } }
+  return h+'</div>';
+}
+function fdHtmlParte(i){
+  const P=FD_PARTES[i], d=FD.partes[P.k]||(FD.partes[P.k]=fdNovaParte());
+  return `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text3)">${esc(P.tipo)}</div>
+  <div style="font-weight:700;font-size:16px;margin-bottom:6px">${esc(P.n)}</div>
+  <div style="font-size:12px;color:var(--text2);background:#F6F8FB;border-radius:8px;padding:10px;line-height:1.5">${esc(P.fala)}</div>
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px">
+    <div class="fd-tempo" id="fd-rel">${d.tempo!==''?fdFmtT(d.tempo):'0,0s'}</div>
+    <button class="btn-primary" id="fd-btn-ini" onclick="fdIniciarParte()">▶ Iniciar (cronômetro + voz)</button>
+    <button class="btn-ghost" id="fd-btn-par" style="display:none" onclick="fdPararParte()">⏹ Parar</button>
+    <span id="fd-ind" style="font-size:12px;color:#B3261E"></span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;margin-top:10px;font-size:13px">Tempo (segundos):
+    <input class="form-input" id="fd-tempo" style="max-width:110px" value="${esc(d.tempo)}" placeholder="ex.: 32,5"> <span style="color:var(--text3)">(preenchido ao parar; pode ajustar à mão)</span></div>
+  <label class="form-label" style="margin-top:12px">Transcrição (pode corrigir e tocar em Reprocessar)</label>
+  <textarea class="form-input" id="fd-texto" rows="2" style="width:100%">${esc(d.texto)}</textarea>
+  <button class="btn-ghost" style="font-size:12px;margin-top:6px" onclick="fdReprocessar()">↻ Reprocessar texto</button>
+  <div style="margin-top:12px;font-size:12px;color:var(--text2)">Confira as 50 respostas. <b>Verde = correta · vermelho = erro.</b> Toque em um número para alternar (respostas autocorrigidas pela pessoa não contam como erro).</div>
+  <div id="fd-grade">${fdHtmlGrade(d)}</div>
+  <div id="fd-tot" style="margin-top:10px;font-size:14px">${fdHtmlTot(d)}</div>
+  <div style="display:flex;justify-content:space-between;margin-top:16px">
+    <button class="btn-ghost" ${i===0?'disabled':''} onclick="fdIr(${i-1})">← Anterior</button>
+    <button class="btn-primary" onclick="fdConfirmar()">Confirmar ${esc(P.k.replace('P','Parte '))} e continuar →</button>
+  </div>`;
+}
+function fdHtmlTot(d){ return `<b>Erros: ${d.erros}</b>${d.extras?` · respostas a mais ouvidas: ${d.extras}`:''}`; }
+function fdAtual(){ const d=FD.partes[FD_PARTES[FD_STEP].k]; const g=document.getElementById('fd-grade'); if(g) g.innerHTML=fdHtmlGrade(d); const t=document.getElementById('fd-tot'); if(t) t.innerHTML=fdHtmlTot(d); }
+function fdCel(i){ const d=FD.partes[FD_PARTES[FD_STEP].k]; d.err[i]=d.err[i]?0:1; d.erros=d.err.reduce((a,b)=>a+b,0); fdAtual(); }
+function fdReprocessar(){
+  const d=FD.partes[FD_PARTES[FD_STEP].k], txt=document.getElementById('fd-texto').value; d.texto=txt;
+  const r=fdDigitos(txt); if(!r.length){ toast('Nenhum número encontrado no texto.'); return; }
+  const a=fdAlinhar(r); d.err=a.err; d.extras=a.extras; d.erros=d.err.reduce((x,y)=>x+y,0); fdAtual();
+}
+function fdTick(){ const el=document.getElementById('fd-rel'); if(!el||!_fdRun) return; el.textContent=fdFmtT((performance.now()-_fdT0)/1000); }
+function fdIniciarParte(){
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  const ta=document.getElementById('fd-texto'); ta.value=''; _fdBase='';
+  _fdT0=performance.now(); _fdRun=true; if(_fdInt) clearInterval(_fdInt); _fdInt=setInterval(fdTick,100);
+  document.getElementById('fd-btn-ini').style.display='none'; document.getElementById('fd-btn-par').style.display='';
+  const ind=document.getElementById('fd-ind');
+  if(SR&&FD.consentimentoAudio){ _fdOn=true; fdIniciarRec(SR); ind.textContent='● cronometrando e gravando'; ind.className='fd-rec-on'; }
+  else { ind.textContent='● cronometrando (sem voz: marque os erros à mão)'; ind.className='fd-rec-on'; }
+}
+function fdIniciarRec(SR){
+  const r=new SR(); r.lang='pt-BR'; r.continuous=true; r.interimResults=true; r.maxAlternatives=1;
+  r.onresult=e=>{ let f='',t=''; for(let i=0;i<e.results.length;i++){ const x=e.results[i]; if(x.isFinal) f+=x[0].transcript+' '; else t+=x[0].transcript+' '; }
+    const ta=document.getElementById('fd-texto'); if(ta) ta.value=(_fdBase+' '+f+t).trim(); };
+  r.onerror=e=>{ if(e.error==='not-allowed'||e.error==='service-not-allowed'){ _fdOn=false; toast('Permita o uso do microfone no navegador (cadeado ao lado do endereço).'); } };
+  r.onend=()=>{ if(_fdOn){ const ta=document.getElementById('fd-texto'); _fdBase=ta?(ta.value||'').trim():_fdBase; try{ fdIniciarRec(SR); }catch(e){ _fdOn=false; } } };
+  _fdRec=r; try{ r.start(); }catch(e){ _fdOn=false; }
+}
+function fdPararParte(){
+  if(!_fdRun) return;
+  const seg=Math.round((performance.now()-_fdT0)/100)/10; _fdRun=false; if(_fdInt){ clearInterval(_fdInt); _fdInt=null; }
+  _fdOn=false; try{ if(_fdRec) _fdRec.stop(); }catch(e){}
+  const d=FD.partes[FD_PARTES[FD_STEP].k]; d.tempo=String(seg).replace('.',',');
+  document.getElementById('fd-tempo').value=d.tempo; document.getElementById('fd-rel').textContent=fdFmtT(seg);
+  document.getElementById('fd-btn-ini').style.display=''; document.getElementById('fd-btn-ini').textContent='▶ Refazer cronômetro'; document.getElementById('fd-btn-par').style.display='none';
+  const ind=document.getElementById('fd-ind'); ind.textContent=''; ind.className='';
+  setTimeout(()=>{ const ta=document.getElementById('fd-texto'); if(ta&&ta.value.trim()) fdReprocessar(); },600);
+}
+function fdConfirmar(){
+  const d=FD.partes[FD_PARTES[FD_STEP].k]; fdLerCampos();
+  if(_fdRun){ toast('Pare o cronômetro antes de confirmar.'); return; }
+  if(d.tempo===''||isNaN(parseFloat(String(d.tempo).replace(',','.')))){ if(!confirm('O tempo desta parte não foi preenchido. Continuar mesmo assim?')) return; }
+  const ta=document.getElementById('fd-texto'); if(ta) d.texto=ta.value;
+  d.confirmado=true; fdSalvar(); FD_STEP++; fdRender();
+}
+function fdHtmlFim(){
+  const d=fdDerivados(FD);
+  const lin=(t,k)=>{ const p=FD.partes[k]||{}; return `<tr><td style="padding:5px 8px;font-weight:600">${t}</td><td style="text-align:center">${fdFmtT(p.tempo)}</td><td style="text-align:center">${p.confirmado?(p.erros||0):'—'}</td><td style="text-align:center"><input class="form-input" style="width:70px;padding:3px 6px" value="${esc((FD.pc||{})[k+'t']||'')}" onchange="fdPc('${k}t',this.value)"></td><td style="text-align:center"><input class="form-input" style="width:70px;padding:3px 6px" value="${esc((FD.pc||{})[k+'e']||'')}" onchange="fdPc('${k}e',this.value)"></td></tr>`; };
+  const der=(t,v,k)=>`<tr><td style="padding:5px 8px;font-weight:600">${t}</td><td style="text-align:center">${v===null?'—':fdFmtT(v)}</td><td style="text-align:center">—</td><td style="text-align:center"><input class="form-input" style="width:70px;padding:3px 6px" value="${esc((FD.pc||{})[k]||'')}" onchange="fdPc('${k}',this.value)"></td><td></td></tr>`;
+  return `<div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="background:#F6F8FB"><th style="text-align:left;padding:5px 8px">Medida</th><th>Tempo</th><th>Erros</th><th>PC tempo</th><th>PC erros</th></tr></thead><tbody>
+    ${FD_PARTES.map(P=>lin(P.n,P.k)).join('')}${der('Inibição (Parte 3 − Parte 1)',d.inib,'inib')}${der('Flexibilidade (Parte 4 − Parte 1)',d.flex,'flex')}</tbody></table></div>
+  <p style="font-size:12px;color:var(--text3);margin-top:8px">Digite os percentis (PC) conforme as tabelas do manual do FDT para a idade/escolaridade do paciente; eles entram no PDF. O sistema não calcula o percentil.</p>
+  <label class="form-label" style="margin-top:12px">Observações</label>
+  <textarea class="form-input" id="fd-obs" rows="3" style="width:100%">${esc(FD.obs||'')}</textarea>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">
+    <button class="btn-primary" onclick="fdFinalizar(false)">💾 Salvar registro</button>
+    <button class="btn-ghost" onclick="fdFinalizar(true)">📄 Salvar e abrir PDF do resultado</button>
+  </div>`;
+}
+function fdPc(k,v){ FD.pc=FD.pc||{}; FD.pc[k]=v.trim(); }
+function fdFinalizar(pdf){
+  FD.obs=(document.getElementById('fd-obs')||{value:FD.obs}).value; FD.status='registrado'; FD.registradoEm=new Date().toISOString();
+  fdSalvar(); toast('✅ Registro do FDT salvo.'); if(pdf) fdPdf(FD.id); else fdRender();
+}
+function fdExcluir(id){
+  if(CU.role!=='admin'||!confirm('Excluir esta aplicação do FDT? Não pode ser desfeito.')) return;
+  finSave(FD_KEY,fdSess().filter(x=>x.id!==id)); if(document.getElementById('modal-testes')) teRenderFicha();
+}
+function fdPdf(id){
+  const s=(FD&&FD.id===id?FD:null)||fdSess().find(x=>x.id===id); if(!s){ toast('Registro não encontrado.'); return; }
+  const d=fdDerivados(s), pc=s.pc||{};
+  const linhaP=P=>{ const p=(s.partes||{})[P.k]||{}; return `<tr><td style="text-align:left"><b>${esc(P.n)}</b></td><td>${fdFmtT(p.tempo)}</td><td>${p.confirmado?(p.erros||0):'—'}</td><td>${esc(pc[P.k+'t']||'')}</td><td>${esc(pc[P.k+'e']||'')}</td></tr>`; };
+  const grades=FD_PARTES.map(P=>{ const p=(s.partes||{})[P.k]; if(!p) return ''; let h=`<div class="gp"><div class="gt">${esc(P.n)}</div><table class="g">`; for(let r=0;r<10;r++){ h+='<tr>'; for(let c=0;c<5;c++){ const i=r*5+c; h+=`<td class="${p.err&&p.err[i]?'x':''}">${FD_GAB[i]}</td>`; } h+='</tr>'; } return h+'</table></div>'; }).join('');
+  const html=`<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>FDT - ${esc(s.pacNome)}</title><style>
+  @page{size:A4;margin:14mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1d2733;font-size:11px;margin:0}
+  .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #04253D;padding-bottom:8px;margin-bottom:10px}.hd img{height:54px}.hd .t{text-align:right}.hd h1{font-size:16px;margin:0;color:#04253D}.hd p{margin:2px 0 0;color:#586374}
+  .id{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 14px;border:1px solid #cdd5df;border-radius:6px;padding:8px;margin-bottom:10px}.id div b{color:#04253D}
+  h2{font-size:12px;color:#fff;background:#04253D;padding:4px 8px;border-radius:4px;margin:12px 0 6px}
+  table.r{width:100%;border-collapse:collapse}table.r th,table.r td{border:1px solid #b9c3cf;padding:5px 7px;text-align:center}table.r th{background:#e9eff6}
+  .gw{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.gt{font-size:10px;font-weight:700;margin-bottom:3px}table.g{border-collapse:collapse}table.g td{border:1px solid #b9c3cf;width:18px;height:16px;text-align:center;font-size:10px}table.g td.x{background:#F3B5B0;font-weight:700;color:#8a1c14}
+  .ob{border:1px solid #cdd5df;border-radius:6px;padding:8px;min-height:44px;white-space:pre-wrap}.ft{margin-top:14px;font-size:9px;color:#6b7686;border-top:1px solid #cdd5df;padding-top:6px}
+  </style></head><body>
+  <div class="hd"><img src="${RV_LOGO}"><div class="t"><h1>Resultado — FDT</h1><p>Five Digit Test (Teste dos Cinco Dígitos) · tempos, erros e medidas derivadas</p></div></div>
+  <div class="id"><div><b>Paciente:</b> ${esc(s.pacNome)}</div><div><b>Nascimento:</b> ${s.nasc?esc(preCadFmtData(s.nasc.slice(0,10))):'—'}</div><div><b>Idade na aplicação:</b> ${esc(rvIdadeTxt(s.nasc,s.data)||'—')}</div>
+  <div><b>Data:</b> ${esc(preCadFmtData(s.data))}</div><div><b>Sexo:</b> ${s.sexo==='F'?'Feminino':s.sexo==='M'?'Masculino':'—'}</div><div><b>Escolaridade:</b> ${esc(s.escolaridade||'—')}</div><div style="grid-column:1/-1"><b>Examinador:</b> ${esc(s.examinador||'—')}</div></div>
+  <h2>Resumo da pontuação</h2>
+  <table class="r"><thead><tr><th style="text-align:left">Medida</th><th>Tempo</th><th>Erros</th><th>PC tempo</th><th>PC erros</th></tr></thead><tbody>
+  ${FD_PARTES.map(linhaP).join('')}
+  <tr><td style="text-align:left"><b>Inibição</b> (Parte 3 − Parte 1)</td><td>${d.inib===null?'—':fdFmtT(d.inib)}</td><td>${d.inibE===null?'—':d.inibE}</td><td>${esc(pc.inib||'')}</td><td></td></tr>
+  <tr><td style="text-align:left"><b>Flexibilidade</b> (Parte 4 − Parte 1)</td><td>${d.flex===null?'—':fdFmtT(d.flex)}</td><td>${d.flexE===null?'—':d.flexE}</td><td>${esc(pc.flex||'')}</td><td></td></tr></tbody></table>
+  <h2>Respostas por parte (vermelho = erro)</h2><div class="gw">${grades}</div>
+  <h2>Observações</h2><div class="ob">${esc(s.obs||'')}</div>
+  <div class="ft">Documento gerado pelo sistema CINPSI em ${esc(new Date().toLocaleString('pt-BR'))}. Tempos medidos pelo cronômetro do sistema; erros conferidos pelo examinador (transcrição de voz como apoio; o áudio não foi armazenado). Percentis (PC) transcritos das tabelas do manual pelo examinador. A interpretação clínica é de responsabilidade do profissional.</div>
+  </body></html>`;
+  const w=window.open('','_blank'); if(!w){ toast('Libere pop-ups para abrir o PDF.'); return; }
+  w.document.write(html); w.document.close(); setTimeout(()=>{ try{ w.focus(); w.print(); }catch(e){} },700);
+}
+
 // ── Ficha do paciente: abas Testes | Trilha ──
 let teAbaAtual='testes', teNomeAtual='';
 function teAbrir(nome,aba){
@@ -2776,8 +3012,8 @@ function teRenderFicha(){
   const tab=(k,t)=>`<button onclick="teAbaAtual='${k}';teRenderFicha()" style="flex:1;padding:10px;border:none;border-bottom:3px solid ${teAbaAtual===k?'var(--accent)':'transparent'};background:none;font-weight:${teAbaAtual===k?'600':'400'};cursor:pointer;font-size:14px">${t}</button>`;
   mo.innerHTML=`<div class="modal" style="max-width:680px">
     <div class="modal-header"><div class="modal-title">🧪 ${esc(nome)}${id!==null?` <span style="font-weight:400;color:var(--text3);font-size:13px">· ${teIdadeTxt(p,id)}</span>`:''}</div><button class="modal-close" onclick="teFechar()">×</button></div>
-    <div style="display:flex;border-bottom:1px solid var(--border)">${tab('testes','Testes')}${tab('trilha','Trilha')}${tab('ravlt','RAVLT')}</div>
-    <div style="padding:16px 20px">${teAbaAtual==='testes'?teHtmlTestes(p,id):teAbaAtual==='ravlt'?rvHtmlAba(p,id,nome):teHtmlTrilha(nome)}</div></div>`;
+    <div style="display:flex;border-bottom:1px solid var(--border)">${tab('testes','Testes')}${tab('trilha','Trilha')}${tab('ravlt','RAVLT')}${tab('fdt','FDT')}</div>
+    <div style="padding:16px 20px">${teAbaAtual==='testes'?teHtmlTestes(p,id):teAbaAtual==='ravlt'?rvHtmlAba(p,id,nome):teAbaAtual==='fdt'?fdHtmlAba(p,id,nome):teHtmlTrilha(nome)}</div></div>`;
 }
 function teHtmlTestes(p,id){
   const nome=tePacNome(p)||teNomeAtual, sug=teSugeridos(id), ls=teLinksDe(nome).sort((a,b)=>(b.criado||'').localeCompare(a.criado||''));
