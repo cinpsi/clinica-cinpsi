@@ -2162,6 +2162,7 @@ function teIdadiScore(esc_,A){
   const sec=(tit,ch)=>{ const l=pend.filter(x=>x[0]===ch); return l.length?`<details style="margin:6px 0"><summary style="cursor:pointer;font-weight:600">${tit} (${l.length})</summary><div style="font-size:12px;margin-top:4px">${l.map(x=>`<div><b>${esc(x[1])}</b> · ${esc(x[3])}: ${esc(x[2])}</div>`).join('')}</div></details>`:''; };
   return {titulo:'Pontuação bruta por domínio (IDADI): Sim=2, Às vezes=1, Ainda não=0',linhas,nota:'Itens "Não observado" ficam fora do cálculo. A conversão em escore padronizado/percentil deve ser feita pela terapeuta com as tabelas do manual do IDADI.',extra:sec('Itens marcados "Ainda não"','N')+sec('Itens marcados "Às vezes"','A')};
 }
+function teIdadeTxt(p,a){ if(a===null||a>=5) return a+' anos'; const n=teNascISO(p&&(p.nascimento||p.nasc)); if(!n) return a+' anos'; const d=new Date(n.slice(0,10)+'T12:00:00'),h=new Date(); let m=(h.getFullYear()-d.getFullYear())*12+h.getMonth()-d.getMonth(), dt=h.getDate()-d.getDate(); if(dt<0){ m--; dt+=new Date(h.getFullYear(),h.getMonth(),0).getDate(); } return m+' meses'+(dt?' e '+dt+' dias':''); }
 function teSugeridos(idade){ if(idade===null) return []; return Object.keys(TE_CAT).filter(k=>idade>=TE_CAT[k].min&&idade<=TE_CAT[k].max); }
 function tePacientes(){
   const vistos=new Set(); const out=[];
@@ -2217,7 +2218,7 @@ function teRenderLinhas(){
   tb.innerHTML=lista.map(p=>{
     const nome=tePacNome(p), id=teIdade(p), sug=teSugeridos(id), ls=teLinksDe(nome);
     const pend=ls.filter(l=>l.status==='pendente').length, rsp=ls.filter(l=>l.status==='respondido').length, nv=ls.filter(l=>l.status==='respondido'&&!l.visto).length;
-    return `<tr><td><strong>${esc(nome)}</strong></td><td>${id===null?'—':id+' anos'}</td>${CU.role==='admin'?`<td>${esc(teTerCanon(p.terapeuta)||'—')}</td>`:''}
+    return `<tr><td><strong>${esc(nome)}</strong></td><td>${id===null?'—':teIdadeTxt(p,id)}</td>${CU.role==='admin'?`<td>${esc(teTerCanon(p.terapeuta)||'—')}</td>`:''}
       <td>${sug.length?sug.map(k=>`<span style="font-size:11px;background:#e0f2fe;color:#075985;border-radius:10px;padding:2px 8px">${esc(TE_CAT[k].nome)}</span>`).join(' '):'<span style="color:var(--text3)">—</span>'}</td>
       <td style="font-size:12px">${pend?`⏳ ${pend} pendente(s) `:''}${rsp?`✅ ${rsp} respondido(s)`:''}${nv?` <span style="background:#15803d;color:#fff;border-radius:10px;padding:1px 7px;font-size:10px">novo</span>`:''}${!pend&&!rsp?'—':''}</td>
       <td><button class="btn-ghost" onclick="teAbrir('${esc(nome).replace(/'/g,"\\'")}')">Abrir</button></td></tr>`;
@@ -2774,7 +2775,7 @@ function teRenderFicha(){
   if(!mo){ mo=document.createElement('div'); mo.className='modal-overlay open'; mo.id='modal-testes'; mo.onclick=e=>{ if(e.target===mo) teFechar(); }; document.body.appendChild(mo); }
   const tab=(k,t)=>`<button onclick="teAbaAtual='${k}';teRenderFicha()" style="flex:1;padding:10px;border:none;border-bottom:3px solid ${teAbaAtual===k?'var(--accent)':'transparent'};background:none;font-weight:${teAbaAtual===k?'600':'400'};cursor:pointer;font-size:14px">${t}</button>`;
   mo.innerHTML=`<div class="modal" style="max-width:680px">
-    <div class="modal-header"><div class="modal-title">🧪 ${esc(nome)}${id!==null?` <span style="font-weight:400;color:var(--text3);font-size:13px">· ${id} anos</span>`:''}</div><button class="modal-close" onclick="teFechar()">×</button></div>
+    <div class="modal-header"><div class="modal-title">🧪 ${esc(nome)}${id!==null?` <span style="font-weight:400;color:var(--text3);font-size:13px">· ${teIdadeTxt(p,id)}</span>`:''}</div><button class="modal-close" onclick="teFechar()">×</button></div>
     <div style="display:flex;border-bottom:1px solid var(--border)">${tab('testes','Testes')}${tab('trilha','Trilha')}${tab('ravlt','RAVLT')}</div>
     <div style="padding:16px 20px">${teAbaAtual==='testes'?teHtmlTestes(p,id):teAbaAtual==='ravlt'?rvHtmlAba(p,id,nome):teHtmlTrilha(nome)}</div></div>`;
 }
