@@ -1035,7 +1035,7 @@ function glyph(o){ return o[3] || o[0]; }
 function itemHTML(i){
 var cur = S.ans[i], name = 'q' + (i + 1), pos = VIEW.indexOf(i) + 1, html =
 '<div class="item' + (cur ? ' done' : '') + '" id="it' + i + '" role="radiogroup" aria-labelledby="q' + i + '">' +
-'<div class="n">' + CFG.lbl + ' ' + pos + '</div><div class="q" id="q' + i + '">' + esc(ITEMS[i]) + '</div>' +
+'<div class="n">' + (ID ? ID.itens[i][1] : CFG.lbl + ' ' + pos) + '</div><div class="q" id="q' + i + '">' + esc(ITEMS[i]) + '</div>' +
 '<div class="choices' + (OPTS.length >= 4 ? ' many' : '') + '" style="--cols:' + OPTS.length + '">';
 CFG.opts.forEach(function(o){
 html += '<label><input type="radio" name="' + name + '" value="' + o[0] + '" data-i="' + i + '"' + (cur === o[0] ? ' checked' : '') +
@@ -1054,13 +1054,16 @@ logoHTML() +
 '<div class="nav" style="margin-top:20px"><button class="btn" id="go1" type="button">Continuar</button></div>';
 document.getElementById('go1').addEventListener('click', function(){ go(1); });
 }
+function domRange(d){ var f = null, l = null; VIEW.forEach(function(i){ if (ID.itens[i][0] === d) { if (f === null) f = ID.itens[i][1]; l = ID.itens[i][1]; } }); return f === l ? f : f + ' a ' + l; }
+function stopNote(i){ var d = ID.itens[i][0]; return '<div style="margin:6px 0 18px;padding:10px 12px;border:2px solid #b91c1c;border-radius:10px;background:#fef2f2;color:#7f1d1d;font-size:14px;font-weight:600;text-align:center">⛔ PARE · fim das frases de ' + esc(ID.doms[d].n) + ' para esta idade (último item: ' + ID.itens[i][1] + ')</div>'; }
 function renderItems(){
 var r = pageRange(S.page), html = '<h1>' + CFG.lbl + 's ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
 '<p class="lead">' + esc(CFG.perg) + '</p>', lastDom = -1;
 for (var p = r[0]; p < r[1]; p++) {
 var i = VIEW[p];
-if (ID && ID.itens[i][0] !== lastDom) { lastDom = ID.itens[i][0]; html += '<h2>' + esc(ID.doms[lastDom].n) + '</h2>'; }
+if (ID && ID.itens[i][0] !== lastDom) { lastDom = ID.itens[i][0]; html += '<h2>' + esc(ID.doms[lastDom].n) + ' <small style="font-weight:400;font-size:13px;color:#586374">· itens ' + domRange(lastDom) + ' para esta idade</small></h2>'; }
 html += itemHTML(i);
+if (ID && (p + 1 >= VIEW.length || ID.itens[VIEW[p + 1]][0] !== ID.itens[i][0])) html += stopNote(i);
 }
 html += '<p class="msg" id="msg" role="alert"></p><div class="nav">' +
 '<button class="btn ghost" id="back" type="button">Voltar</button>' +
@@ -1100,7 +1103,7 @@ VIEW.forEach(function(i, p){ if (!S.ans[i]) miss.push(p); });
 var html = '<h1>Revisão</h1>';
 if (miss.length) {
 html += '<p class="lead">Ainda faltam ' + miss.length + ' itens. Toque em um para voltar até ele.</p><div class="jump">';
-miss.forEach(function(p){ html += '<button type="button" data-go="' + p + '">' + CFG.lbl + ' ' + (p + 1) + '</button>'; });
+miss.forEach(function(p){ html += '<button type="button" data-go="' + p + '">' + (ID ? ID.itens[VIEW[p]][1] : CFG.lbl + ' ' + (p + 1)) + '</button>'; });
 html += '</div>';
 } else {
 html += '<p class="lead">Você respondeu todos os itens. Toque em Concluir para enviar.</p>';
