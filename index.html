@@ -9984,7 +9984,7 @@ function jrRefresh(){
 }
 function jrMesLabel(ym){ const n=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return n[+ym.slice(5,7)-1]+'/'+ym.slice(2,4); }
 function jrToggle(i){ const e=document.getElementById('jr-x-'+i); if(e) e.style.display=e.style.display==='none'?'':'none'; }
-const JR_MOT_KEY='cinpsi_jornada_motivos', JR_MOTIVOS=['Alta','Desistência','Trocou especialidade'];
+const JR_MOT_KEY='cinpsi_jornada_motivos', JR_MOTIVOS=['Alta','Desistência','Trocou especialidade','Financeiro'];
 function jrMotivos(){ return load(JR_MOT_KEY)||{}; }
 function jrSetMotivo(k,v){ const m=Object.assign({},jrMotivos()); if(v) m[k]=v; else delete m[k]; store(JR_MOT_KEY,m); jrLista(); }
 function jrMotivoSel(nome){
