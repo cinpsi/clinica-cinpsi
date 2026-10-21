@@ -1297,7 +1297,7 @@ async function initFirebase(){
     // Escuta mudanças em tempo real — qualquer usuário que salvar, todos veem
     const cols=Object.values(K).filter(k=>k!==K.SES);
     // Adiciona chaves financeiras e de config ao listener
-    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse','cinpsi_testes','cinpsi_ravlt','cinpsi_ravlt_cfg','cinpsi_jornada'];
+    const extraCols=[FK.REC, FK.DESP, FK.FORN, FK.PREV, 'cinpsi_regras_repasse','cinpsi_repasses','cl_meudev','cinpsi_orcamento','cinpsi_fluxo_caixa','cinpsi_fat_planilha','cinpsi_fluxo_saldo','cl_trilha','cl_trilha_cfg','cinpsi_nfse','cinpsi_testes','cinpsi_ravlt','cinpsi_ravlt_cfg','cinpsi_jornada','cinpsi_jornada_motivos'];
     const allCols=[...cols, ...extraCols];
     for(const col of allCols){
       _db.collection('dados').doc(col).onSnapshot(snap=>{
@@ -9967,7 +9967,7 @@ function renderJornada(c){
    +'<div class="cx-card" style="margin-bottom:16px"><div class="cx-card-h"><h2>Retenção</h2><span id="jr-retsel" style="margin-left:auto"></span></div><div id="jr-ret"></div></div>'
    +'<div class="data-table" style="padding:14px 16px"><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">'
    +'<input id="jr-q" placeholder="Buscar paciente…" oninput="jrSetF(\'q\',this.value)" style="flex:1;min-width:180px;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px">'
-   +'<select id="jr-sit" onchange="jrSetF(\'sit\',this.value)" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff"><option value="">Todas as situações</option><option value="ativo">Em tratamento</option><option value="parou">Parou</option><option value="agendado">1ª sessão agendada</option></select>'
+   +'<select id="jr-sit" onchange="jrSetF(\'sit\',this.value)" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff"><option value="">Todas as situações</option><option value="ativo">Em tratamento</option><option value="parou">Parou</option><option value="agendado">1ª sessão agendada</option><option value="semmotivo">Parou sem motivo</option></select>'
    +'<select id="jr-ord" onchange="jrSetF(\'ord\',this.value)" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;background:#fff"><option value="meses">Maior tempo em tratamento</option><option value="mesesAsc">Menor tempo em tratamento</option><option value="recente">Última sessão mais recente</option><option value="antiga">Última sessão mais antiga</option><option value="nome">Nome (A–Z)</option></select></div>'
    +'<div id="jr-lista"></div></div>';
   document.getElementById('jr-sit').value=window._jrF.sit;
@@ -9984,6 +9984,19 @@ function jrRefresh(){
 }
 function jrMesLabel(ym){ const n=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']; return n[+ym.slice(5,7)-1]+'/'+ym.slice(2,4); }
 function jrToggle(i){ const e=document.getElementById('jr-x-'+i); if(e) e.style.display=e.style.display==='none'?'':'none'; }
+const JR_MOT_KEY='cinpsi_jornada_motivos', JR_MOTIVOS=['Alta','Desistência','Trocou especialidade'];
+function jrMotivos(){ return load(JR_MOT_KEY)||{}; }
+function jrSetMotivo(k,v){ const m=Object.assign({},jrMotivos()); if(v) m[k]=v; else delete m[k]; store(JR_MOT_KEY,m); jrLista(); }
+function jrMotivoSel(nome){
+  const k=jrNz(nome), cur=jrMotivos()[k]||'';
+  return '<select onchange="jrSetMotivo(decodeURIComponent(\''+encodeURIComponent(k)+'\'),this.value)" style="font-size:12px;padding:4px 6px;border:1px solid var(--border);border-radius:8px;background:'+(cur?'#fff':'#FFF7E6')+'"><option value="">Selecionar…</option>'
+    +JR_MOTIVOS.map(o=>'<option'+(cur===o?' selected':'')+'>'+o+'</option>').join('')+'</select>';
+}
+function jrResumoMotivos(pa){
+  const m=jrMotivos(), c={}; let sem=0;
+  pa.forEach(p=>{ const v=m[jrNz(p.nome)]; if(v) c[v]=(c[v]||0)+1; else sem++; });
+  return '<div style="font-size:12.5px;color:var(--text2);margin-bottom:8px">Motivo da parada: '+JR_MOTIVOS.map(o=>'<strong>'+o+'</strong> '+(c[o]||0)).join(' · ')+' · <strong>sem motivo</strong> '+sem+'</div>';
+}
 function jrLista(){
   const ter=window._jrTer||'', F=window._jrF;
   const J=jrCalc(ter); const box=document.getElementById('jr-lista'); const kp=document.getElementById('jr-kpis'); if(!box||!J) return;
@@ -9998,7 +10011,7 @@ function jrLista(){
     +'<div class="stat-card"><div class="stat-label">Permanência típica de quem parou</div><div class="stat-value">'+(med==null?'—':med.toFixed(1).replace('.',',')+' m')+'</div></div>'
     +'<div class="stat-card"><div class="stat-label">Pararam após 1 sessão</div><div class="stat-value">'+uma+'</div></div></div>';
   const q=jrNz(F.q);
-  let rows=L.filter(p=>(!F.sit||p.sit===F.sit)&&(!q||jrNz(p.nome).includes(q)));
+  let rows=L.filter(p=>(!F.sit||(F.sit==='semmotivo'?(p.sit==='parou'&&!jrMotivos()[jrNz(p.nome)]):p.sit===F.sit))&&(!q||jrNz(p.nome).includes(q)));
   const o=F.ord;
   rows.sort((a,b)=>o==='nome'?a.nome.localeCompare(b.nome):o==='mesesAsc'?a.meses_t-b.meses_t:o==='recente'?(b.last||'').localeCompare(a.last||''):o==='antiga'?(a.last||'9').localeCompare(b.last||'9'):b.meses_t-a.meses_t);
   const pill=p=>p.sit==='ativo'?'<span style="background:#D1FAE5;color:#065F46;padding:2px 9px;border-radius:20px;font-size:11.5px">Em tratamento</span>'
@@ -10019,11 +10032,11 @@ function jrLista(){
       +'<td style="padding:8px;font-size:13px;font-weight:600;white-space:nowrap" '+(p.cens?'title="Já estava em tratamento antes do período importado"':'')+'>'+(p.n?(p.cens?'≥ ':'')+p.meses_t.toFixed(1).replace('.',',')+' m':'—')+'</td>'
       +'<td style="padding:8px;text-align:center;font-size:12.5px">'+p.n+'</td>'
       +'<td style="padding:8px">'+pill(p)+'</td>'
-      +'<td style="padding:8px;font-size:12.5px;white-space:nowrap">'+(p.prox?fmtDate(p.prox):'—')+'</td></tr>'
-      +'<tr id="jr-x-'+i+'" style="display:none"><td colspan="8" style="padding:8px 12px 14px;background:var(--surface2)"><div style="font-size:11.5px;color:var(--text2);margin-bottom:6px">Sessões realizadas por mês</div><div style="display:flex;gap:4px;flex-wrap:wrap">'+(cells||'—')+'</div></td></tr>';
+      +'<td style="padding:8px;font-size:12.5px;white-space:nowrap">'+(p.prox?fmtDate(p.prox):'—')+'</td><td style="padding:8px" onclick="event.stopPropagation()">'+(p.sit==='parou'?jrMotivoSel(p.nome):'<span style="color:var(--text3)">—</span>')+'</td></tr>'
+      +'<tr id="jr-x-'+i+'" style="display:none"><td colspan="9" style="padding:8px 12px 14px;background:var(--surface2)"><div style="font-size:11.5px;color:var(--text2);margin-bottom:6px">Sessões realizadas por mês</div><div style="display:flex;gap:4px;flex-wrap:wrap">'+(cells||'—')+'</div></td></tr>';
   }).join('');
-  box.innerHTML='<div style="font-size:12px;color:var(--text3);margin-bottom:6px">'+rows.length+' paciente'+(rows.length!==1?'s':'')+(ter?' com '+esc(ter):'')+' · clique na linha para ver mês a mês</div>'
-    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="font-size:11px;color:var(--text3);text-align:left;border-bottom:1px solid var(--border)"><th style="padding:8px">Paciente</th><th style="padding:8px">Terapeuta</th><th style="padding:8px">1ª sessão</th><th style="padding:8px">Última</th><th style="padding:8px">Em tratamento</th><th style="padding:8px;text-align:center">Sessões</th><th style="padding:8px">Situação</th><th style="padding:8px">Próxima</th></tr></thead><tbody>'+(body||'<tr><td colspan="8" style="padding:20px;text-align:center;color:var(--text3)">Nenhum paciente encontrado.</td></tr>')+'</tbody></table></div>';
+  box.innerHTML=jrResumoMotivos(pa)+'<div style="font-size:12px;color:var(--text3);margin-bottom:6px">'+rows.length+' paciente'+(rows.length!==1?'s':'')+(ter?' com '+esc(ter):'')+' · clique na linha para ver mês a mês</div>'
+    +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse"><thead><tr style="font-size:11px;color:var(--text3);text-align:left;border-bottom:1px solid var(--border)"><th style="padding:8px">Paciente</th><th style="padding:8px">Terapeuta</th><th style="padding:8px">1ª sessão</th><th style="padding:8px">Última</th><th style="padding:8px">Em tratamento</th><th style="padding:8px;text-align:center">Sessões</th><th style="padding:8px">Situação</th><th style="padding:8px">Próxima</th><th style="padding:8px">Motivo da parada</th></tr></thead><tbody>'+(body||'<tr><td colspan="9" style="padding:20px;text-align:center;color:var(--text3)">Nenhum paciente encontrado.</td></tr>')+'</tbody></table></div>';
 }
 
 
