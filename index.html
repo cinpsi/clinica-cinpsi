@@ -9881,7 +9881,7 @@ async function jrImportar(input){
 
 function jrTers(){
   const c={}; jrLoad().rows.forEach(r=>{ if(r[3]==='R') c[r[1]]=(c[r[1]]||0)+1; });
-  return Object.keys(c).filter(t=>c[t]>=5&&t!=='—').sort((a,b)=>c[b]-c[a]);
+  const oc=['Luciana','Christiane','Cristiane','Taina','Renata','Karina','Fernanda'];return Object.keys(c).filter(t=>c[t]>=5&&t!=='—'&&!oc.includes(t)).sort((a,b)=>c[b]-c[a]);
 }
 
 // Jornada de cada paciente (opcionalmente só com um terapeuta)
