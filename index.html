@@ -2764,7 +2764,7 @@ function rvBlocoCorr(s,c){
     `<p style="font-size:10.5px;color:#6b7686;margin-top:12px">Texto gerado automaticamente pelas regras do sistema a partir dos escores e das normas do manual. É apoio técnico: a interpretação clínica e a conclusão são de responsabilidade do profissional.</p>`;
 }
 // ── PDF de registro (layout CINPSI; impresso pelo navegador → "Salvar como PDF") ──
-function rvPdf(id,corr){
+function rvPdfLegado(id,corr){
   const s=(RV&&RV.id===id?RV:null)||rvSess().find(x=>x.id===id), cfg=rvCfg(); if(!s||!cfg){ toast('Registro ou configuração não encontrados.'); return; }
   const cab=['A1','A2','A3','A4','A5','B1','A6','A7'];
   const nLin=Math.max(1,...cab.map(k=>(((s.tent||{})[k]||{}).ordem||[]).length));
@@ -2823,6 +2823,69 @@ const FD_NORMAS={"6-8":{"T":[[25,29,34,39,48],[32,40,48,56,83],[41,66,79,94,109]
 function fdFaixaIdade(a){ return a>=6&&a<=8?'6-8':a<=10&&a>=9?'9-10':a>=11&&a<=12?'11-12':a>=13&&a<=15?'13-15':a>=16&&a<=18?'16-18':a>=19&&a<=34?'19-34':a>=35&&a<=59?'35-59':a>=60&&a<=75?'60-75':a>=76?'76+':null; }
 function fdPcCalc(v,r){ if(v==null||isNaN(v)) return ''; if(r[0]===r[4]) return 'NULO'; const L=[95,75,50,25,5]; for(let i=0;i<5;i++) if(v<=r[i]) return String(L[i]); return '5'; }
 function fdAutoPc(s){ if(!s||!s.nasc||!s.data) return null; const n=new Date(s.nasc+'T12:00:00'), d0=new Date(s.data+'T12:00:00'); if(isNaN(n)||isNaN(d0)) return null; let a=d0.getFullYear()-n.getFullYear(); if(d0.getMonth()<n.getMonth()||(d0.getMonth()===n.getMonth()&&d0.getDate()<n.getDate())) a--; const f=fdFaixaIdade(a); if(!f) return null; const N=FD_NORMAS[f], dv=fdDerivados(s); s.pc=s.pc||{}; s.pcAuto=s.pcAuto||{}; const set=(k,v)=>{ if(v==='') return; if(s.pc[k]===undefined||s.pc[k]===''||s.pc[k]===s.pcAuto[k]) s.pc[k]=v; s.pcAuto[k]=v; }; ['P1','P2','P3','P4'].forEach((k,i)=>{ const p=(s.partes||{})[k]||{}; const tp=parseFloat(String(p.tempo).replace(',','.')); set(k+'t',isNaN(tp)?'':fdPcCalc(tp,N.T[i])); set(k+'e',p.confirmado?fdPcCalc(+p.erros||0,N.E[i]):''); }); set('inib',dv.inib==null?'':fdPcCalc(dv.inib,N.T[4])); set('flex',dv.flex==null?'':fdPcCalc(dv.flex,N.T[5])); return f; }
+function relAbrirM(M){
+  const w=window.open('','_blank'); if(!w){ toast('Libere pop-ups para abrir o resultado.'); return; }
+  const logo=(typeof RV_LOGO!=='undefined')?RV_LOGO:'', js=JSON.stringify(M).replace(/</g,'\\u003c');
+  w.document.write('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><title>Resultado - '+esc(M.meta[0][1])+' · '+esc(M.titulo)+'</title><style>'+REL_CSS+'</style></head><body>'+(logo?'<div style="text-align:center;margin-bottom:10px"><img src="'+logo+'" style="height:54px"></div>':'')+'<script>('+relPopup.toString()+')('+js+');<\/script></body></html>');
+  w.document.close();
+}
+function relFdtModelo(s){
+  const fx=fdAutoPc(s), pc=s.pc||{}, dv=fdDerivados(s), N=fx?FD_NORMAS[fx]:null;
+  const fm=iso=>iso?String(iso).split('-').reverse().join('/'):'—', fT=v=>v==null?'—':String(v).replace('.',',');
+  const tp=k=>{ const v=parseFloat(String(((s.partes||{})[k]||{}).tempo).replace(',','.')); return isNaN(v)?null:v; };
+  const er=k=>{ const p=(s.partes||{})[k]||{}; return p.confirmado?(+p.erros||0):null; };
+  const nv=(v,r)=>(v==null||!r)?null:(v<=r[0]?4:v<=r[1]?3:v<=r[3]?2:v<=r[4]?1:0);
+  const ZS=[1.645,0.674,0,-0.674,-1.645];
+  const zf=(v,r)=>{ if(v==null||!r||r[0]===r[4]) return null; if(v<=r[0]) return ZS[0]; for(let i=0;i<4;i++){ if(v<=r[i+1]){ const d=r[i+1]-r[i]; return ZS[i]+(d>0?(v-r[i])/d:0)*(ZS[i+1]-ZS[i]); } } const d=(r[4]-r[3])||1; return Math.max(-3,ZS[4]-(v-r[4])/d*0.7); };
+  const CL=['Dificuldade proeminente','Dificuldade discreta','Dentro do esperado','Acima da média','Superior'];
+  const defs=[['Leitura','P1',0,'t'],['Contagem','P2',1,'t'],['Escolha','P3',2,'t'],['Alternância','P4',3,'t'],['Inibição (Escolha − Leitura)','inib',4,'d'],['Flexibilidade (Alternância − Leitura)','flex',5,'d']];
+  const rows=defs.map(d=>{ const dr=d[3]==='d', v=dr?dv[d[1]]:tp(d[1]), e=dr?null:er(d[1]), r=N?N.T[d[2]]:null, n=nv(v,r), pT=dr?pc[d[1]]:pc[d[1]+'t'], pE=dr?null:pc[d[1]+'e'];
+    return {d,v,e,r,n,z:zf(v,r),cells:[d[0],fT(v),dr||e==null?'—':String(e),pT||'—',pE||'—',n==null?'—':CL[n]],nivel:n}; });
+  const grupos=[{nome:'Processos automáticos',linhas:rows.slice(0,2)},{nome:'Processos controlados',linhas:rows.slice(2)}];
+  const tem=rows.filter(r=>r.v!=null);
+  const charts=[
+    {id:'Tempo (segundos)',titulo:'FDT - Tempo de execução (s)',eixo:'Segundos',serie:tem.map(r=>({l:r.d[0].split(' (')[0],v:r.v,corte:r.r?r.r[2]:undefined}))},
+    {id:'Percentil (tempo)',titulo:'FDT - Percentil (tempo)',eixo:'Percentil',ymax:100,serie:tem.filter(r=>/^\d+$/.test(String(r.d[3]==='d'?pc[r.d[1]]:pc[r.d[1]+'t']||''))).map(r=>({l:r.d[0].split(' (')[0],v:+(r.d[3]==='d'?pc[r.d[1]]:pc[r.d[1]+'t'])}))},
+    {id:'Erros',titulo:'FDT - Erros',eixo:'Erros',serie:rows.filter(r=>r.e!=null).map(r=>({l:r.d[0],v:r.e}))}
+  ].filter(c=>c.serie.length);
+  const meta=[['Paciente',s.pacNome||''],['Nascimento',fm(s.nasc)],['Sexo',s.sexo||'—'],['Escolaridade',s.escolaridade||'—'],['Examinador',s.examinador||'—'],['Data da aplicação',fm(s.data)],['Faixa normativa',fx?fx+' anos':'sem norma'],['Teste','FDT – Teste dos Cinco Dígitos']];
+  const nota=fx?('Percentis calculados com as normas brasileiras do FDT (Tabelas 6.3 a 6.11), faixa '+fx+' anos. Quanto menor o tempo, melhor o desempenho. O percentil indica o ponto da tabela alcançado (95, 75, 50, 25 ou 5); "NULO" = sem variabilidade na norma. Classificação: abaixo do P25 indica dificuldades discretas e abaixo do P5, déficits mais proeminentes (manual, cap. 6.1); os rótulos acima da média são descritivos. A posição na curva é estimada por interpolação entre os percentis.'):'Sem norma para a idade informada (abaixo de 6 anos) ou sem data de nascimento: os percentis, se houver, foram digitados manualmente.';
+  const M={titulo:'FDT – Teste dos Cinco Dígitos',informante:'',meta,cols:['Seção','Medida','Tempo (s)','Erros','Percentil tempo','Percentil erros','Classificação'],grupos,charts,nota,cores:REL_COR,codigo:'',neuro:false,
+    curva:{titulo:'FDT – posição estimada (direita = melhor desempenho)',pts:rows.map(r=>({n:r.d[0].split(' (')[0],x:r.z==null?null:Math.max(-3,Math.min(3,r.z))}))}};
+  M.extra='<h2>Observações</h2><p style="font-size:13px">'+(s.obs?esc(s.obs):'—')+'</p><div class="btns"><button onclick="window.opener&amp;&amp;window.opener.fdPdfLegado(\''+esc(s.id)+'\')">Folha de registro completa (PDF)</button></div>';
+  return M;
+}
+function fdPdf(id){
+  const s=(FD&&FD.id===id?FD:null)||fdSess().find(x=>x.id===id); if(!s){ toast('Registro não encontrado.'); return; }
+  let M; try{ M=relFdtModelo(s); }catch(e){ toast('Não foi possível montar o resultado: '+e.message); return; }
+  relAbrirM(M);
+}
+function relRvModelo(s){
+  const cfg=rvCfg(), c=rvCorrigir(s), fm=iso=>iso?String(iso).split('-').reverse().join('/'):'—', fN=n=>n==null?'—':String(n).replace('.',',');
+  const v=c.erro?(cfg?rvMedidas(s,cfg):{}):c.v, L=c.linhas||[];
+  const NV=[0,1,2,2,3,4], GR={A1:'Aprendizagem',A2:'Aprendizagem',A3:'Aprendizagem',A4:'Aprendizagem',A5:'Aprendizagem',ET:'Aprendizagem',ALT:'Aprendizagem',B1:'Interferência e evocação',A6:'Interferência e evocação',A7:'Interferência e evocação',REC:'Reconhecimento',VE:'Índices',IP:'Índices',IR:'Índices'};
+  const SEM=['VE','IP','IR'], ordem=['Aprendizagem','Interferência e evocação','Reconhecimento','Índices'], G={};
+  RV_MED.forEach(([k,nm])=>{ const l=L.find(x=>x.k===k)||{}, x=v[k]; const calc=l.x!=null&&l.lbl, sem=SEM.indexOf(k)>=0, cl=calc&&!sem?RV_CLS[l.cls]:null;
+    const ln={cells:[nm,fN(x),calc?fN(l.m)+' ('+fN(l.dp)+')':'—',calc&&l.z!=null?fN(l.z):'—',calc?l.lbl:'—',calc?l.g:'—',sem?(calc?'Interpretar clinicamente':'—'):(cl?cl[1]:'—')],nivel:cl?NV[l.cls]:null,k,l};
+    (G[GR[k]]=G[GR[k]]||[]).push(ln); });
+  if(c.rd&&c.rd.fp) G['Reconhecimento'].push({cells:['Falso positivo (reconhecimento)',String(c.rd.fp.length),'—','—','—','—','—'],nivel:null,k:'FP',l:{}});
+  const grupos=ordem.filter(n=>G[n]).map(n=>({nome:n,linhas:G[n]}));
+  const ser=['A1','A2','A3','A4','A5','B1','A6','A7'].filter(k=>v[k]!=null).map(k=>{ const l=L.find(x=>x.k===k)||{}; return {l:k,v:v[k],corte:l.m!=null?l.m:undefined}; });
+  const perc=L.filter(l=>l.x!=null&&l.lbl&&l.lo!=null).map(l=>({l:l.k,v:Math.round((l.lo+l.hi)/2)}));
+  const meta=[['Paciente',s.pacNome||''],['Nascimento',fm(s.nasc)],['Sexo',s.sexo||'—'],['Escolaridade',s.escolaridade||'—'],['Examinador',s.examinador||'—'],['Data da aplicação',fm(s.data)],['Idade na aplicação',c.anos!=null?c.anos+' anos':'—'],['Norma',c.faixa?(c.faixa.tab+': '+(c.faixa.max>=200?c.faixa.min+' anos ou mais':c.faixa.min+' a '+c.faixa.max+' anos')):'não carregada'],['Teste','RAVLT']];
+  const pts=L.filter(l=>l.z!=null&&['A1','A2','A3','A4','A5','ET','B1','A6','A7','REC'].indexOf(l.k)>=0).map(l=>({n:l.k,x:Math.max(-3,Math.min(3,l.z))}));
+  const nota=c.erro?('Escores brutos apenas: '+c.erro):('Tabela normativa '+c.faixa.tab+(c.fonte?' · '+c.fonte:'')+' (n='+c.faixa.n+'). Classificação sugerida pelo manual (Tabela 1): abaixo do P5 déficit clínico; P5 a P25 possível déficit; acima disso, típico. Interferências (IP, IR) e velocidade de esquecimento: percentil mais alto indica índice maior, não necessariamente melhor desempenho; interpretar clinicamente. Rótulos Guilmette: consenso AACN (2020).');
+  const M={titulo:'RAVLT – Teste de Aprendizagem Auditivo-Verbal de Rey',informante:'',meta,cols:['Seção','Medida','Pontuação Bruta','Média (DP)','Z','Percentil','Guilmette (AACN)','Classificação'],grupos,
+    charts:[{id:'Curva de aprendizagem',titulo:'RAVLT - Palavras evocadas',eixo:'Palavras (máx. 15)',ymax:15,serie:ser}].concat(perc.length?[{id:'Percentil por medida',titulo:'RAVLT - Percentil',eixo:'Percentil',ymax:100,serie:perc}]:[]),
+    nota,cores:REL_COR,codigo:'',neuro:false,curva:pts.length?{titulo:'RAVLT – posição em relação à norma (escore Z)',pts}:null};
+  M.extra='<h2>Observações</h2><p style="font-size:13px">'+(s.obs?esc(s.obs):'—')+'</p><div class="btns"><button onclick="window.opener&amp;&amp;window.opener.rvPdfLegado(\''+esc(s.id)+'\')">Folha de registro completa (PDF)</button></div>';
+  return M;
+}
+function rvPdf(id,corr){
+  const s=(RV&&RV.id===id?RV:null)||rvSess().find(x=>x.id===id); if(!s){ toast('Registro não encontrado.'); return; }
+  let M; try{ M=relRvModelo(s); }catch(e){ toast('Não foi possível montar o resultado: '+e.message); return; }
+  relAbrirM(M);
+}
 function fdSess(){ const v=finLoad(FD_KEY); return Array.isArray(v)?v:[]; }
 const FD_NUM={zero:0,um:1,uma:1,dois:2,duas:2,tres:3,quatro:4,cinco:5,seis:6,sete:7,oito:8,nove:9};
 function fdDigitos(txt){
@@ -3015,7 +3078,7 @@ function fdExcluir(id){
   if(CU.role!=='admin'||!confirm('Excluir esta aplicação do FDT? Não pode ser desfeito.')) return;
   finSave(FD_KEY,fdSess().filter(x=>x.id!==id)); if(document.getElementById('modal-testes')) teRenderFicha();
 }
-function fdPdf(id){
+function fdPdfLegado(id){
   const s=(FD&&FD.id===id?FD:null)||fdSess().find(x=>x.id===id); if(!s){ toast('Registro não encontrado.'); return; }
   fdAutoPc(s); const d=fdDerivados(s), pc=s.pc||{};
   const linhaP=P=>{ const p=(s.partes||{})[P.k]||{}; return `<tr><td style="text-align:left"><b>${esc(P.n)}</b></td><td>${fdFmtT(p.tempo)}</td><td>${p.confirmado?(p.erros||0):'—'}</td><td>${esc(pc[P.k+'t']||'')}</td><td>${esc(pc[P.k+'e']||'')}</td></tr>`; };
