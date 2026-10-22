@@ -853,7 +853,7 @@ go(2);
   }
 
   function renderItems(){
-    var r = pageRange(S.page), html = '<h1>' + CFG.lbl + 's ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
+    var r = pageRange(S.page), html = '<h1>' + (CFG.lbl === 'Item' ? 'Itens' : CFG.lbl + 's') + ' ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
       '<p class="lead">' + esc(CFG.perg) + '</p>';
     for (var i = r[0]; i < r[1]; i++) html += itemHTML(i);
     html += '<p class="msg" id="msg" role="alert"></p><div class="nav">' +
@@ -1063,7 +1063,7 @@ document.getElementById('go1').addEventListener('click', function(){ go(1); });
 function domRange(d){ var f = null, l = null; VIEW.forEach(function(i){ if (ID.itens[i][0] === d) { if (f === null) f = ID.itens[i][1]; l = ID.itens[i][1]; } }); return f === l ? f : f + ' a ' + l; }
 function stopNote(i){ var d = ID.itens[i][0]; return '<div style="margin:6px 0 18px;padding:10px 12px;border:2px solid #b91c1c;border-radius:10px;background:#fef2f2;color:#7f1d1d;font-size:14px;font-weight:600;text-align:center">⛔ PARE · fim das frases de ' + esc(ID.doms[d].n) + ' para esta idade (último item: ' + ID.itens[i][1] + ')</div>'; }
 function renderItems(){
-var r = pageRange(S.page), html = '<h1>' + CFG.lbl + 's ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
+var r = pageRange(S.page), html = '<h1>' + (CFG.lbl === 'Item' ? 'Itens' : CFG.lbl + 's') + ' ' + (r[0] + 1) + ' a ' + r[1] + '</h1>' +
 '<p class="lead">' + esc(CFG.perg) + '</p>', lastDom = -1;
 for (var p = r[0]; p < r[1]; p++) {
 var i = VIEW[p];
