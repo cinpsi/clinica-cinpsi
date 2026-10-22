@@ -1068,7 +1068,7 @@ var r = pageRange(S.page), html = '<h1>' + CFG.lbl + 's ' + (r[0] + 1) + ' a ' +
 for (var p = r[0]; p < r[1]; p++) {
 var i = VIEW[p];
 if (ID && ID.itens[i][0] !== lastDom) { lastDom = ID.itens[i][0]; html += '<h2>' + esc(ID.doms[lastDom].n) + ' <small style="font-weight:400;font-size:13px;color:#586374">· itens ' + domRange(lastDom) + ' para esta idade</small></h2>'; }
-if (!ID && CFG.secs) { var si = 0; for (var q = 0; q < CFG.secs.length; q++) if (CFG.secs[q][0] <= i) si = q; if (si !== lastSec) { lastSec = si; html += '<h2>' + esc(CFG.secs[si][1]) + '</h2>'; } }
+if (!ID && CFG.secs) { var si = 0; for (var q = 0; q < CFG.secs.length; q++) if (CFG.secs[q][0] <= i) si = q; if (CFG.secs[si][0] === i || i === pageRange(S.page)[0]) { html += '<h2>' + esc(CFG.secs[si][1]) + '</h2>'; } }
 html += itemHTML(i);
 if (ID && (p + 1 >= VIEW.length || ID.itens[VIEW[p + 1]][0] !== ID.itens[i][0])) html += stopNote(i);
 }
