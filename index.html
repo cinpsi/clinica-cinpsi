@@ -3544,14 +3544,16 @@ function buildNav(){
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else if(CU.role==='supervisora'){
     html+=`<div class="nav-section">Pacientes</div>
-      ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">🗂️</span> Prontuário</button>`:''}
+      ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">👥</span> Pacientes</button>
+      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else {
     html+=`<div class="nav-section">Pacientes</div>
       ${(CU.email||'').toLowerCase()==='julianacalleff@yahoo.com'?`<button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
-      ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">🗂️</span> Prontuário</button>`:''}
+      ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">👥</span> Pacientes</button>
+      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -3589,7 +3591,8 @@ const VM={
 // ════════════════════════════════════════════════════════════
 // AGENDA (demonstração — dados fictícios, nada é gravado)
 // ════════════════════════════════════════════════════════════
-function agVisivel(){return CU&&(CU.role==='admin'||(CU.email||'').toLowerCase()==='julianacalleff@yahoo.com');}
+function agVisivel(){return CU&&(CU.role==='admin'||(CU.email||'').toLowerCase()==='julianacalleff@yahoo.com'||PR_CLIN.includes((CU.email||'').toLowerCase()));}
+function agMeuIdx(){return (CU.email||'').toLowerCase().startsWith('tatiane')?6:0;}
 const AG={ws:null,E:null,on:null,mine:false};
 const AG_PROS=[['Juliana Callef','#1971c2'],['Mayara','#2f9e44'],['Leticia','#0c8599'],['Adriana','#f08c00'],['Nayra','#7048e8'],['Erika','#c2255c'],['Tatiane','#5f3dc4']];
 const AG_SRV=['Psicoterapia','Psicopedagogia','Orientação parental','Avaliação neuropsicológica','Supervisão'];
@@ -3597,7 +3600,7 @@ function agSeg(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-
 function agInit(){
   AG.mine=CU.role!=='admin';
   AG.ws=agSeg(new Date());
-  AG.on=new Set(AG.mine?[0]:AG_PROS.map((_,i)=>i));
+  AG.on=new Set(AG.mine?[agMeuIdx()]:AG_PROS.map((_,i)=>i));
   let seed=11;const r=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
   AG.E=[];
   for(let d=0;d<5;d++)for(let p=0;p<AG_PROS.length;p++){let h=9+Math.floor(r()*2);
@@ -3651,7 +3654,7 @@ function renderAgenda(c){
    </section></div>
   <div class="ag-modal" id="ag-md"><div class="box"><h3 style="margin:0 0 6px;color:var(--navy)">Novo agendamento</h3>
    <label>Paciente</label><input id="ag-mp" placeholder="Nome do paciente">
-   <label>Profissional</label><select id="ag-mpro">${AG_PROS.filter((_,i)=>!AG.mine||i===0).map(p=>'<option value="'+AG_PROS.indexOf(p)+'">'+p[0]+'</option>').join('')}</select>
+   <label>Profissional</label><select id="ag-mpro">${AG_PROS.filter((_,i)=>!AG.mine||i===agMeuIdx()).map(p=>'<option value="'+AG_PROS.indexOf(p)+'">'+p[0]+'</option>').join('')}</select>
    <label>Serviço</label><select id="ag-msrv">${AG_SRV.map(s=>'<option>'+s+'</option>').join('')}</select>
    <label>Dia e horário</label><div style="display:flex;gap:8px"><input type="date" id="ag-md-d"><input type="time" id="ag-md-h" value="14:00"></div>
    <label>Duração</label><select id="ag-mdur"><option value="1">1 hora</option><option value="0.75">50 min</option><option value="2">2 horas</option></select>
@@ -3778,33 +3781,99 @@ function prDet(){
   const meu=(e.profissionalEmail||'').toLowerCase()===prMe();
   d.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><b style="font-size:15px">${prDt(e.data)}</b><span class="pr-bd">v${e.versao}</span><span style="color:var(--text2);font-size:12px">${esc((e.campos&&e.campos.autorOriginal)||e.profissionalEmail)}${e.origem==='doctoralia_import'?' · importado do Doctoralia':''}</span>
    <span style="margin-left:auto;display:flex;gap:6px">${meu?'<button class="btn-ghost" onclick="prEditar()">✏ Editar</button>':''}<button class="btn-ghost" onclick="prImprimir()">🖨 Imprimir</button>${CU.role==='admin'?'<button class="btn-ghost" onclick="prVersoes()">🕘 Versões</button>':''}</span></div>
-   <div id="pr-corpo"><div class="pr-txt">${esc((e.campos&&e.campos.texto)||'')}</div></div><div id="pr-ver"></div>`;
+   <div id="pr-corpo">${prCorpo(e)}</div><div id="pr-ver"></div>`;
+}
+const PR_MODELOS=[
+ {n:'Modelo predefinido',c:['Humor','Queixa -','Emoções e Comportamento','Pensamentos','Intervenção/condução - técnicas','Encaminhamentos/planos de ação/tarefas','Avaliação geral terapeuta/ evolução','Medicações/ e consultas','Crenças','Regras']},
+ {n:'Reunião Com equipe super',c:['Dificuldades e potencialidades','Tarefas','Observações gerais']},
+ {n:'Registro de Formação Científica — CINPSI (palestras, congressos, cursos)',c:['Identificação da palestra','Conteúdo científico e conceitos apresentados','Avaliação, instrumentos e indicadores clínicos','Estratégias de intervenção e aplicação prática','Pesquisas, autores e referências bibliográficas','Aplicabilidade para a prática psicopedagógica']},
+ {n:'ENTREVISTA COM OUTROS ESPECIALISTAS',c:['Impressões do especilusta entrevistados','Orientações']},
+ {n:'Devoluiva ANP',c:['O que encontramos','Orientações']},
+ {n:'entrevista com familiar',c:['Qual familiar - Nome e parentesco','Dificuldades','Facilidade','Diagnostico','Ponto chave']},
+ {n:'Supervisão',c:['Acompanhamento das metas anteriores','Desenvolvimento de competências clínicas','Orientações, tarefas e metas','Discussão e raciocínio clínico dos casos']},
+ {n:'Atendimento Adulto',c:['Queixa, manifestações clínicas e estado de humor','Emoções/Pensamentos Comportamento','Intervenção / condução - Técnicas','Plano de tratamento/ Encaminhamentos / Planos de ação / Tarefas','Avaliação geral terapeuta / Evolução/ Dificuldades ou barreiras','Medicações e Consultas','Observações']},
+ {n:'Atendimento Infantil',c:['Observação: Comportamento / Humor / Pensamento','Relata alguma queixa ?','Intervenções Realizadas (técnicas, testes; jogos; outros instrumentos)','Observações adicionais','Seguiu o plano de tratamento ou houve troca de estratégia ?','Tarefa para próxima sessão','Cumpriu a tarefa deixada na última sessão?']},
+ {n:'Sessão Escolar',c:['Instrumentos entregue a escola','Orientação dada a escola','Observações da escola','Vida Acadêmica','Expectativas da escola','Outras observações']},
+ {n:'Orientação Parental/ Devolutiva',c:['Hipóteses levantadas','Encaminhamentos para outros profissionais','Orientações para a família','Queixas da família','Plano de ação terapêutico']},
+ {n:'Anamnese',c:['Queixa principal','História relevante do desenvolvimento Infantil - Histórico escolar','Outras observações','Dificuldade de aprendizagem escolar ?','Desde quando o problema iniciou ?','Histórico familiar - Transtornos e funcionamento','Rotina familiar e hábitos de vida','Uso de medicações','Outros Problemas','Já fez psicoterapia? Teve alta ?','Faz algum tratamento atual? Quais?']},
+ {n:'ANP 0 sessões de testagem',c:['Sinais e comportamentos','Avaliação comportamento','Testes aplicados','Queixas do paciente ou do familiar nessa semana','Oservações']}
+];
+function prSecTexto(sec){return sec.filter(x=>x.x&&x.x.trim()).map(x=>x.t+':\n'+x.x.trim()).join('\n\n');}
+function prCorpo(e){
+  const c=e.campos||{};
+  if(c.secoes&&c.secoes.length)return (c.modelo?'<div style="color:var(--text2);font-size:12px;margin-bottom:6px">Modelo: '+esc(c.modelo)+'</div>':'')+c.secoes.filter(s=>s.x&&s.x.trim()).map(s=>'<div style="margin-bottom:10px"><div style="font-weight:600;font-size:13px;margin-bottom:3px">'+esc(s.t)+'</div><div class="pr-txt">'+esc(s.x)+'</div></div>').join('');
+  return '<div class="pr-txt">'+esc(c.texto||'')+'</div>';
 }
 function prEditar(){
-  const e=PR.eps.find(x=>x.id===PR.eid);if(!e)return;
-  document.getElementById('pr-corpo').innerHTML='<textarea class="form-textarea" id="pr-ed" style="min-height:320px;line-height:1.5">'+esc((e.campos&&e.campos.texto)||'')+'</textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarEd()">Salvar (cria nova versão)</button><button class="btn-ghost" onclick="prDet()">Cancelar</button></div><div style="color:var(--text2);font-size:12px;margin-top:6px">A versão atual fica guardada no histórico.</div>';
+  const e=PR.eps.find(x=>x.id===PR.eid);if(!e)return;const c=e.campos||{};
+  const corpo=(c.secoes&&c.secoes.length)
+    ?c.secoes.map((s,i)=>'<div style="margin-bottom:8px"><label style="font-weight:600;font-size:13px">'+esc(s.t)+'</label><textarea class="form-textarea pr-sec" data-i="'+i+'" style="min-height:80px">'+esc(s.x||'')+'</textarea></div>').join('')
+    :'<textarea class="form-textarea" id="pr-ed" style="min-height:320px;line-height:1.5">'+esc(c.texto||'')+'</textarea>';
+  document.getElementById('pr-corpo').innerHTML=corpo+'<div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarEd()">Salvar (cria nova versão)</button><button class="btn-ghost" onclick="prDet()">Cancelar</button></div><div style="color:var(--text2);font-size:12px;margin-top:6px">A versão atual fica guardada no histórico.</div>';
 }
 function prSalvarEd(){
-  const e=PR.eps.find(x=>x.id===PR.eid),novo=document.getElementById('pr-ed').value;
-  if(!e)return;if(novo===((e.campos&&e.campos.texto)||'')){prDet();return;}
+  const e=PR.eps.find(x=>x.id===PR.eid);if(!e)return;const c=e.campos||{};
+  let novoC;
+  if(c.secoes&&c.secoes.length){
+    const sec=c.secoes.map(s=>({t:s.t,x:s.x||''}));
+    document.querySelectorAll('.pr-sec').forEach(t=>{sec[+t.dataset.i].x=t.value;});
+    if(JSON.stringify(sec)===JSON.stringify(c.secoes)){prDet();return;}
+    novoC=Object.assign({},c,{secoes:sec,texto:prSecTexto(sec)});
+  }else{
+    const novo=document.getElementById('pr-ed').value;
+    if(novo===(c.texto||'')){prDet();return;}
+    novoC=Object.assign({},c,{texto:novo});
+  }
   const ref=prFs().collection('prontuarios').doc(PR.pid).collection('episodios').doc(e.id),agora=new Date().toISOString();
   const b=prFs().batch();
-  b.set(ref.collection('versoes').doc(String(e.versao)),{versao:e.versao,campos:e.campos||{},editadoEm:e.editadoEm||e.criadoEm||'',guardadoPor:prMe(),guardadoEm:agora});
-  b.update(ref,{campos:Object.assign({},e.campos||{},{texto:novo}),versao:e.versao+1,editadoEm:agora});
+  b.set(ref.collection('versoes').doc(String(e.versao)),{versao:e.versao,campos:c,editadoEm:e.editadoEm||e.criadoEm||'',guardadoPor:prMe(),guardadoEm:agora});
+  b.update(ref,{campos:novoC,versao:e.versao+1,editadoEm:agora});
   b.commit().then(()=>{prAud('editou',PR.pid,e.id);toast('Salvo. Versão '+(e.versao+1));prAbrirMantendo(e.id);}).catch(er=>toast('Não salvo: '+er.message));
 }
 function prAbrirMantendo(eid){
   prFs().collection('prontuarios').doc(PR.pid).collection('episodios').orderBy('data','desc').get().then(s=>{PR.eps=s.docs.map(d=>Object.assign({id:d.id},d.data()));PR.eid=eid;prDesenha();});
 }
+// ----- Novo registro com escolha de modelo -----
 function prNovo(){
-  const hoje=new Date().toISOString().slice(0,10);
-  document.getElementById('pr-det').innerHTML='<b>Novo registro</b><div style="margin:8px 0"><input type="date" class="form-input" id="pr-nd" value="'+hoje+'" style="width:180px"></div><textarea class="form-textarea" id="pr-nt" style="min-height:300px" placeholder="Relato da sessão, procedimento, plano de ação…"></textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarNovo()">Salvar registro</button><button class="btn-ghost" onclick="prDesenha()">Cancelar</button></div>';
+  let padrao=null;try{padrao=localStorage.getItem('pr_modelo_padrao');}catch(e){}
+  if(padrao!==null&&PR_MODELOS[+padrao]){prFormModelo(+padrao);return;}
+  prAbreModal();
+}
+function prAbreModal(sel){
+  sel=sel||0;
+  let m=document.getElementById('pr-modal');if(m)m.remove();
+  m=document.createElement('div');m.id='pr-modal';
+  m.style.cssText='position:fixed;inset:0;background:#0007;z-index:400;display:flex;align-items:center;justify-content:center';
+  m.innerHTML='<div style="background:#fff;border-radius:14px;width:760px;max-width:94vw;max-height:88vh;display:flex;flex-direction:column"><div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center"><b style="font-size:15px">Selecione um modelo</b><button class="btn-ghost" style="margin-left:auto;padding:3px 10px" onclick="document.getElementById(\'pr-modal\').remove()">✕</button></div>'
+   +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:14px 18px;overflow:auto;flex:1"><div id="pr-mlist"></div><div id="pr-mprev" style="background:#f6f8fb;border:1px solid var(--border);border-radius:10px;padding:12px;max-height:46vh;overflow:auto"></div></div>'
+   +'<div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;align-items:center;gap:10px"><label style="font-size:13px"><input type="checkbox" id="pr-nopergunta"> Não me pergunte outra vez</label><span style="margin-left:auto;display:flex;gap:8px"><button class="btn-ghost" onclick="document.getElementById(\'pr-modal\').remove()">Cancelar</button><button class="btn-primary" onclick="prUsaModelo()">Usar um modelo</button></span></div></div>';
+  document.body.appendChild(m);
+  document.getElementById('pr-mlist').innerHTML='<div style="font-size:12px;color:var(--text2);margin-bottom:8px">Seus modelos</div>'+PR_MODELOS.map((x,i)=>'<label style="display:flex;gap:8px;align-items:flex-start;margin:7px 0;font-size:13px;cursor:pointer"><input type="radio" name="pr-mod" value="'+i+'" '+(i===sel?'checked':'')+' onchange="prPrev('+i+')"> <span>'+esc(x.n)+'</span></label>').join('');
+  prPrev(sel);
+}
+function prPrev(i){
+  const x=PR_MODELOS[i];
+  document.getElementById('pr-mprev').innerHTML='<div style="font-weight:700;font-size:16px;margin-bottom:8px">'+esc(x.n)+'</div>'+x.c.map(t=>'<div style="margin-bottom:8px"><div style="font-weight:600;font-size:13px">'+esc(t)+'</div><div style="height:8px;background:#e3e7ec;border-radius:4px;margin:4px 0"></div><div style="height:8px;width:55%;background:#e3e7ec;border-radius:4px"></div></div>').join('');
+}
+function prUsaModelo(){
+  const r=document.querySelector('input[name=pr-mod]:checked');const i=r?+r.value:0;
+  if(document.getElementById('pr-nopergunta').checked){try{localStorage.setItem('pr_modelo_padrao',String(i));}catch(e){}}
+  document.getElementById('pr-modal').remove();prFormModelo(i);
+}
+function prFormModelo(i){
+  const x=PR_MODELOS[i],hoje=new Date().toISOString().slice(0,10);PR.mod=i;
+  document.getElementById('pr-det').innerHTML='<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><b>Novo registro</b><span style="color:var(--text2);font-size:12px">Modelo: '+esc(x.n)+'</span><button class="btn-ghost" style="padding:3px 10px" onclick="try{localStorage.removeItem(\'pr_modelo_padrao\')}catch(e){};prAbreModal('+i+')">Trocar modelo</button></div>'
+   +'<div style="margin:8px 0"><input type="date" class="form-input" id="pr-nd" value="'+hoje+'" style="width:180px"></div>'
+   +x.c.map((t,k)=>'<div style="margin-bottom:8px"><label style="font-weight:600;font-size:13px">'+esc(t)+'</label><textarea class="form-textarea pr-nsec" data-i="'+k+'" style="min-height:70px"></textarea></div>').join('')
+   +'<div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarNovo()">Salvar registro</button><button class="btn-ghost" onclick="prDesenha()">Cancelar</button></div>';
 }
 function prSalvarNovo(){
-  const t=document.getElementById('pr-nt').value.trim(),d=document.getElementById('pr-nd').value;
-  if(!t||!d){toast('Preencha data e texto.');return;}
+  const x=PR_MODELOS[PR.mod],d=document.getElementById('pr-nd').value;
+  const sec=x.c.map(t=>({t:t,x:''}));document.querySelectorAll('.pr-nsec').forEach(t=>{sec[+t.dataset.i].x=t.value;});
+  const texto=prSecTexto(sec);
+  if(!texto||!d){toast('Preencha a data e ao menos um campo.');return;}
   const agora=new Date().toISOString();
-  prFs().collection('prontuarios').doc(PR.pid).collection('episodios').add({data:d,tipo:'evolucao',campos:{texto:t},profissionalEmail:prMe(),versao:1,criadoEm:agora,editadoEm:agora,origem:'app'})
+  prFs().collection('prontuarios').doc(PR.pid).collection('episodios').add({data:d,tipo:'evolucao',campos:{modelo:x.n,secoes:sec,texto:texto},profissionalEmail:prMe(),versao:1,criadoEm:agora,editadoEm:agora,origem:'app'})
    .then(r=>{prAud('criou',PR.pid,r.id);toast('Registro salvo.');prAbrirMantendo(r.id);}).catch(er=>toast('Não salvo: '+er.message));
 }
 function prImprimir(){
