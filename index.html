@@ -3603,7 +3603,16 @@ const AG_PROFS={'tatianesanches@cinpsi.com.br':{n:'Tatiane Sanches',c:'#5f3dc4'}
 const AG_ST={programado:'Programado',compareceu:'Compareceu',faltou:'Faltou (cobrado)',reagendar:'Faltou – aguardando reagendamento',cancelado:'Cancelado'};
 const AG_REP={'tatianesanches@cinpsi.com.br':80};
 function agRepPct(e){return AG_REP[(e||'').toLowerCase()];}
-const AG={ws:null,ev:[],srv:[],pacs:[],on:null,cur:null,aguard:[]};
+const AG={ws:null,ev:[],srv:[],pacs:[],on:null,cur:null,aguard:[],curE:null,ghost:null};
+function agCurE(){return AG.curE;}
+function agPrev(di,hi){
+  const d=document.getElementById(di).value,h=document.getElementById(hi).value;if(!d)return;
+  const du=document.getElementById('ap-dur');
+  AG.ghost={data:d,inicio:h||'08:00',dur:du?+du.value:60};
+  const w=agSeg(new Date(d+'T12:00'));
+  if(agIso(w)!==agIso(AG.ws)){AG.ws=w;agCarrega().then(()=>agScrollGhost());}else{agDraw();agScrollGhost();}
+}
+function agScrollGhost(){const c=document.getElementById('ag-cal'),g=AG.ghost;if(c&&g)c.scrollTop=Math.max(0,(agMin(g.inicio)/60-8)*56-120);}
 function agPf(e){return AG_PROFS[(e||'').toLowerCase()]||{n:(e||'').split('@')[0],c:'#6b7a8a'};}
 function agIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function agSeg(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
@@ -3704,14 +3713,15 @@ function agDraw(){
     const nc=Math.max(1,...ev.map(e=>e.c+1));
     ev.forEach(e=>{const P=agPf(e.profissionalEmail),st=e.status==='compareceu'?'✓✓':e.status==='faltou'?'×':e.status==='reagendar'?'↻':e.status==='cancelado'?'':'✓';
       h+='<div class="ag-ev'+(e.status==='cancelado'?' canc':'')+(e.status==='reagendar'?' reag':'')+'" onclick="agAbrir(\''+e.id+'\')" style="top:'+((e.h-8)*56+1)+'px;height:'+(e.dur*56-3)+'px;left:'+(e.c*100/nc+1)+'%;width:'+(100/nc-2)+'%;background:'+P.c+'26;border-color:'+P.c+'"><span class="st">'+st+'</span><div style="font-size:10px;opacity:.8">'+esc(e.inicio)+' – '+agHm(e.h+e.dur)+'</div><b>'+esc(e.pacienteNome)+'</b><i>'+esc(e.servicoNome||'')+'</i></div>';});
+    if(AG.ghost&&AG.ghost.data===ds){const g=AG.ghost,gh=agMin(g.inicio)/60;h+='<div style="position:absolute;left:1%;width:98%;top:'+((gh-8)*56+1)+'px;height:'+((g.dur/60)*56-3)+'px;border:2px dashed #0b6b3a;background:#d7f5e4cc;border-radius:6px;z-index:4;pointer-events:none;font-size:11px;padding:3px 6px;color:#0b6b3a"><b>Novo horário</b><div>'+esc(g.inicio)+' – '+agHm(gh+g.dur/60)+'</div></div>';}
     h+='</div>';}
   h+='</div>';
-  document.getElementById('ag-cal').innerHTML=h;
+  const _cal=document.getElementById('ag-cal'),_st=_cal.scrollTop;_cal.innerHTML=h;_cal.scrollTop=_st;
 }
 function agOpts(arr,sel,fv,fl){return arr.map(x=>'<option value="'+esc(fv(x))+'"'+(fv(x)===sel?' selected':'')+'>'+esc(fl(x))+'</option>').join('');}
 function agPainel(e,novo){
   const adm=CU.role==='admin',p=document.getElementById('ag-panel');
-  AG.cur=novo?null:e.id;
+  AG.cur=novo?null:e.id;AG.curE=novo?null:e;AG.ghost=null;
   const pros=Object.keys(AG_PROFS);
   const pacs=AG.pacs.filter(x=>novo?true:true);
   let meet='';try{meet=localStorage.getItem('ag_meet_'+prMe())||'';}catch(er){}
@@ -3721,7 +3731,7 @@ function agPainel(e,novo){
    <label>Profissional</label><select id="ap-pro" ${novo&&adm?'':'disabled'}>${agOpts(pros,e.profissionalEmail||prMe(),x=>x,x=>agPf(x).n)}</select>
    <label>Serviço</label><select id="ap-srv" onchange="agValor()">${novo?'<option value="">Selecione…</option>':''}${agOpts(AG.srv,e.servicoId||'',x=>x.id,x=>x.nome)}</select>
    <div id="ap-val" style="font-size:13px;margin-top:4px;color:#1f7a4d;font-weight:600"></div>
-   <label>Data e horário</label><div style="display:flex;gap:8px"><input type="date" id="ap-data" value="${esc(e.data||'')}"><input type="time" id="ap-hora" value="${esc(e.inicio||'')}"></div>
+   <label>Data e horário</label><div style="display:flex;gap:8px"><input type="date" id="ap-data" value="${esc(e.data||'')}" onchange="agPrev('ap-data','ap-hora')"><input type="time" id="ap-hora" value="${esc(e.inicio||'')}" onchange="agPrev('ap-data','ap-hora')"></div>
    <label>Duração</label><select id="ap-dur">${[30,45,50,60,90,120].map(m=>'<option value="'+m+'"'+((e.dur||60)===m?' selected':'')+'>'+m+' min</option>').join('')}</select>
    <label>Status</label><select id="ap-st">${Object.keys(AG_ST).map(k=>'<option value="'+k+'"'+((e.status||'programado')===k?' selected':'')+'>'+AG_ST[k]+'</option>').join('')}</select>
    <label>Modalidade</label><select id="ap-mod" onchange="document.getElementById('ap-linkbox').style.display=this.value==='online'?'block':'none'"><option value="presencial"${e.modalidade!=='online'?' selected':''}>Presencial</option><option value="online"${e.modalidade==='online'?' selected':''}>Online (Google Meet)</option></select>
@@ -3731,7 +3741,7 @@ function agPainel(e,novo){
   <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
    ${novo?'':`<div id="ap-reag" style="display:none;width:100%;background:#fff8e6;border:1px solid #ecd9a0;border-radius:10px;padding:10px">
      <div style="font-size:12px;color:#7a5b00;margin-bottom:6px">Escolha a nova data e horário:</div>
-     <div style="display:flex;gap:8px"><input type="date" id="rg-data" value="${esc(e.data||'')}"><input type="time" id="rg-hora" value="${esc(e.inicio||'')}"></div>
+     <div style="display:flex;gap:8px"><input type="date" id="rg-data" value="${esc(e.data||'')}" onchange="agPrev('rg-data','rg-hora')"><input type="time" id="rg-hora" value="${esc(e.inicio||'')}" onchange="agPrev('rg-data','rg-hora')"></div>
      <div style="display:flex;gap:8px;margin-top:8px"><button onclick="document.getElementById('ap-reag').style.display='none'" style="flex:1">Cancelar</button><button class="p" onclick="agReagendar()" style="flex:1">Confirmar novo horário</button></div></div>
    <button onclick="document.getElementById('ap-reag').style.display='block'" style="width:100%;border-color:#d98e00;color:#8a5a00">↻ Reagendar</button>
    <button onclick="agEpisodio()" style="width:100%">📝 Criar episódio clínico</button>`}
@@ -3740,9 +3750,9 @@ function agPainel(e,novo){
 }
 function agValor(v){
   const s=AG.srv.find(x=>x.id===document.getElementById('ap-srv').value);
-  document.getElementById('ap-val').textContent=s?('Valor: '+agBRL(v!=null&&AG.cur&&s.id===(AG.ev.find(x=>x.id===AG.cur)||{}).servicoId?v:s.valor)):'';
+  document.getElementById('ap-val').textContent=s?('Valor: '+agBRL(v!=null&&AG.cur&&s.id===(agCurE()||{}).servicoId?v:s.valor)):'';
 }
-function agFecha(){const p=document.getElementById('ag-panel');if(p)p.style.display='none';AG.cur=null;}
+function agFecha(){const p=document.getElementById('ag-panel');if(p)p.style.display='none';AG.cur=null;AG.curE=null;if(AG.ghost){AG.ghost=null;agDraw();}}
 function agAbrir(id){const e=AG.ev.find(x=>x.id===id);if(e)agPainel(e,false);}
 function agNovo(ds,hr){
   const e={data:ds||agIso(new Date()),inicio:hr?String(hr).padStart(2,'0')+':00':'',dur:60,status:'programado',modalidade:'presencial'};
@@ -3757,7 +3767,7 @@ function agSalvar(){
   if(online&&link){try{localStorage.setItem('ag_meet_'+prMe(),link);}catch(er){}}
   const fs=prFs();
   if(AG.cur){
-    const e=AG.ev.find(x=>x.id===AG.cur);
+    const e=agCurE();
     const mudouSrv=srv.id!==e.servicoId;
     fs.collection('agenda').doc(AG.cur).update({data:g('ap-data'),inicio:g('ap-hora'),dur:+g('ap-dur'),status:g('ap-st'),modalidade:g('ap-mod'),link:link,servicoId:srv.id,servicoNome:srv.nome,valor:mudouSrv?Number(srv.valor||0):e.valor,editadoEm:agora})
      .then(()=>{toast('Agendamento salvo.');agFecha();agCarrega();}).catch(er=>toast('Não salvo: '+er.message));
@@ -3775,7 +3785,7 @@ function agSalvar(){
   b.commit().then(()=>{toast(n>1?n+' agendamentos criados.':'Agendamento criado.');agFecha();agCarrega();}).catch(er=>toast('Não salvo: '+er.message));
 }
 function agEstende(){
-  const e=AG.ev.find(x=>x.id===AG.cur);if(!e||!e.serieId)return;
+  const e=agCurE();if(!e||!e.serieId)return;
   const fs=prFs();
   fs.collection('agenda').where('serieId','==',e.serieId).where('profissionalEmail','==',e.profissionalEmail).get().then(s=>{
     const docs=s.docs.map(d=>d.data()).sort((a,b)=>a.data<b.data?1:-1),u=docs[0],passo=u.passo||7;
@@ -3786,7 +3796,7 @@ function agEstende(){
   }).then(()=>{toast('Série estendida em 12 semanas.');agFecha();agCarrega();}).catch(er=>toast('Erro: '+er.message));
 }
 function agReagendar(){
-  const e=AG.ev.find(x=>x.id===AG.cur);if(!e)return;
+  const e=agCurE();if(!e)return;
   const d=document.getElementById('rg-data').value,h=document.getElementById('rg-hora').value;
   if(!d||!h){toast('Escolha data e horário.');return;}
   prFs().collection('agenda').doc(e.id).update({data:d,inicio:h,status:'programado',reagendadoDe:e.data+' '+e.inicio,editadoEm:new Date().toISOString()})
@@ -3803,7 +3813,7 @@ function agAguard(){
 }
 function agAbreDaLista(id){const e=AG.aguard.find(x=>x.id===id);if(!e)return;if(!AG.ev.find(x=>x.id===id))AG.ev.push(e);agPainel(e,false);document.getElementById('ap-reag').style.display='block';}
 function agEpisodio(){
-  const e=AG.ev.find(x=>x.id===AG.cur);if(!e)return;
+  const e=agCurE();if(!e)return;
   agFecha();window.__prGo=e.pacienteId;showView('prontuario');
 }
 // ----- Serviços (valor editável pelo administrador) -----
