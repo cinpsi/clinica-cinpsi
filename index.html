@@ -3533,6 +3533,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Pacientes</button>
       <button class="nav-item" onclick="showView('jornada')" id="nav-jornada"><span class="nav-icon">📈</span> Jornada do paciente</button>
       <button class="nav-item" onclick="showView('trilha')" id="nav-trilha"><span class="nav-icon">🧭</span> Trilha de avaliação</button>
+      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('nfse')" id="nav-nfse"><span class="nav-icon">🧾</span> Notas Fiscais</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
@@ -3547,6 +3548,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else {
     html+=`<div class="nav-section">Pacientes</div>
+      ${(CU.email||'').toLowerCase()==='julianacalleff@yahoo.com'?`<button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -3565,6 +3567,7 @@ const VM={
   'convertidos':{title:'Pacientes',sub:'Pacientes ativos e histórico',role:'admin'},
   'jornada':{title:'Jornada do paciente',sub:'Tempo de tratamento, retenção e abandono',role:'admin'},
   'trilha':{title:'Trilha de avaliação',sub:'Etapas de entrada do paciente novo',role:'admin'},
+  'agenda':{title:'Agenda',sub:'Agenda semanal (demonstração)'},
   'testes':{title:'Testes',sub:'Escalas e questionários enviados por link'},
   'nfse':{title:'Notas Fiscais',sub:'Lote XML de NFS-e para o GISS Guarulhos',role:'admin'},
   'registros':{title:'Registros de Supervisão',sub:'Histórico de supervisões'},
@@ -3578,6 +3581,118 @@ const VM={
   'minhaconta':{title:'Minha conta',sub:'Alterar senha'},
   'financeiro':{title:'Financeiro',sub:'Controle de receitas e despesas da clínica',role:'admin'},
 };
+
+// ════════════════════════════════════════════════════════════
+// AGENDA (demonstração — dados fictícios, nada é gravado)
+// ════════════════════════════════════════════════════════════
+function agVisivel(){return CU&&(CU.role==='admin'||(CU.email||'').toLowerCase()==='julianacalleff@yahoo.com');}
+const AG={ws:null,E:null,on:null,mine:false};
+const AG_PROS=[['Juliana Callef','#1971c2'],['Mayara','#2f9e44'],['Leticia','#0c8599'],['Adriana','#f08c00'],['Nayra','#7048e8'],['Erika','#c2255c'],['Tatiane','#5f3dc4']];
+const AG_SRV=['Psicoterapia','Psicopedagogia','Orientação parental','Avaliação neuropsicológica','Supervisão'];
+function agSeg(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
+function agInit(){
+  AG.mine=CU.role!=='admin';
+  AG.ws=agSeg(new Date());
+  AG.on=new Set(AG.mine?[0]:AG_PROS.map((_,i)=>i));
+  let seed=11;const r=()=>{seed=(seed*16807)%2147483647;return seed/2147483647;};
+  AG.E=[];
+  for(let d=0;d<5;d++)for(let p=0;p<AG_PROS.length;p++){let h=9+Math.floor(r()*2);
+    for(let k=0;k<5;k++){if(r()<.22){h++;continue;}
+      AG.E.push({d,p,h,dur:1,pac:'Paciente '+String.fromCharCode(65+Math.floor(r()*14)),srv:AG_SRV[Math.floor(r()*3)],st:['ag','ag','ok','falta'][Math.floor(r()*4)]});
+      h+=1+(r()<.3?1:0);if(h>18)break;}}
+}
+function renderAgenda(c){
+  if(!agVisivel()){c.innerHTML='<div class="card" style="padding:20px">Sem acesso.</div>';return;}
+  if(!AG.E)agInit();
+  c.innerHTML=`<style>
+  .ag-note{background:#fff7e0;border:1px solid #ecd9a0;color:#7a5b00;padding:7px 12px;border-radius:8px;font-size:12px;margin-bottom:10px}
+  .ag-wrap{display:grid;grid-template-columns:${AG.mine?'1fr':'210px 1fr'};gap:12px;align-items:start}
+  .ag-side{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .ag-side h4{margin:14px 0 7px;font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--text3,#6b7a8a)}
+  .ag-pro{display:flex;align-items:center;gap:8px;margin:6px 0;cursor:pointer;font-size:13px}.ag-pro.off{opacity:.35}
+  .ag-sw{width:14px;height:14px;border-radius:4px;border:2px solid}
+  .ag-main{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+  .ag-bar{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+  .ag-bar button,.ag-side button,.ag-modal button{font:inherit;font-size:13px;border-radius:8px;padding:6px 12px;border:1px solid var(--navy);background:#fff;color:var(--navy);cursor:pointer}
+  .ag-bar button.p,.ag-side button.p,.ag-modal button.p{background:var(--navy);color:#fff}
+  .ag-ttl{font-weight:700;font-size:15px;min-width:170px;text-align:center;color:var(--navy)}
+  .ag-bar input,.ag-bar select,.ag-side select,.ag-modal input,.ag-modal select{font:inherit;font-size:13px;border:1px solid var(--border2);border-radius:8px;padding:6px 9px;background:#fff;color:var(--navy)}
+  .ag-cal{max-height:calc(100vh - 260px);overflow:auto;position:relative}
+  .ag-head,.ag-body{display:grid;grid-template-columns:54px repeat(7,1fr)}
+  .ag-head{position:sticky;top:0;background:#fff;z-index:5;border-bottom:1px solid var(--border)}
+  .ag-head div{padding:7px 2px;text-align:center;color:#5b6b7b;font-size:11px;letter-spacing:.06em}
+  .ag-head div b{display:block;font-size:19px;color:var(--navy)}
+  .ag-head .hoje b{background:var(--navy);color:#fff;width:32px;height:32px;line-height:32px;border-radius:50%;margin:1px auto 0}
+  .ag-hrs div{height:56px;font-size:11px;color:#5b6b7b;text-align:right;padding-right:6px;transform:translateY(-7px)}
+  .ag-col{position:relative;border-left:1px solid var(--border)}
+  .ag-slot{height:56px;border-bottom:1px solid #f0f2f4;cursor:pointer}.ag-slot:hover{background:#f4f8fc}
+  .ag-ev{position:absolute;border-radius:6px;padding:3px 6px;font-size:11px;line-height:1.25;overflow:hidden;border-left:4px solid;cursor:pointer;box-shadow:0 1px 2px #0002}
+  .ag-ev b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-ev i{font-style:normal;opacity:.8}
+  .ag-ev .st{position:absolute;right:5px;top:3px;font-size:10px}
+  .ag-modal{position:fixed;inset:0;background:#0006;display:none;align-items:center;justify-content:center;z-index:300}
+  .ag-modal .box{background:#fff;border-radius:14px;padding:20px;width:420px;max-width:92vw}
+  .ag-modal label{display:block;margin:10px 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#5b6b7b}
+  .ag-modal input,.ag-modal select{width:100%}
+  </style>
+  <div class="ag-note">Demonstração com dados fictícios — nada do que for criado aqui é salvo. A agenda real será ligada ao cadastro de pacientes.</div>
+  <div class="ag-wrap">
+   ${AG.mine?'':`<aside class="ag-side"><button class="p" style="width:100%" onclick="agNovo()">+ Novo agendamento</button><h4>Profissionais</h4><div id="ag-pros"></div><h4>Serviço</h4><select id="ag-fsrv" style="width:100%" onchange="agDraw()"><option value="">Todos</option>${AG_SRV.map(s=>'<option>'+s+'</option>').join('')}</select></aside>`}
+   <section class="ag-main">
+    <div class="ag-bar"><button onclick="AG.ws=agSeg(new Date());agDraw()">Hoje</button><button onclick="agNav(-1)">‹</button><button onclick="agNav(1)">›</button>
+     <span class="ag-ttl" id="ag-ttl"></span>
+     <input id="ag-q" placeholder="Buscar paciente..." oninput="agDraw()">
+     ${AG.mine?'<button class="p" onclick="agNovo()" style="margin-left:auto">+ Novo agendamento</button>':''}
+     <span style="margin-left:${AG.mine?'0':'auto'};font-size:12px;color:#5b6b7b">✓ agendado · ✓✓ compareceu · × faltou</span></div>
+    <div class="ag-cal" id="ag-cal"></div>
+   </section></div>
+  <div class="ag-modal" id="ag-md"><div class="box"><h3 style="margin:0 0 6px;color:var(--navy)">Novo agendamento</h3>
+   <label>Paciente</label><input id="ag-mp" placeholder="Nome do paciente">
+   <label>Profissional</label><select id="ag-mpro">${AG_PROS.filter((_,i)=>!AG.mine||i===0).map(p=>'<option value="'+AG_PROS.indexOf(p)+'">'+p[0]+'</option>').join('')}</select>
+   <label>Serviço</label><select id="ag-msrv">${AG_SRV.map(s=>'<option>'+s+'</option>').join('')}</select>
+   <label>Dia e horário</label><div style="display:flex;gap:8px"><input type="date" id="ag-md-d"><input type="time" id="ag-md-h" value="14:00"></div>
+   <label>Duração</label><select id="ag-mdur"><option value="1">1 hora</option><option value="0.75">50 min</option><option value="2">2 horas</option></select>
+   <div style="display:flex;gap:8px;margin-top:16px"><button class="p" onclick="agSalvar()">Salvar</button><button onclick="agFechar()">Cancelar</button></div></div></div>`;
+  agDraw();
+}
+function agNav(n){AG.ws.setDate(AG.ws.getDate()+7*n);agDraw();}
+function agDraw(){
+  const f=d=>d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short'});
+  const end=new Date(AG.ws);end.setDate(end.getDate()+6);
+  document.getElementById('ag-ttl').textContent=f(AG.ws)+' – '+f(end)+' '+end.getFullYear();
+  const pr=document.getElementById('ag-pros');
+  if(pr){pr.innerHTML='';AG_PROS.forEach((p,i)=>{const e=document.createElement('div');e.className='ag-pro'+(AG.on.has(i)?'':' off');
+    e.innerHTML='<span class="ag-sw" style="border-color:'+p[1]+';background:'+(AG.on.has(i)?p[1]:'transparent')+'"></span>'+p[0];
+    e.onclick=()=>{AG.on.has(i)?AG.on.delete(i):AG.on.add(i);agDraw();};pr.appendChild(e);});}
+  const q=(document.getElementById('ag-q').value||'').toLowerCase(),fs=(document.getElementById('ag-fsrv')||{}).value||'';
+  const dias=['SEG','TER','QUA','QUI','SEX','SÁB','DOM'],hoje=new Date().toDateString();
+  let h='<div class="ag-head"><div></div>';
+  for(let i=0;i<7;i++){const d=new Date(AG.ws);d.setDate(d.getDate()+i);h+='<div class="'+(d.toDateString()===hoje?'hoje':'')+'">'+dias[i]+'<b>'+d.getDate()+'</b></div>';}
+  h+='</div><div class="ag-body"><div class="ag-hrs">';
+  for(let x=8;x<=20;x++)h+='<div>'+String(x).padStart(2,'0')+':00</div>';
+  h+='</div>';
+  for(let i=0;i<7;i++){h+='<div class="ag-col">';
+    for(let x=8;x<=20;x++)h+='<div class="ag-slot" onclick="agNovo('+i+','+x+')"></div>';
+    const ev=AG.E.filter(e=>e.d===i&&AG.on.has(e.p)&&(!fs||e.srv===fs)&&(!q||e.pac.toLowerCase().includes(q))).sort((a,b)=>a.h-b.h);
+    const cols=[];ev.forEach(e=>{let k=0;while(cols[k]&&cols[k]>e.h)k++;cols[k]=e.h+e.dur;e.c=k;});
+    const nc=Math.max(1,...ev.map(e=>e.c+1));
+    ev.forEach(e=>{const P=AG_PROS[e.p],st=e.st==='ok'?'✓✓':e.st==='falta'?'×':'✓';
+      h+='<div class="ag-ev" style="top:'+((e.h-8)*56+1)+'px;height:'+(e.dur*56-3)+'px;left:'+(e.c*100/nc+1)+'%;width:'+(100/nc-2)+'%;background:'+P[1]+'26;border-color:'+P[1]+'" title="'+esc(P[0]+' · '+e.srv)+'"><span class="st">'+st+'</span><b>'+esc(e.pac)+'</b><i>'+(AG.mine?'':esc(P[0])+' · ')+esc(e.srv)+'</i></div>';});
+    h+='</div>';}
+  h+='</div>';
+  document.getElementById('ag-cal').innerHTML=h;
+}
+function agNovo(d,hr){
+  const dd=new Date(AG.ws);dd.setDate(dd.getDate()+(d||0));
+  document.getElementById('ag-md-d').value=dd.getFullYear()+'-'+String(dd.getMonth()+1).padStart(2,'0')+'-'+String(dd.getDate()).padStart(2,'0');
+  if(hr)document.getElementById('ag-md-h').value=String(hr).padStart(2,'0')+':00';
+  document.getElementById('ag-md').style.display='flex';
+}
+function agFechar(){document.getElementById('ag-md').style.display='none';}
+function agSalvar(){
+  const dt=new Date(document.getElementById('ag-md-d').value+'T12:00'),d=Math.round((dt-AG.ws)/864e5),[hh,mm]=document.getElementById('ag-md-h').value.split(':');
+  if(d>=0&&d<7)AG.E.push({d,p:+document.getElementById('ag-mpro').value,h:+hh+(+mm)/60,dur:+document.getElementById('ag-mdur').value,pac:document.getElementById('ag-mp').value||'Novo paciente',srv:document.getElementById('ag-msrv').value,st:'ag'});
+  agFechar();agDraw();
+}
 
 let leadViewMode='tabela';
 
@@ -3630,6 +3745,7 @@ function showView(name){
   else if(name==='convertidos') renderConvertidos(c);
   else if(name==='trilha'&&CU.role==='admin') renderTrilha(c);
   else if(name==='jornada'&&CU.role==='admin') renderJornada(c);
+  else if(name==='agenda') renderAgenda(c);
   else if(name==='testes') renderTestes(c);
   else if(name==='nfse'&&CU.role==='admin') renderNfse(c);
   else if(name==='faturamento') renderFaturamento(c);
