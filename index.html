@@ -34,7 +34,7 @@ const CX_ICONS={
  users2:'<path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/>'
 };
 function cxIco(n,cls){return '<svg class="cx-ico '+(cls||'')+'" viewBox="0 0 24 24" aria-hidden="true">'+(CX_ICONS[n]||'')+'</svg>';}
-const CX_NAV={'dash-leads':'dash','leads':'leads','convertidos':'users','trilha':'compass','jornada':'chart','testes':'flask','nfse':'receipt','financeiro':'wallet','reunioes':'file','usuarios':'lock','minhaconta':'account','prontuario':'doc','agenda':'calendar','servicos':'dollar'};
+const CX_NAV={'dash-leads':'dash','leads':'leads','convertidos':'users','trilha':'compass','jornada':'chart','testes':'flask','nfse':'receipt','financeiro':'wallet','reunioes':'file','usuarios':'lock','minhaconta':'account','prontuario':'doc','agenda':'calendar','repasses':'wallet','servicos':'dollar'};
 function cxNavIcons(){
   document.querySelectorAll('#sidebar-nav .nav-item').forEach(b=>{
     const k=(b.id||'').replace('nav-','');const ic=b.querySelector('.nav-icon');
@@ -3537,6 +3537,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('trilha')" id="nav-trilha"><span class="nav-icon">🧭</span> Trilha de avaliação</button>
       <button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">🗂️</span> Prontuário</button>
       <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>
+      <button class="nav-item" onclick="showView('repasses')" id="nav-repasses"><span class="nav-icon">💵</span> Repasses (piloto)</button>
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('nfse')" id="nav-nfse"><span class="nav-icon">🧾</span> Notas Fiscais</button>
       <button class="nav-item" onclick="showView('financeiro')" id="nav-financeiro"><span class="nav-icon">💰</span> Financeiro <span class="fin-badge-notif" id="fin-nav-badge" style="display:none">0</span></button>
@@ -3548,14 +3549,16 @@ function buildNav(){
   } else if(CU.role==='supervisora'){
     html+=`<div class="nav-section">Pacientes</div>
       ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">👥</span> Pacientes</button>
-      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
+      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>
+      <button class="nav-item" onclick="showView('repasses')" id="nav-repasses"><span class="nav-icon">💵</span> Meus repasses</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else {
     html+=`<div class="nav-section">Pacientes</div>
       ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">👥</span> Pacientes</button>
-      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
+      <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>
+      <button class="nav-item" onclick="showView('repasses')" id="nav-repasses"><span class="nav-icon">💵</span> Meus repasses</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -3577,6 +3580,7 @@ const VM={
   'prontuario':{title:'Prontuário',sub:'Registros clínicos (piloto) — nada é apagado'},
   'servicos':{title:'Serviços',sub:'Serviços e valores',role:'admin'},
   'agenda':{title:'Agenda',sub:'Agenda semanal'},
+  'repasses':{title:'Repasses',sub:'Atendimentos realizados e repasse do mês (piloto)'},
   'testes':{title:'Testes',sub:'Escalas e questionários enviados por link'},
   'nfse':{title:'Notas Fiscais',sub:'Lote XML de NFS-e para o GISS Guarulhos',role:'admin'},
   'registros':{title:'Registros de Supervisão',sub:'Histórico de supervisões'},
@@ -3596,8 +3600,10 @@ const VM={
 // ════════════════════════════════════════════════════════════
 function agVisivel(){return CU&&(CU.role==='admin'||PR_CLIN.includes((CU.email||'').toLowerCase()));}
 const AG_PROFS={'tatianesanches@cinpsi.com.br':{n:'Tatiane Sanches',c:'#5f3dc4'}};
-const AG_ST={programado:'Programado',compareceu:'Compareceu',faltou:'Faltou',cancelado:'Cancelado'};
-const AG={ws:null,ev:[],srv:[],pacs:[],on:null,cur:null};
+const AG_ST={programado:'Programado',compareceu:'Compareceu',faltou:'Faltou (cobrado)',reagendar:'Faltou – aguardando reagendamento',cancelado:'Cancelado'};
+const AG_REP={'tatianesanches@cinpsi.com.br':80};
+function agRepPct(e){return AG_REP[(e||'').toLowerCase()];}
+const AG={ws:null,ev:[],srv:[],pacs:[],on:null,cur:null,aguard:[]};
 function agPf(e){return AG_PROFS[(e||'').toLowerCase()]||{n:(e||'').split('@')[0],c:'#6b7a8a'};}
 function agIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function agSeg(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
@@ -3634,6 +3640,7 @@ function renderAgenda(c){
   .ag-ev b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.ag-ev i{font-style:normal;opacity:.8}
   .ag-ev .st{position:absolute;right:5px;top:3px;font-size:10px}
   .ag-ev.canc{opacity:.45;text-decoration:line-through}
+  .ag-ev.reag{background:repeating-linear-gradient(45deg,#fff3d6,#fff3d6 6px,#ffe6a8 6px,#ffe6a8 12px)!important;border-color:#d98e00!important}
   .ag-panel{position:fixed;top:0;right:0;bottom:0;width:380px;max-width:96vw;background:#fff;box-shadow:-6px 0 24px #0003;z-index:300;display:none;flex-direction:column}
   .ag-panel .bd{padding:14px 18px;overflow:auto;flex:1}
   .ag-panel label{display:block;margin:10px 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#5b6b7b}
@@ -3645,8 +3652,9 @@ function renderAgenda(c){
     <div class="ag-bar"><button onclick="AG.ws=agSeg(new Date());agCarrega()">Hoje</button><button onclick="agNav(-1)">‹</button><button onclick="agNav(1)">›</button>
      <span class="ag-ttl" id="ag-ttl"></span>
      <input id="ag-q" placeholder="Buscar paciente..." oninput="agDraw()">
-     ${adm?'':'<button class="p" onclick="agNovo()" style="margin-left:auto">+ Novo agendamento</button>'}
-     <span style="margin-left:${adm?'auto':'0'};font-size:12px;color:#5b6b7b">✓ programado · ✓✓ compareceu · × faltou</span></div>
+     ${adm?'':'<button class="p" onclick="agNovo()">+ Novo agendamento</button>'}
+     <button id="ag-bt-aguard" onclick="agAguard()" style="border-color:#d98e00;color:#8a5a00;background:#fff8e6">↻ Aguardando reagendamento (<span id="ag-n-aguard">0</span>)</button>
+     <span style="margin-left:auto;font-size:12px;color:#5b6b7b">✓ programado · ✓✓ compareceu · × faltou · ↻ reagendar</span></div>
     <div class="ag-cal" id="ag-cal">Carregando…</div>
    </section></div>
   <div class="ag-panel" id="ag-panel"></div>`;
@@ -3659,7 +3667,10 @@ function agCarrega(){
   let qa=fs.collection('agenda');
   qa=adm?qa.where('data','>=',a).where('data','<=',b):qa.where('profissionalEmail','==',me);
   const qp=adm?fs.collection('prontuarios'):fs.collection('prontuarios').where('profissionais','array-contains',me);
-  return Promise.all([qa.get(),fs.collection('servicos').get(),qp.get()]).then(r=>{
+  let qg=fs.collection('agenda');qg=adm?qg.where('status','==','reagendar'):qg.where('profissionalEmail','==',me).where('status','==','reagendar');
+  return Promise.all([qa.get(),fs.collection('servicos').get(),qp.get(),qg.get()]).then(r=>{
+    AG.aguard=r[3].docs.map(d=>Object.assign({id:d.id},d.data())).sort((x,y)=>x.data<y.data?-1:1);
+    const nb=document.getElementById('ag-n-aguard');if(nb)nb.textContent=AG.aguard.length;
     AG.ev=r[0].docs.map(d=>Object.assign({id:d.id},d.data())).filter(x=>x.data>=a&&x.data<=b);
     AG.srv=r[1].docs.map(d=>Object.assign({id:d.id},d.data())).filter(x=>x.ativo!==false).sort((x,y)=>String(x.nome).localeCompare(y.nome));
     AG.pacs=r[2].docs.map(d=>Object.assign({id:d.id},d.data())).sort((x,y)=>String(x.pacienteNome).localeCompare(y.pacienteNome));
@@ -3691,8 +3702,8 @@ function agDraw(){
     const ev=AG.ev.filter(e=>e.data===ds&&AG.on.has(e.profissionalEmail)&&(!q||String(e.pacienteNome).toLowerCase().includes(q))).map(e=>Object.assign({},e,{h:agMin(e.inicio)/60,dur:(e.dur||60)/60})).sort((a,b)=>a.h-b.h);
     const cols=[];ev.forEach(e=>{let k=0;while(cols[k]&&cols[k]>e.h)k++;cols[k]=e.h+e.dur;e.c=k;});
     const nc=Math.max(1,...ev.map(e=>e.c+1));
-    ev.forEach(e=>{const P=agPf(e.profissionalEmail),st=e.status==='compareceu'?'✓✓':e.status==='faltou'?'×':e.status==='cancelado'?'':'✓';
-      h+='<div class="ag-ev'+(e.status==='cancelado'?' canc':'')+'" onclick="agAbrir(\''+e.id+'\')" style="top:'+((e.h-8)*56+1)+'px;height:'+(e.dur*56-3)+'px;left:'+(e.c*100/nc+1)+'%;width:'+(100/nc-2)+'%;background:'+P.c+'26;border-color:'+P.c+'"><span class="st">'+st+'</span><div style="font-size:10px;opacity:.8">'+esc(e.inicio)+' – '+agHm(e.h+e.dur)+'</div><b>'+esc(e.pacienteNome)+'</b><i>'+esc(e.servicoNome||'')+'</i></div>';});
+    ev.forEach(e=>{const P=agPf(e.profissionalEmail),st=e.status==='compareceu'?'✓✓':e.status==='faltou'?'×':e.status==='reagendar'?'↻':e.status==='cancelado'?'':'✓';
+      h+='<div class="ag-ev'+(e.status==='cancelado'?' canc':'')+(e.status==='reagendar'?' reag':'')+'" onclick="agAbrir(\''+e.id+'\')" style="top:'+((e.h-8)*56+1)+'px;height:'+(e.dur*56-3)+'px;left:'+(e.c*100/nc+1)+'%;width:'+(100/nc-2)+'%;background:'+P.c+'26;border-color:'+P.c+'"><span class="st">'+st+'</span><div style="font-size:10px;opacity:.8">'+esc(e.inicio)+' – '+agHm(e.h+e.dur)+'</div><b>'+esc(e.pacienteNome)+'</b><i>'+esc(e.servicoNome||'')+'</i></div>';});
     h+='</div>';}
   h+='</div>';
   document.getElementById('ag-cal').innerHTML=h;
@@ -3718,7 +3729,12 @@ function agPainel(e,novo){
    ${novo?`<label>Repetição</label><div style="display:flex;gap:8px"><select id="ap-rep"><option value="0">Não repete</option><option value="7" selected>Toda semana</option><option value="14">A cada 15 dias</option></select><select id="ap-sem"><option value="12">por 12 semanas</option><option value="26">por 26 semanas</option><option value="4">por 4 semanas</option></select></div>`:(e.serieId?`<div style="margin-top:10px;font-size:12px;color:#5b6b7b">Faz parte de uma série semanal. <a href="#" onclick="agEstende();return false">Estender +12 semanas</a></div>`:'')}
   </div>
   <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">
-   ${novo?'':'<button onclick="agEpisodio()" style="width:100%">📝 Criar episódio clínico</button>'}
+   ${novo?'':`<div id="ap-reag" style="display:none;width:100%;background:#fff8e6;border:1px solid #ecd9a0;border-radius:10px;padding:10px">
+     <div style="font-size:12px;color:#7a5b00;margin-bottom:6px">Escolha a nova data e horário:</div>
+     <div style="display:flex;gap:8px"><input type="date" id="rg-data" value="${esc(e.data||'')}"><input type="time" id="rg-hora" value="${esc(e.inicio||'')}"></div>
+     <div style="display:flex;gap:8px;margin-top:8px"><button onclick="document.getElementById('ap-reag').style.display='none'" style="flex:1">Cancelar</button><button class="p" onclick="agReagendar()" style="flex:1">Confirmar novo horário</button></div></div>
+   <button onclick="document.getElementById('ap-reag').style.display='block'" style="width:100%;border-color:#d98e00;color:#8a5a00">↻ Reagendar</button>
+   <button onclick="agEpisodio()" style="width:100%">📝 Criar episódio clínico</button>`}
    <button onclick="agFecha()" style="flex:1">Fechar</button><button class="p" onclick="agSalvar()" style="flex:1">Salvar</button></div>`;
   p.style.display='flex';agValor(e.valor);
 }
@@ -3769,6 +3785,23 @@ function agEstende(){
     return b.commit();
   }).then(()=>{toast('Série estendida em 12 semanas.');agFecha();agCarrega();}).catch(er=>toast('Erro: '+er.message));
 }
+function agReagendar(){
+  const e=AG.ev.find(x=>x.id===AG.cur);if(!e)return;
+  const d=document.getElementById('rg-data').value,h=document.getElementById('rg-hora').value;
+  if(!d||!h){toast('Escolha data e horário.');return;}
+  prFs().collection('agenda').doc(e.id).update({data:d,inicio:h,status:'programado',reagendadoDe:e.data+' '+e.inicio,editadoEm:new Date().toISOString()})
+   .then(()=>{toast('Reagendado para '+d.split('-').reverse().join('/')+' às '+h+'.');agFecha();AG.ws=agSeg(new Date(d+'T12:00'));agCarrega();}).catch(er=>toast('Não salvo: '+er.message));
+}
+function agAguard(){
+  const p=document.getElementById('ag-panel');AG.cur=null;
+  const L=AG.aguard,adm=CU.role==='admin';
+  p.innerHTML=`<div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center"><b style="font-size:15px">↻ Aguardando reagendamento (${L.length})</b><button onclick="agFecha()" style="margin-left:auto;padding:3px 10px">✕</button></div>
+  <div class="bd">${L.length?L.map(e=>`<div style="border:1px solid #ecd9a0;background:#fff8e6;border-radius:10px;padding:10px;margin-bottom:8px">
+    <b>${esc(e.pacienteNome)}</b><div style="font-size:12px;color:#5b6b7b">${esc(e.servicoNome||'')} · faltou em ${esc(String(e.data).split('-').reverse().join('/'))} ${esc(e.inicio||'')}${adm?' · '+esc(agPf(e.profissionalEmail).n):''}</div>
+    <button onclick="agAbreDaLista('${e.id}')" style="margin-top:6px">↻ Reagendar</button></div>`).join(''):'<div style="color:#5b6b7b">Nenhuma sessão aguardando reagendamento.</div>'}</div>`;
+  p.style.display='flex';
+}
+function agAbreDaLista(id){const e=AG.aguard.find(x=>x.id===id);if(!e)return;if(!AG.ev.find(x=>x.id===id))AG.ev.push(e);agPainel(e,false);document.getElementById('ap-reag').style.display='block';}
 function agEpisodio(){
   const e=AG.ev.find(x=>x.id===AG.cur);if(!e)return;
   agFecha();window.__prGo=e.pacienteId;showView('prontuario');
@@ -3800,6 +3833,41 @@ function svNovo(){
 // PRONTUÁRIO (piloto) — coleções: prontuarios/{pid}/episodios/{eid}/versoes/{n}, auditoria
 // Nada é apagado. Edição só pelo autor (cada edição guarda a versão anterior).
 // ════════════════════════════════════════════════════════════
+// ===== REPASSES (piloto, somente leitura) =====
+const RP={mes:null};
+function renderRepasses(c){
+  if(!agVisivel()){c.innerHTML='<div class="card" style="padding:20px">Sem acesso.</div>';return;}
+  if(!RP.mes){const n=new Date();RP.mes=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
+  c.innerHTML='<div class="card" style="padding:16px"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button class="btn-secondary" onclick="rpNav(-1)">‹</button><b id="rp-ttl" style="min-width:150px;text-align:center"></b><button class="btn-secondary" onclick="rpNav(1)">›</button></div><div id="rp-body" style="margin-top:14px">Carregando…</div></div>';
+  rpCarrega();
+}
+function rpNav(n){const p=RP.mes.split('-');const d=new Date(+p[0],+p[1]-1+n,1);RP.mes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');rpCarrega();}
+function rpCarrega(){
+  const fs=prFs(),me=prMe(),adm=CU.role==='admin',m=RP.mes;
+  const a=m+'-01',b=m+'-31';
+  let q=fs.collection('agenda');
+  q=adm?q.where('data','>=',a).where('data','<=',b):q.where('profissionalEmail','==',me);
+  const t=document.getElementById('rp-ttl');if(t){const p=m.split('-');t.textContent=new Date(+p[0],+p[1]-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});}
+  return q.get().then(sn=>{
+    const L=sn.docs.map(d=>d.data()).filter(x=>x.data>=a&&x.data<=b).sort((x,y)=>(x.data+x.inicio)<(y.data+y.inicio)?-1:1);
+    const ok=L.filter(x=>x.status==='compareceu'),nF=L.filter(x=>x.status==='faltou').length,nR=L.filter(x=>x.status==='reagendar').length,nP=L.filter(x=>x.status==='programado').length;
+    const rep=x=>{const p=agRepPct(x.profissionalEmail);return p==null?null:Number(x.valor||0)*p/100;};
+    const tot=ok.reduce((s,x)=>s+(rep(x)||0),0),totV=ok.reduce((s,x)=>s+Number(x.valor||0),0);
+    const sem=ok.some(x=>rep(x)==null);
+    let h=`<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="card" style="padding:10px 14px"><div style="font-size:11px;color:#5b6b7b">REPASSE REALIZADO</div><b style="font-size:20px;color:#1f7a4d">${agBRL(tot)}</b></div>
+      ${adm?`<div class="card" style="padding:10px 14px"><div style="font-size:11px;color:#5b6b7b">VALOR ATENDIDO</div><b style="font-size:20px">${agBRL(totV)}</b></div>`:''}
+      <div class="card" style="padding:10px 14px"><div style="font-size:11px;color:#5b6b7b">ATENDIDAS</div><b style="font-size:20px">${ok.length}</b></div>
+      <div class="card" style="padding:10px 14px"><div style="font-size:11px;color:#5b6b7b">AINDA PROGRAMADAS</div><b style="font-size:20px">${nP}</b></div>
+      <div class="card" style="padding:10px 14px"><div style="font-size:11px;color:#5b6b7b">AGUARDANDO REAGEND.</div><b style="font-size:20px">${nR}</b></div></div>
+      ${sem?'<div style="color:#b91c1c;font-size:12px;margin-bottom:8px">Há profissional sem percentual de repasse cadastrado.</div>':''}
+      <div style="overflow:auto"><table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:#5b6b7b;font-size:11px;text-transform:uppercase"><th style="padding:6px">Data</th>${adm?'<th>Profissional</th>':''}<th>Paciente</th><th>Serviço</th>${adm?'<th style="text-align:right">Valor</th>':''}<th style="text-align:right">Repasse</th></tr>`;
+    ok.forEach(x=>{const r=rep(x);h+=`<tr style="border-top:1px solid var(--border)"><td style="padding:6px">${esc(String(x.data).split('-').reverse().join('/'))}</td>${adm?'<td>'+esc(agPf(x.profissionalEmail).n)+'</td>':''}<td>${esc(x.pacienteNome)}</td><td>${esc(x.servicoNome||'')}</td>${adm?'<td style="text-align:right">'+agBRL(x.valor)+'</td>':''}<td style="text-align:right"><b>${r==null?'—':agBRL(r)}</b></td></tr>`;});
+    h+='</table></div>'+(ok.length?'':'<div style="color:#5b6b7b;padding:10px">Nenhum atendimento com status “Compareceu” neste mês.</div>');
+    h+=`<div style="font-size:12px;color:#5b6b7b;margin-top:10px">Só contam sessões marcadas como “Compareceu”. Faltas cobradas (${nF}) e sessões aguardando reagendamento não geram repasse até serem realizadas. Piloto: estes valores não alimentam o financeiro oficial.</div>`;
+    const el=document.getElementById('rp-body');if(el)el.innerHTML=h;
+  }).catch(e=>{const el=document.getElementById('rp-body');if(el)el.innerHTML='<div style="color:#b91c1c">Erro: '+esc(e.message)+'</div>';});
+}
 const PR_CLIN=['tatianesanches@cinpsi.com.br'];
 function prVisivel(){return CU&&(CU.role==='admin'||PR_CLIN.includes((CU.email||'').toLowerCase()));}
 const PR={pid:null,pac:null,eps:[],eid:null,lista:[],last:Date.now(),timer:null};
@@ -4077,6 +4145,7 @@ function showView(name){
   else if(name==='prontuario') renderProntuario(c);
   else if(name==='servicos') renderServicos(c);
   else if(name==='agenda') renderAgenda(c);
+  else if(name==='repasses') renderRepasses(c);
   else if(name==='testes') renderTestes(c);
   else if(name==='nfse'&&CU.role==='admin') renderNfse(c);
   else if(name==='faturamento') renderFaturamento(c);
