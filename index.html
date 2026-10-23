@@ -3882,7 +3882,7 @@ function rpCarrega(){
 }
 
 // ===== RECEITAS (piloto, só admin): baixa de pagamentos da agenda =====
-const RC={mes:null,L:[],sel:new Set(),filtro:'pend',q:'',prof:'',srv:''};
+const RC={mes:null,L:[],sel:new Set(),filtro:'pend',q:'',prof:'',srv:'',pac:''};
 const RC_FORMAS=['Pix','Cartão de crédito','Cartão de débito','Dinheiro','Transferência','Outro'];
 function rcBRL(v){return agBRL(v);}
 function renderReceitas(c){
@@ -3891,11 +3891,11 @@ function renderReceitas(c){
   c.innerHTML='<div class="card" style="padding:16px"><div style="background:#fff7e0;border:1px solid #ecd9a0;color:#7a5b00;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:10px">Piloto: usa só a agenda do app (Tatiane). Não alimenta o financeiro oficial, o DRE nem a NFS-e.</div>'
    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button class="btn-secondary" onclick="rcNav(-1)">‹</button><b id="rc-ttl" style="min-width:150px;text-align:center"></b><button class="btn-secondary" onclick="rcNav(1)">›</button>'
    +'<select id="rc-f" class="filter-input" onchange="RC.filtro=this.value;rcDraw()"><option value="pend">Com pendência</option><option value="todos">Todos</option><option value="pago">Só pagos</option></select>'
-   +'<input id="rc-q" class="filter-input" placeholder="Buscar paciente..." oninput="RC.q=this.value;rcDraw()"><select id="rc-p" class="filter-input" onchange="RC.prof=this.value;rcDraw()"></select><select id="rc-s" class="filter-input" onchange="RC.srv=this.value;rcDraw()"></select></div>'
+   +'<div style="position:relative"><input id="rc-q" class="filter-input" placeholder="Buscar paciente..." autocomplete="off" oninput="rcSug(this.value)" onfocus="rcSug(this.value)"><div id="rc-sug" style="display:none;position:absolute;top:100%;left:0;min-width:320px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px #0002;z-index:50;max-height:300px;overflow:auto"></div></div><select id="rc-p" class="filter-input" onchange="RC.prof=this.value;rcDraw()"></select><select id="rc-s" class="filter-input" onchange="RC.srv=this.value;rcDraw()"></select></div>'
    +'<div id="rc-body" style="margin-top:14px">Carregando…</div></div><div id="rc-modal"></div>';
   document.getElementById('rc-f').value=RC.filtro;rcCarrega();
 }
-function rcNav(n){const p=RC.mes.split('-');const d=new Date(+p[0],+p[1]-1+n,1);RC.mes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');RC.sel=new Set();rcCarrega();}
+function rcNav(n){const p=RC.mes.split('-');const d=new Date(+p[0],+p[1]-1+n,1);RC.mes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');RC.sel=new Set();RC.pac='';RC.q='';const qi=document.getElementById('rc-q');if(qi)qi.value='';rcCarrega();}
 function rcCarrega(){
   const m=RC.mes,a=m+'-01',b=m+'-31',t=document.getElementById('rc-ttl');
   if(t){const p=m.split('-');t.textContent=new Date(+p[0],+p[1]-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});}
@@ -3917,7 +3917,7 @@ function rcDraw(){
   const profs=[...new Set(RC.L.map(x=>x.profissionalEmail))],srvs=[...new Set(RC.L.map(x=>x.servicoNome||'').filter(Boolean))].sort();
   if(selP){selP.innerHTML='<option value="">Todas as profissionais</option>'+profs.map(e=>'<option value="'+esc(e)+'"'+(RC.prof===e?' selected':'')+'>'+esc(agPf(e).n)+'</option>').join('');}
   if(selS){selS.innerHTML='<option value="">Todos os serviços</option>'+srvs.map(n=>'<option'+(RC.srv===n?' selected':'')+'>'+esc(n)+'</option>').join('');}
-  const L=RC.L.filter(x=>(!RC.prof||x.profissionalEmail===RC.prof)&&(!RC.srv||(x.servicoNome||'')===RC.srv));
+  const L=RC.L.filter(x=>(!RC.prof||x.profissionalEmail===RC.prof)&&(!RC.srv||(x.servicoNome||'')===RC.srv)&&(!RC.pac||(x.pacienteId||x.pacienteNome)===RC.pac));
   const pago=L.filter(x=>x.pgStatus==='pago'),pend=L.filter(x=>x.pgStatus!=='pago'&&x._devido>0);
   const sPrev=L.reduce((s,x)=>s+x._devido,0);
   const sP=pago.reduce((s,x)=>s+Number(x.pgValor!=null?x.pgValor:x._devido),0),sD=pend.reduce((s,x)=>s+x._devido,0);
@@ -3932,7 +3932,7 @@ function rcDraw(){
   if(Object.keys(porProf).length>1)h+='<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px"><tr style="text-align:left;color:#5b6b7b;font-size:11px;text-transform:uppercase"><th>Profissional</th><th style="text-align:right">Sessões</th><th style="text-align:right">Previsto</th><th style="text-align:right">Pago</th><th style="text-align:right">Em aberto</th></tr>'
     +Object.keys(porProf).map(e=>{const o=porProf[e];return '<tr style="border-top:1px solid var(--border)"><td style="padding:5px 0">'+esc(agPf(e).n)+'</td><td style="text-align:right">'+o.n+'</td><td style="text-align:right">'+rcBRL(o.prev)+'</td><td style="text-align:right;color:#1f7a4d">'+rcBRL(o.pago)+'</td><td style="text-align:right;color:#b9770e">'+rcBRL(o.ab)+'</td></tr>';}).join('')+'</table>';
   const grupos={};L.forEach(x=>{const k=x.pacienteId||x.pacienteNome;(grupos[k]=grupos[k]||[]).push(x);});
-  const ks=Object.keys(grupos).filter(k=>{const g=grupos[k],n=g[0].pacienteNome.toLowerCase();if(q&&!n.includes(q))return false;
+  const ks=Object.keys(grupos).filter(k=>{const g=grupos[k],n=g[0].pacienteNome.toLowerCase();if(!RC.pac&&q&&!n.includes(q))return false;
     const temP=g.some(x=>x.pgStatus!=='pago'&&x._devido>0);return RC.filtro==='todos'||(RC.filtro==='pend'?temP:!temP);}).sort((x,y)=>grupos[x][0].pacienteNome.localeCompare(grupos[y][0].pacienteNome));
   if(!ks.length)h+='<div style="color:#5b6b7b;padding:10px">Nenhum atendimento neste filtro.</div>';
   ks.forEach(k=>{const g=grupos[k],pd=g.filter(x=>x.pgStatus!=='pago'&&x._devido>0),tp=pd.reduce((s,x)=>s+x._devido,0),nm=g[0].pacienteNome;
@@ -3965,6 +3965,26 @@ function rcSalvaValor(id){
   prFs().collection('agenda').doc(id).update({valorManual:Math.round(v*100)/100,valorAnterior:x._devido,editadoEm:new Date().toISOString()})
    .then(()=>{prAud('valor-editado',x.pacienteId||'',id);toast('Valor atualizado para '+rcBRL(v)+'.');document.getElementById('rc-modal').innerHTML='';rcCarrega();}).catch(e=>toast('Não salvo: '+e.message));
 }
+function rcSugLista(q){
+  const por={};RC.L.forEach(x=>{const k=x.pacienteId||x.pacienteNome;const o=por[k]=por[k]||{k:k,nome:x.pacienteNome,profs:new Set(),n:0};o.profs.add(x.profissionalEmail);o.n++;});
+  const t=prNorm(q);
+  return Object.values(por).filter(o=>{const nk=prNorm(o.nome);return t.every(w=>nk.some(n=>n.startsWith(w)||n.includes(w)));}).sort((a,b)=>a.nome.localeCompare(b.nome)).slice(0,10);
+}
+function rcSug(v){
+  RC.q=v;RC.pac='';const box=document.getElementById('rc-sug');
+  if(!v||v.trim().length<1){if(box)box.style.display='none';rcDraw();return;}
+  const L=rcSugLista(v);
+  box.innerHTML=L.length?L.map(o=>{const f=prFichaDe(o.nome),nasc=f&&f.nascimento?new Date(String(f.nascimento).slice(0,10)+'T12:00:00').toLocaleDateString('pt-BR'):'';
+    return '<div class="rc-sg" style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #eef1f4" onmousedown="rcEscolhe(\''+esc(o.k)+'\')"><b>'+esc(o.nome)+'</b><div style="font-size:11px;color:#5b6b7b">'+[...o.profs].map(e=>esc(agPf(e).n)).join(', ')+' · '+o.n+' sessão(ões) no mês'+(nasc?' · nasc. '+nasc:'')+'</div></div>';}).join('')
+    :'<div style="padding:8px 12px;color:#5b6b7b;font-size:12px">Nenhum paciente com esse nome neste mês.</div>';
+  box.style.display='block';rcDraw();
+}
+function rcEscolhe(k){
+  const o=rcSugLista('').find(x=>x.k===k)||RC.L.map(x=>({k:x.pacienteId||x.pacienteNome,nome:x.pacienteNome})).find(x=>x.k===k);
+  RC.pac=k;const i=document.getElementById('rc-q');if(i&&o)i.value=o.nome;RC.q=o?o.nome:'';
+  const box=document.getElementById('rc-sug');if(box)box.style.display='none';rcDraw();
+}
+document.addEventListener('click',e=>{const b=document.getElementById('rc-sug');if(b&&!e.target.closest('#rc-q')&&!e.target.closest('#rc-sug'))b.style.display='none';});
 function rcTog(id,on){on?RC.sel.add(id):RC.sel.delete(id);rcDraw();}
 function rcSelTodos(k){RC.L.filter(x=>(x.pacienteId||x.pacienteNome)===k&&x.pgStatus!=='pago'&&x._devido>0).forEach(x=>RC.sel.add(x.id));rcDraw();}
 function rcAbreBaixa(k){
