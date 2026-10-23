@@ -3945,6 +3945,7 @@ function prAbrir(pid){
 }
 function prDesenha(){
   const m=document.getElementById('pr-main');if(!m)return;
+  prRecLimpa();
   const me=prMe();
   const lista=PR.eps.map(e=>'<div class="pr-it'+(e.id===PR.eid?' on':'')+'" onclick="prSel(\''+esc(e.id)+'\')"><b>'+prDt(e.data)+' · '+esc((e.campos&&e.campos.autorOriginal)||(e.profissionalEmail||'').split('@')[0])+'</b><span>v'+e.versao+(e.origem==='doctoralia_import'?' · Doctoralia':'')+'</span></div>').join('');
   const g=document.getElementById('pr-g'),lb=document.getElementById('pr-listbox');if(g)g.style.gridTemplateColumns='1fr';if(lb)lb.style.display='none';
@@ -4065,14 +4066,59 @@ function prUsaModelo(){
   if(document.getElementById('pr-nopergunta').checked){try{localStorage.setItem('pr_modelo_padrao',String(i));}catch(e){}}
   document.getElementById('pr-modal').remove();prFormModelo(i);
 }
+const PRR={mr:null,st:null,ch:[],t0:0,acc:0,tm:null,url:null,mime:''};
+function prRecHtml(){return '<div id="pr-rec" style="border:1px solid #cfd8e3;background:#f6f9fc;border-radius:10px;padding:10px 12px;margin:8px 0">'
+ +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b style="font-size:13px">🎙 Gravar sessão</b>'
+ +'<button class="btn-primary" id="rec-ini" onclick="prRecIni()" style="padding:5px 12px">● Gravar</button>'
+ +'<button class="btn-ghost" id="rec-pau" onclick="prRecPausa()" style="display:none;padding:5px 12px">⏸ Pausar</button>'
+ +'<button class="btn-ghost" id="rec-fim" onclick="prRecFim()" style="display:none;padding:5px 12px">■ Parar</button>'
+ +'<span id="rec-t" style="font-variant-numeric:tabular-nums;font-weight:600"></span><span id="rec-s" style="font-size:12px"></span></div>'
+ +'<div id="rec-pl" style="margin-top:8px"></div>'
+ +'<div style="font-size:11px;color:#5b6b7b;margin-top:6px">Fase de teste: o áudio fica apenas neste computador (não é enviado nem salvo no sistema). Ao sair desta tela ele é descartado. Peça o consentimento do paciente antes de gravar. A transcrição automática ainda será ligada.</div></div>';}
+function prRecTempo(){const ms=PRR.acc+(PRR.mr&&PRR.mr.state==='recording'?Date.now()-PRR.t0:0),sg=Math.floor(ms/1000);const e=document.getElementById('rec-t');if(e)e.textContent=String(Math.floor(sg/60)).padStart(2,'0')+':'+String(sg%60).padStart(2,'0');}
+function prRecLimpa(){try{if(PRR.mr&&PRR.mr.state!=='inactive'){PRR.mr.onstop=null;PRR.mr.stop();}}catch(e){}if(PRR.st)PRR.st.getTracks().forEach(t=>t.stop());clearInterval(PRR.tm);if(PRR.url)URL.revokeObjectURL(PRR.url);PRR.mr=null;PRR.st=null;PRR.ch=[];PRR.acc=0;PRR.url=null;window.onbeforeunload=null;}
+function prRecIni(){
+  if(!navigator.mediaDevices||!window.MediaRecorder){toast('Este navegador não grava áudio. Use o Chrome.');return;}
+  navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}}).then(st=>{
+    prRecLimpa();PRR.st=st;
+    const tipos=['audio/webm;codecs=opus','audio/webm','audio/mp4'];PRR.mime=tipos.find(t=>MediaRecorder.isTypeSupported(t))||'';
+    PRR.mr=new MediaRecorder(st,PRR.mime?{mimeType:PRR.mime}:{});
+    PRR.mr.ondataavailable=ev=>{if(ev.data&&ev.data.size)PRR.ch.push(ev.data);};
+    PRR.mr.onstop=prRecPronto;
+    PRR.mr.start(1000);PRR.t0=Date.now();PRR.acc=0;
+    PRR.tm=setInterval(prRecTempo,500);window.onbeforeunload=()=>'Há uma gravação em andamento.';
+    document.getElementById('rec-ini').style.display='none';document.getElementById('rec-pau').style.display='';document.getElementById('rec-fim').style.display='';
+    document.getElementById('rec-pl').innerHTML='';document.getElementById('rec-s').innerHTML='<span style="color:#c0392b">● gravando</span>';
+  }).catch(er=>toast('Não foi possível acessar o microfone: '+(er.name==='NotAllowedError'?'permissão negada. Clique no cadeado do endereço e permita o microfone.':er.message)));
+}
+function prRecPausa(){
+  const b=document.getElementById('rec-pau'),s=document.getElementById('rec-s');
+  if(PRR.mr.state==='recording'){PRR.mr.pause();PRR.acc+=Date.now()-PRR.t0;b.textContent='▶ Continuar';s.innerHTML='<span style="color:#b9770e">⏸ pausado</span>';}
+  else{PRR.mr.resume();PRR.t0=Date.now();b.textContent='⏸ Pausar';s.innerHTML='<span style="color:#c0392b">● gravando</span>';}
+}
+function prRecFim(){prRecTempo();PRR.acc+=PRR.mr.state==='recording'?Date.now()-PRR.t0:0;PRR.mr.stop();}
+function prRecPronto(){
+  clearInterval(PRR.tm);if(PRR.st)PRR.st.getTracks().forEach(t=>t.stop());window.onbeforeunload=null;
+  const ext=/mp4/.test(PRR.mime)?'m4a':'webm',blob=new Blob(PRR.ch,{type:PRR.mime||'audio/webm'});
+  PRR.url=URL.createObjectURL(blob);
+  const nome='sessao_'+new Date().toISOString().slice(0,16).replace(/[:T]/g,'-')+'.'+ext;
+  const pl=document.getElementById('rec-pl');if(!pl)return;
+  document.getElementById('rec-pau').style.display='none';document.getElementById('rec-fim').style.display='none';
+  const ini=document.getElementById('rec-ini');ini.style.display='';ini.textContent='● Gravar de novo';
+  document.getElementById('rec-s').innerHTML='<span style="color:#1f7a4d">✓ gravação concluída ('+(blob.size/1048576).toFixed(1)+' MB)</span>';
+  pl.innerHTML='<audio controls src="'+PRR.url+'" style="width:100%"></audio><div style="margin-top:6px"><a class="btn-ghost" style="padding:5px 12px;text-decoration:none;display:inline-block" href="'+PRR.url+'" download="'+nome+'">⬇ Baixar áudio</a></div>';
+}
 function prFormModelo(i){
+  prRecLimpa();
   const x=PR_MODELOS[i],hoje=new Date().toISOString().slice(0,10);PR.mod=i;
   document.getElementById('pr-det').innerHTML='<div style="display:flex;gap:10px;align-items:center;margin-bottom:8px"><b>Novo registro</b><span style="color:var(--text2);font-size:12px">Modelo: '+esc(x.n)+'</span><button class="btn-ghost" style="padding:3px 10px" onclick="try{localStorage.removeItem(\'pr_modelo_padrao\')}catch(e){};prAbreModal('+i+')">Trocar modelo</button></div>'
    +'<div style="margin:8px 0"><input type="date" class="form-input" id="pr-nd" value="'+hoje+'" style="width:180px"></div>'
+   +prRecHtml()
    +x.c.map((t,k)=>'<div style="margin-bottom:8px"><label style="font-weight:600;font-size:13px">'+esc(t)+'</label><textarea class="form-textarea pr-nsec" data-i="'+k+'" style="min-height:70px"></textarea></div>').join('')
    +'<div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarNovo()">Salvar registro</button><button class="btn-ghost" onclick="prDesenha()">Cancelar</button></div>';
 }
 function prSalvarNovo(){
+  if(PRR.mr&&PRR.mr.state!=='inactive'){toast('Pare a gravação antes de salvar.');return;}
   const x=PR_MODELOS[PR.mod],d=document.getElementById('pr-nd').value;
   const sec=x.c.map(t=>({t:t,x:''}));document.querySelectorAll('.pr-nsec').forEach(t=>{sec[+t.dataset.i].x=t.value;});
   const texto=prSecTexto(sec);
