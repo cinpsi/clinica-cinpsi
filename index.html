@@ -3905,7 +3905,7 @@ function rcCarrega(){
   const m=RC.mes,a=m+'-01',b=m+'-31',t=document.getElementById('rc-ttl');
   if(t){const p=m.split('-');t.textContent=new Date(+p[0],+p[1]-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});}
   return prFs().collection(rcCol()).where('data','>=',a).where('data','<=',b).get().then(sn=>{
-    const L=sn.docs.map(d=>Object.assign({id:d.id},d.data())).filter(x=>x.data>=a&&x.data<=b&&x.status!=='cancelado'&&x.status!=='reagendar').map(x=>RC.fonte==='fin'?Object.assign(x,{profissionalEmail:'nome:'+(x.profNome||'—'),pacienteId:''}):x);
+    const L=sn.docs.map(d=>Object.assign({id:d.id},d.data())).filter(x=>x.data>=a&&x.data<=b&&x.status!=='cancelado'&&x.status!=='reagendar').map(x=>RC.fonte==='fin'?Object.assign(x,{profissionalEmail:'nome:'+(/licen[cç]a/i.test(x.profNome||'')?'Letícia Martins':(x.profNome||'—')),pacienteId:''}):x);
     const por={};L.forEach(x=>{(por[x.pacienteId||x.pacienteNome]=por[x.pacienteId||x.pacienteNome]||[]).push(x);});
     Object.keys(por).forEach(k=>{
       const ls=por[k].sort((x,y)=>(x.data+x.inicio)<(y.data+y.inicio)?-1:1);
@@ -3994,7 +3994,7 @@ document.addEventListener('click',e=>{const b=document.getElementById('rc-sug');
 // ----- Importação da planilha do Doctoralia (migração do financeiro; só admin) -----
 function rcNum(v){if(typeof v==='number')return v;const t=String(v==null?'':v).trim();if(!t)return 0;return t.includes(',')?parseFloat(t.replace(/\./g,'').replace(',','.'))||0:parseFloat(t)||0;}
 function rcHash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36);}
-function rcProfNome(n){const t=String(n||'').trim();if(/licen[cç]a/i.test(t))return 'Licença administrativa (sem profissional)';if(/^juliana/i.test(t))return 'Juliana Calleff';return t;}
+function rcProfNome(n){const t=String(n||'').trim();if(/licen[cç]a/i.test(t))return 'Letícia Martins';if(/^juliana/i.test(t))return 'Juliana Calleff';return t;}
 function rcLePlanilha(file){
   if(!file)return;
   if(typeof XLSX==='undefined'){toast('Leitor de planilhas indisponível. Recarregue a página.');return;}
@@ -4041,7 +4041,7 @@ async function rcGravaImp(){
     for(const x of L){
       const e=ex[x.id],ref=col.doc(x.id);
       if(!e){batch.set(ref,Object.assign({},x,{criadoEm:agora,editadoEm:agora,criadoPor:prMe()}));nNovo++;}
-      else if(e.pgPor||e.valorManual!=null){batch.update(ref,{status:x.status,estadoOrig:x.estadoOrig,editadoEm:agora});nPres++;}
+      else if(e.pgPor||e.valorManual!=null){batch.update(ref,{status:x.status,estadoOrig:x.estadoOrig,profNome:x.profNome,editadoEm:agora});nPres++;}
       else{batch.update(ref,{valor:x.valor,status:x.status,estadoOrig:x.estadoOrig,pgStatus:x.pgStatus,pgValor:x.pgValor,pgForma:x.pgForma,servicoNome:x.servicoNome,profNome:x.profNome,editadoEm:agora});nAtu++;}
       if(++ops>=400){await batch.commit();batch=fs.batch();ops=0;}
     }
