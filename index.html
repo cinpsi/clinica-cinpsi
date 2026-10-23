@@ -3882,7 +3882,7 @@ function rpCarrega(){
 }
 
 // ===== RECEITAS (piloto, só admin): baixa de pagamentos da agenda =====
-const RC={mes:null,L:[],sel:new Set(),filtro:'pend',q:''};
+const RC={mes:null,L:[],sel:new Set(),filtro:'pend',q:'',prof:'',srv:''};
 const RC_FORMAS=['Pix','Cartão de crédito','Cartão de débito','Dinheiro','Transferência','Outro'];
 function rcBRL(v){return agBRL(v);}
 function renderReceitas(c){
@@ -3891,7 +3891,7 @@ function renderReceitas(c){
   c.innerHTML='<div class="card" style="padding:16px"><div style="background:#fff7e0;border:1px solid #ecd9a0;color:#7a5b00;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:10px">Piloto: usa só a agenda do app (Tatiane). Não alimenta o financeiro oficial, o DRE nem a NFS-e.</div>'
    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button class="btn-secondary" onclick="rcNav(-1)">‹</button><b id="rc-ttl" style="min-width:150px;text-align:center"></b><button class="btn-secondary" onclick="rcNav(1)">›</button>'
    +'<select id="rc-f" class="filter-input" onchange="RC.filtro=this.value;rcDraw()"><option value="pend">Com pendência</option><option value="todos">Todos</option><option value="pago">Só pagos</option></select>'
-   +'<input id="rc-q" class="filter-input" placeholder="Buscar paciente..." oninput="RC.q=this.value;rcDraw()"></div>'
+   +'<input id="rc-q" class="filter-input" placeholder="Buscar paciente..." oninput="RC.q=this.value;rcDraw()"><select id="rc-p" class="filter-input" onchange="RC.prof=this.value;rcDraw()"></select><select id="rc-s" class="filter-input" onchange="RC.srv=this.value;rcDraw()"></select></div>'
    +'<div id="rc-body" style="margin-top:14px">Carregando…</div></div><div id="rc-modal"></div>';
   document.getElementById('rc-f').value=RC.filtro;rcCarrega();
 }
@@ -3912,13 +3912,25 @@ function rcCarrega(){
 }
 function rcDraw(){
   const el=document.getElementById('rc-body');if(!el)return;
-  const q=(RC.q||'').toLowerCase(),L=RC.L;
+  const q=(RC.q||'').toLowerCase();
+  const selP=document.getElementById('rc-p'),selS=document.getElementById('rc-s');
+  const profs=[...new Set(RC.L.map(x=>x.profissionalEmail))],srvs=[...new Set(RC.L.map(x=>x.servicoNome||'').filter(Boolean))].sort();
+  if(selP){selP.innerHTML='<option value="">Todas as profissionais</option>'+profs.map(e=>'<option value="'+esc(e)+'"'+(RC.prof===e?' selected':'')+'>'+esc(agPf(e).n)+'</option>').join('');}
+  if(selS){selS.innerHTML='<option value="">Todos os serviços</option>'+srvs.map(n=>'<option'+(RC.srv===n?' selected':'')+'>'+esc(n)+'</option>').join('');}
+  const L=RC.L.filter(x=>(!RC.prof||x.profissionalEmail===RC.prof)&&(!RC.srv||(x.servicoNome||'')===RC.srv));
   const pago=L.filter(x=>x.pgStatus==='pago'),pend=L.filter(x=>x.pgStatus!=='pago'&&x._devido>0);
+  const sPrev=L.reduce((s,x)=>s+x._devido,0);
   const sP=pago.reduce((s,x)=>s+Number(x.pgValor!=null?x.pgValor:x._devido),0),sD=pend.reduce((s,x)=>s+x._devido,0);
   const porForma={};pago.forEach(x=>{const f=x.pgForma||'—';porForma[f]=(porForma[f]||0)+Number(x.pgValor!=null?x.pgValor:x._devido);});
   const card=(t,v,c)=>'<div class="card" style="padding:10px 14px"><div style="font-size:11px;color:#5b6b7b">'+t+'</div><b style="font-size:20px;'+(c?'color:'+c:'')+'">'+v+'</b></div>';
-  let h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'+card('PAGO',rcBRL(sP),'#1f7a4d')+card('PENDENTE',rcBRL(sD),'#b9770e')
-    +Object.keys(porForma).map(f=>card(esc(f).toUpperCase(),rcBRL(porForma[f]))).join('')+'</div>';
+  const sDesc=Math.round((sPrev-sP-sD)*100)/100,pct=sPrev>0?Math.round(sP/sPrev*100):0;
+  let h='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">'+card('FATURAMENTO PREVISTO',rcBRL(sPrev),'#022543')+card('JÁ PAGO ('+pct+'%)',rcBRL(sP),'#1f7a4d')+card('EM ABERTO',rcBRL(sD),'#b9770e')
+    +(Math.abs(sDesc)>0.009?card('DESCONTOS/AJUSTES',rcBRL(sDesc)):'')+'</div>'
+    +'<div style="font-size:11px;color:#5b6b7b;margin:4px 0 4px">FORMAS DE PAGAMENTO (valores já recebidos)</div><div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">'
+    +(Object.keys(porForma).length?Object.keys(porForma).map(f=>card(esc(f).toUpperCase(),rcBRL(porForma[f]))).join(''):'<span style="color:#5b6b7b;font-size:12px">Nenhum pagamento registrado neste filtro.</span>')+'</div>';
+  const porProf={};L.forEach(x=>{const o=porProf[x.profissionalEmail]=porProf[x.profissionalEmail]||{prev:0,pago:0,ab:0,n:0};o.n++;o.prev+=x._devido;if(x.pgStatus==='pago')o.pago+=Number(x.pgValor!=null?x.pgValor:x._devido);else o.ab+=x._devido;});
+  if(Object.keys(porProf).length>1)h+='<table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:12px"><tr style="text-align:left;color:#5b6b7b;font-size:11px;text-transform:uppercase"><th>Profissional</th><th style="text-align:right">Sessões</th><th style="text-align:right">Previsto</th><th style="text-align:right">Pago</th><th style="text-align:right">Em aberto</th></tr>'
+    +Object.keys(porProf).map(e=>{const o=porProf[e];return '<tr style="border-top:1px solid var(--border)"><td style="padding:5px 0">'+esc(agPf(e).n)+'</td><td style="text-align:right">'+o.n+'</td><td style="text-align:right">'+rcBRL(o.prev)+'</td><td style="text-align:right;color:#1f7a4d">'+rcBRL(o.pago)+'</td><td style="text-align:right;color:#b9770e">'+rcBRL(o.ab)+'</td></tr>';}).join('')+'</table>';
   const grupos={};L.forEach(x=>{const k=x.pacienteId||x.pacienteNome;(grupos[k]=grupos[k]||[]).push(x);});
   const ks=Object.keys(grupos).filter(k=>{const g=grupos[k],n=g[0].pacienteNome.toLowerCase();if(q&&!n.includes(q))return false;
     const temP=g.some(x=>x.pgStatus!=='pago'&&x._devido>0);return RC.filtro==='todos'||(RC.filtro==='pend'?temP:!temP);}).sort((x,y)=>grupos[x][0].pacienteNome.localeCompare(grupos[y][0].pacienteNome));
