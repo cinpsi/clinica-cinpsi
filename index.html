@@ -3533,6 +3533,7 @@ function buildNav(){
       <button class="nav-item" onclick="showView('convertidos')" id="nav-convertidos"><span class="nav-icon">✅</span> Pacientes</button>
       <button class="nav-item" onclick="showView('jornada')" id="nav-jornada"><span class="nav-icon">📈</span> Jornada do paciente</button>
       <button class="nav-item" onclick="showView('trilha')" id="nav-trilha"><span class="nav-icon">🧭</span> Trilha de avaliação</button>
+      <button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">🗂️</span> Prontuário</button>
       <button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <button class="nav-item" onclick="showView('nfse')" id="nav-nfse"><span class="nav-icon">🧾</span> Notas Fiscais</button>
@@ -3543,12 +3544,14 @@ function buildNav(){
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else if(CU.role==='supervisora'){
     html+=`<div class="nav-section">Pacientes</div>
+      ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">🗂️</span> Prontuário</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
   } else {
     html+=`<div class="nav-section">Pacientes</div>
       ${(CU.email||'').toLowerCase()==='julianacalleff@yahoo.com'?`<button class="nav-item" onclick="showView('agenda')" id="nav-agenda"><span class="nav-icon">📅</span> Agenda</button>`:''}
+      ${PR_CLIN.includes((CU.email||'').toLowerCase())?`<button class="nav-item" onclick="showView('prontuario')" id="nav-prontuario"><span class="nav-icon">🗂️</span> Prontuário</button>`:''}
       <button class="nav-item" onclick="showView('testes')" id="nav-testes"><span class="nav-icon">🧪</span> Testes <span class="fin-badge-notif" id="te-nav-badge" style="display:none">0</span></button>
       <div class="nav-section">Conta</div>
       <button class="nav-item" onclick="showView('minhaconta')" id="nav-minhaconta"><span class="nav-icon">⚙️</span> Minha conta</button>`;
@@ -3567,6 +3570,7 @@ const VM={
   'convertidos':{title:'Pacientes',sub:'Pacientes ativos e histórico',role:'admin'},
   'jornada':{title:'Jornada do paciente',sub:'Tempo de tratamento, retenção e abandono',role:'admin'},
   'trilha':{title:'Trilha de avaliação',sub:'Etapas de entrada do paciente novo',role:'admin'},
+  'prontuario':{title:'Prontuário',sub:'Registros clínicos (piloto) — nada é apagado'},
   'agenda':{title:'Agenda',sub:'Agenda semanal (demonstração)'},
   'testes':{title:'Testes',sub:'Escalas e questionários enviados por link'},
   'nfse':{title:'Notas Fiscais',sub:'Lote XML de NFS-e para o GISS Guarulhos',role:'admin'},
@@ -3694,6 +3698,158 @@ function agSalvar(){
   agFechar();agDraw();
 }
 
+// ════════════════════════════════════════════════════════════
+// PRONTUÁRIO (piloto) — coleções: prontuarios/{pid}/episodios/{eid}/versoes/{n}, auditoria
+// Nada é apagado. Edição só pelo autor (cada edição guarda a versão anterior).
+// ════════════════════════════════════════════════════════════
+const PR_CLIN=['tatianesanches@cinpsi.com.br'];
+function prVisivel(){return CU&&(CU.role==='admin'||PR_CLIN.includes((CU.email||'').toLowerCase()));}
+const PR={pid:null,pac:null,eps:[],eid:null,lista:[],last:Date.now(),timer:null};
+const prFs=()=>firebase.firestore();
+const prMe=()=>(CU.email||'').toLowerCase();
+function prDt(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;}
+function prAud(acao,pid,eid){
+  try{prFs().collection('auditoria').add({usuario:prMe(),acao:acao,pacienteId:pid||'',episodioId:eid||'',em:new Date().toISOString()}).catch(()=>{});}catch(e){}
+}
+function prTouch(){PR.last=Date.now();}
+function prIniciaLock(){
+  document.removeEventListener('mousemove',prTouch);document.removeEventListener('keydown',prTouch);
+  document.addEventListener('mousemove',prTouch);document.addEventListener('keydown',prTouch);
+  clearInterval(PR.timer);
+  PR.timer=setInterval(()=>{
+    if(_currentView!=='prontuario'){clearInterval(PR.timer);return;}
+    if(Date.now()-PR.last>10*60*1000){clearInterval(PR.timer);PR.pid=null;PR.eid=null;
+      const c=document.getElementById('main-content');
+      c.innerHTML='<div class="card" style="padding:28px;max-width:520px"><h3 style="margin:0 0 8px">Sessão do prontuário bloqueada</h3><p style="color:var(--text2)">Bloqueada após 10 minutos sem uso, para proteger os dados.</p><button class="btn-primary" onclick="renderProntuario(document.getElementById(\'main-content\'))">Desbloquear</button></div>';}
+  },30000);
+}
+function renderProntuario(c){
+  if(!prVisivel()){c.innerHTML='<div class="card" style="padding:20px">Sem acesso.</div>';return;}
+  PR.last=Date.now();prIniciaLock();
+  const isAdm=CU.role==='admin';
+  c.innerHTML=`<style>
+  .pr-wm{position:fixed;inset:0;pointer-events:none;z-index:5;display:flex;align-items:center;justify-content:center;transform:rotate(-18deg);color:#022543;opacity:.045;font-size:34px;font-weight:700;white-space:nowrap}
+  .pr-grid{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start}
+  .pr-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
+  .pr-box h3{margin:0 0 10px;font-size:12px;letter-spacing:.07em;text-transform:uppercase;color:var(--text3,#6b7a8a)}
+  .pr-it{border:1px solid var(--border);border-radius:10px;padding:9px 11px;margin-bottom:7px;cursor:pointer;font-size:13px}
+  .pr-it.on{border-color:var(--accent);background:var(--accent-light)}
+  .pr-it b{display:block}.pr-it span{color:var(--text2);font-size:12px}
+  .pr-lst{max-height:calc(100vh - 300px);overflow:auto}
+  .pr-txt{white-space:pre-wrap;line-height:1.55;font-size:14px;border:1px solid var(--border);border-radius:8px;padding:12px 14px;background:#fff}
+  .pr-bd{display:inline-block;border:1px solid #bfe3cf;background:#eefaf3;color:#1f7a4d;border-radius:20px;padding:3px 10px;font-size:11px;margin-right:6px}
+  .pr-tb{width:100%;border-collapse:collapse;font-size:12.5px}.pr-tb th{text-align:left;color:#6b7a8a;padding:5px 7px;border-bottom:1px solid var(--border)}.pr-tb td{padding:6px 7px;border-bottom:1px solid #f0f2f4}
+  </style>
+  <div class="pr-wm">${esc(prMe())}</div>
+  <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center"><span class="pr-bd">Nada é apagado</span><span class="pr-bd">Histórico de versões</span><span class="pr-bd">Acesso registrado</span>
+   ${isAdm?'<button class="btn-ghost" onclick="document.getElementById(\'pr-file\').click()">⬆ Importar prontuário (JSON)</button><input type="file" id="pr-file" accept=".json" style="display:none" onchange="prImportar(this)"><button class="btn-ghost" onclick="prVerAud()">🔎 Registro de acessos</button>':''}</div>
+  <div class="pr-grid"><div class="pr-box"><h3>Pacientes</h3><div class="pr-lst" id="pr-pacs">Carregando…</div></div>
+  <div id="pr-main"><div class="pr-box" style="color:var(--text2)">Selecione um paciente.</div></div></div>`;
+  prCarregaLista();
+}
+function prCarregaLista(){
+  let q=prFs().collection('prontuarios');
+  if(CU.role!=='admin') q=q.where('profissionais','array-contains',prMe());
+  q.get().then(s=>{
+    PR.lista=s.docs.map(d=>Object.assign({id:d.id},d.data())).sort((a,b)=>String(a.pacienteNome).localeCompare(b.pacienteNome));
+    const el=document.getElementById('pr-pacs');if(!el)return;
+    el.innerHTML=PR.lista.length?PR.lista.map(p=>'<div class="pr-it" onclick="prAbrir(\''+esc(p.id)+'\')"><b>'+esc(p.pacienteNome)+'</b><span>'+esc((p.profissionais||[]).map(e=>e.split('@')[0]).join(', '))+'</span></div>').join(''):'<span style="color:var(--text2)">Nenhum prontuário vinculado.</span>';
+  }).catch(e=>{const el=document.getElementById('pr-pacs');if(el)el.innerHTML='<span style="color:#b91c1c">Sem permissão ou erro: '+esc(e.message)+'</span>';});
+}
+function prAbrir(pid){
+  PR.pid=pid;PR.eid=null;PR.pac=PR.lista.find(p=>p.id===pid);prTouch();
+  prAud('abriu',pid,'');
+  prFs().collection('prontuarios').doc(pid).collection('episodios').orderBy('data','desc').get().then(s=>{
+    PR.eps=s.docs.map(d=>Object.assign({id:d.id},d.data()));
+    prDesenha();
+  }).catch(e=>toast('Erro: '+e.message));
+}
+function prDesenha(){
+  const m=document.getElementById('pr-main');if(!m)return;
+  const me=prMe();
+  const lista=PR.eps.map(e=>'<div class="pr-it'+(e.id===PR.eid?' on':'')+'" onclick="prSel(\''+esc(e.id)+'\')"><b>'+prDt(e.data)+' · '+esc((e.campos&&e.campos.autorOriginal)||(e.profissionalEmail||'').split('@')[0])+'</b><span>v'+e.versao+(e.origem==='doctoralia_import'?' · Doctoralia':'')+'</span></div>').join('');
+  m.innerHTML=`<div class="pr-box"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><h2 style="margin:0;font-size:18px">${esc(PR.pac?PR.pac.pacienteNome:'')}</h2><span style="color:var(--text2);font-size:12px">${PR.eps.length} registros</span><button class="btn-primary" style="margin-left:auto" onclick="prNovo()">+ Novo registro</button></div>
+   <div class="pr-grid" style="grid-template-columns:230px 1fr"><div class="pr-lst" style="max-height:calc(100vh - 340px)">${lista||'<span style="color:var(--text2)">Sem registros.</span>'}</div><div id="pr-det" style="color:var(--text2)">Selecione um registro.</div></div></div>`;
+  if(PR.eid)prDet();
+}
+function prSel(eid){PR.eid=eid;prTouch();prAud('leu',PR.pid,eid);prDesenha();}
+function prDet(){
+  const e=PR.eps.find(x=>x.id===PR.eid),d=document.getElementById('pr-det');if(!e||!d)return;
+  const meu=(e.profissionalEmail||'').toLowerCase()===prMe();
+  d.innerHTML=`<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px"><b style="font-size:15px">${prDt(e.data)}</b><span class="pr-bd">v${e.versao}</span><span style="color:var(--text2);font-size:12px">${esc((e.campos&&e.campos.autorOriginal)||e.profissionalEmail)}${e.origem==='doctoralia_import'?' · importado do Doctoralia':''}</span>
+   <span style="margin-left:auto;display:flex;gap:6px">${meu?'<button class="btn-ghost" onclick="prEditar()">✏ Editar</button>':''}<button class="btn-ghost" onclick="prImprimir()">🖨 Imprimir</button>${CU.role==='admin'?'<button class="btn-ghost" onclick="prVersoes()">🕘 Versões</button>':''}</span></div>
+   <div id="pr-corpo"><div class="pr-txt">${esc((e.campos&&e.campos.texto)||'')}</div></div><div id="pr-ver"></div>`;
+}
+function prEditar(){
+  const e=PR.eps.find(x=>x.id===PR.eid);if(!e)return;
+  document.getElementById('pr-corpo').innerHTML='<textarea class="form-textarea" id="pr-ed" style="min-height:320px;line-height:1.5">'+esc((e.campos&&e.campos.texto)||'')+'</textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarEd()">Salvar (cria nova versão)</button><button class="btn-ghost" onclick="prDet()">Cancelar</button></div><div style="color:var(--text2);font-size:12px;margin-top:6px">A versão atual fica guardada no histórico.</div>';
+}
+function prSalvarEd(){
+  const e=PR.eps.find(x=>x.id===PR.eid),novo=document.getElementById('pr-ed').value;
+  if(!e)return;if(novo===((e.campos&&e.campos.texto)||'')){prDet();return;}
+  const ref=prFs().collection('prontuarios').doc(PR.pid).collection('episodios').doc(e.id),agora=new Date().toISOString();
+  const b=prFs().batch();
+  b.set(ref.collection('versoes').doc(String(e.versao)),{versao:e.versao,campos:e.campos||{},editadoEm:e.editadoEm||e.criadoEm||'',guardadoPor:prMe(),guardadoEm:agora});
+  b.update(ref,{campos:Object.assign({},e.campos||{},{texto:novo}),versao:e.versao+1,editadoEm:agora});
+  b.commit().then(()=>{prAud('editou',PR.pid,e.id);toast('Salvo. Versão '+(e.versao+1));prAbrirMantendo(e.id);}).catch(er=>toast('Não salvo: '+er.message));
+}
+function prAbrirMantendo(eid){
+  prFs().collection('prontuarios').doc(PR.pid).collection('episodios').orderBy('data','desc').get().then(s=>{PR.eps=s.docs.map(d=>Object.assign({id:d.id},d.data()));PR.eid=eid;prDesenha();});
+}
+function prNovo(){
+  const hoje=new Date().toISOString().slice(0,10);
+  document.getElementById('pr-det').innerHTML='<b>Novo registro</b><div style="margin:8px 0"><input type="date" class="form-input" id="pr-nd" value="'+hoje+'" style="width:180px"></div><textarea class="form-textarea" id="pr-nt" style="min-height:300px" placeholder="Relato da sessão, procedimento, plano de ação…"></textarea><div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarNovo()">Salvar registro</button><button class="btn-ghost" onclick="prDesenha()">Cancelar</button></div>';
+}
+function prSalvarNovo(){
+  const t=document.getElementById('pr-nt').value.trim(),d=document.getElementById('pr-nd').value;
+  if(!t||!d){toast('Preencha data e texto.');return;}
+  const agora=new Date().toISOString();
+  prFs().collection('prontuarios').doc(PR.pid).collection('episodios').add({data:d,tipo:'evolucao',campos:{texto:t},profissionalEmail:prMe(),versao:1,criadoEm:agora,editadoEm:agora,origem:'app'})
+   .then(r=>{prAud('criou',PR.pid,r.id);toast('Registro salvo.');prAbrirMantendo(r.id);}).catch(er=>toast('Não salvo: '+er.message));
+}
+function prImprimir(){
+  const e=PR.eps.find(x=>x.id===PR.eid);if(!e)return;prAud('imprimiu',PR.pid,e.id);
+  const w=window.open('','_blank');if(!w){toast('Libere pop-ups para imprimir.');return;}
+  w.document.write('<html><head><title>Prontuário</title><style>body{font-family:Arial;padding:30px;position:relative}.wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;transform:rotate(-20deg);font-size:40px;color:#000;opacity:.07}pre{white-space:pre-wrap;font:14px/1.5 Arial}</style></head><body><div class="wm">'+esc(prMe())+'</div><h2>'+esc(PR.pac.pacienteNome)+'</h2><p><b>'+prDt(e.data)+'</b> · v'+e.versao+' · '+esc((e.campos&&e.campos.autorOriginal)||e.profissionalEmail)+'</p><pre>'+esc((e.campos&&e.campos.texto)||'')+'</pre><p style="font-size:11px;color:#666">Impresso por '+esc(prMe())+' em '+new Date().toLocaleString('pt-BR')+'</p></body></html>');
+  w.document.close();w.focus();setTimeout(()=>w.print(),300);
+}
+function prVersoes(){
+  const e=PR.eps.find(x=>x.id===PR.eid);
+  prFs().collection('prontuarios').doc(PR.pid).collection('episodios').doc(e.id).collection('versoes').get().then(s=>{
+    const v=s.docs.map(d=>d.data()).sort((a,b)=>b.versao-a.versao);
+    document.getElementById('pr-ver').innerHTML='<div class="pr-box" style="margin-top:12px"><h3>Versões anteriores</h3>'+(v.length?v.map(x=>'<details style="margin-bottom:6px"><summary>v'+x.versao+' · '+esc(String(x.editadoEm||'').slice(0,16).replace('T',' '))+'</summary><div class="pr-txt" style="margin-top:6px">'+esc((x.campos&&x.campos.texto)||'')+'</div></details>').join(''):'<span style="color:var(--text2)">Sem versões anteriores.</span>')+'</div>';
+  }).catch(er=>toast('Erro: '+er.message));
+}
+function prVerAud(){
+  prFs().collection('auditoria').orderBy('em','desc').limit(150).get().then(s=>{
+    const m=document.getElementById('pr-main');
+    m.innerHTML='<div class="pr-box"><h3>Registro de acessos (últimos 150)</h3><table class="pr-tb"><tr><th>Quando</th><th>Quem</th><th>Ação</th><th>Paciente</th></tr>'+s.docs.map(d=>{const x=d.data();const p=PR.lista.find(q=>q.id===x.pacienteId);return '<tr><td>'+esc(String(x.em).slice(0,19).replace('T',' '))+'</td><td>'+esc(x.usuario)+'</td><td>'+esc(x.acao)+'</td><td>'+esc(p?p.pacienteNome:x.pacienteId)+'</td></tr>';}).join('')+'</table></div>';
+  }).catch(er=>toast('Erro: '+er.message));
+}
+async function prImportar(inp){
+  const f=inp.files[0];if(!f)return;
+  let j;try{j=JSON.parse(await f.text());}catch(e){toast('JSON inválido.');return;}
+  const P=j.prontuario,E=j.episodios||[];
+  if(!P||!P.id||!E.length){toast('Arquivo sem prontuário/episódios.');return;}
+  if(!confirm('Importar "'+P.pacienteNome+'" com '+E.length+' registros? Registros que já existem serão preservados (não sobrescritos).'))return;
+  const fs=prFs(),agora=new Date().toISOString();
+  try{await fs.collection('prontuarios').doc(P.id).get().then(async s=>{
+    if(!s.exists)await fs.collection('prontuarios').doc(P.id).set({pacienteNome:P.pacienteNome,profissionais:P.profissionais||[],criadoEm:agora,criadoPor:prMe(),status:'ativo'});
+  });}catch(e){toast('Erro ao criar capa: '+e.message);return;}
+  let ok=0,pulou=0,erro=0;
+  for(const e of E){
+    const id='imp_'+e.data.replace(/-/g,'')+'_'+String(e.seq||1).padStart(2,'0');
+    const ref=fs.collection('prontuarios').doc(P.id).collection('episodios').doc(id);
+    try{const ex=await ref.get().then(s=>s.exists).catch(()=>false);
+      if(ex){pulou++;continue;}
+      await ref.set({data:e.data,tipo:'importado',campos:{texto:e.texto,titulo:e.titulo||'',autorOriginal:e.autor||''},profissionalEmail:e.email,versao:1,criadoEm:agora,editadoEm:agora,origem:'doctoralia_import'});ok++;
+    }catch(er){erro++;console.warn(id,er.message);}
+  }
+  prAud('importou',P.id,'');
+  toast('Importação: '+ok+' novos, '+pulou+' já existiam, '+erro+' com erro.');
+  inp.value='';prCarregaLista();
+}
+
 let leadViewMode='tabela';
 
 function showView(name){
@@ -3745,6 +3901,7 @@ function showView(name){
   else if(name==='convertidos') renderConvertidos(c);
   else if(name==='trilha'&&CU.role==='admin') renderTrilha(c);
   else if(name==='jornada'&&CU.role==='admin') renderJornada(c);
+  else if(name==='prontuario') renderProntuario(c);
   else if(name==='agenda') renderAgenda(c);
   else if(name==='testes') renderTestes(c);
   else if(name==='nfse'&&CU.role==='admin') renderNfse(c);
