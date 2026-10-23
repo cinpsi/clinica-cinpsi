@@ -3826,6 +3826,7 @@ function renderProntuario(c){
   PR.last=Date.now();prIniciaLock();
   const isAdm=CU.role==='admin';
   c.innerHTML=`<style>
+  .pr-nsec,.pr-sec,#pr-ed{overflow:hidden!important;resize:none!important;box-sizing:border-box;line-height:1.5}
   .pr-wm{position:fixed;inset:0;pointer-events:none;z-index:5;display:flex;align-items:center;justify-content:center;transform:rotate(-18deg);color:#022543;opacity:.045;font-size:34px;font-weight:700;white-space:nowrap}
   .pr-grid{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start}
   .pr-box{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px}
@@ -3897,6 +3898,9 @@ const PR_MODELOS=[
  {n:'Anamnese',c:['Queixa principal','História relevante do desenvolvimento Infantil - Histórico escolar','Outras observações','Dificuldade de aprendizagem escolar ?','Desde quando o problema iniciou ?','Histórico familiar - Transtornos e funcionamento','Rotina familiar e hábitos de vida','Uso de medicações','Outros Problemas','Já fez psicoterapia? Teve alta ?','Faz algum tratamento atual? Quais?']},
  {n:'ANP 0 sessões de testagem',c:['Sinais e comportamentos','Avaliação comportamento','Testes aplicados','Queixas do paciente ou do familiar nessa semana','Oservações']}
 ];
+function prGrow(t){t.style.height='auto';t.style.height=(t.scrollHeight+2)+'px';}
+function prGrowAll(){document.querySelectorAll('.pr-nsec,.pr-sec,#pr-ed').forEach(prGrow);}
+document.addEventListener('input',e=>{const t=e.target;if(t&&t.matches&&t.matches('.pr-nsec,.pr-sec,#pr-ed'))prGrow(t);});
 function prSecTexto(sec){return sec.filter(x=>x.x&&x.x.trim()).map(x=>x.t+':\n'+x.x.trim()).join('\n\n');}
 function prCorpo(e){
   const c=e.campos||{};
@@ -3909,6 +3913,7 @@ function prEditar(){
     ?c.secoes.map((s,i)=>'<div style="margin-bottom:8px"><label style="font-weight:600;font-size:13px">'+esc(s.t)+'</label><textarea class="form-textarea pr-sec" data-i="'+i+'" style="min-height:80px">'+esc(s.x||'')+'</textarea></div>').join('')
     :'<textarea class="form-textarea" id="pr-ed" style="min-height:320px;line-height:1.5">'+esc(c.texto||'')+'</textarea>';
   document.getElementById('pr-corpo').innerHTML=corpo+'<div style="margin-top:8px;display:flex;gap:8px"><button class="btn-primary" onclick="prSalvarEd()">Salvar (cria nova versão)</button><button class="btn-ghost" onclick="prDet()">Cancelar</button></div><div style="color:var(--text2);font-size:12px;margin-top:6px">A versão atual fica guardada no histórico.</div>';
+  prGrowAll();
 }
 function prSalvarEd(){
   const e=PR.eps.find(x=>x.id===PR.eid);if(!e)return;const c=e.campos||{};
