@@ -3615,7 +3615,7 @@ function agPrev(di,hi){
   if(agIso(w)!==agIso(AG.ws)){AG.ws=w;agCarrega().then(()=>agScrollGhost());}else{agDraw();agScrollGhost();}
 }
 function agScrollGhost(){const c=document.getElementById('ag-cal'),g=AG.ghost;if(c&&g)c.scrollTop=Math.max(0,(agMin(g.inicio)/60-8)*56-120);}
-function agPf(e){return AG_PROFS[(e||'').toLowerCase()]||{n:(e||'').split('@')[0],c:'#6b7a8a'};}
+function agPf(e){if(String(e||'').startsWith('nome:'))return {n:String(e).slice(5),c:'#6b7a8a'};return AG_PROFS[(e||'').toLowerCase()]||{n:(e||'').split('@')[0],c:'#6b7a8a'};}
 function agIso(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function agSeg(d){const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()-((x.getDay()+6)%7));return x;}
 function agBRL(v){return 'R$ '+Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});}
@@ -3882,30 +3882,35 @@ function rpCarrega(){
 }
 
 // ===== RECEITAS (piloto, só admin): baixa de pagamentos da agenda =====
-const RC={mes:null,L:[],sel:new Set(),filtro:'pend',q:'',prof:'',srv:'',pac:''};
+const RC={mes:null,L:[],sel:new Set(),filtro:'pend',q:'',prof:'',srv:'',pac:'',fonte:'fin'};
+function rcCol(){return RC.fonte==='fin'?'fin_sessoes':'agenda';}
 const RC_FORMAS=['Pix','Cartão de crédito','Cartão de débito','Dinheiro','Transferência','Outro'];
 function rcBRL(v){return agBRL(v);}
 function renderReceitas(c){
   if(!CU||CU.role!=='admin'){c.innerHTML='<div class="card" style="padding:20px">Sem acesso.</div>';return;}
   if(!RC.mes){const n=new Date();RC.mes=n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0');}
-  c.innerHTML='<div class="card" style="padding:16px"><div style="background:#fff7e0;border:1px solid #ecd9a0;color:#7a5b00;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:10px">Piloto: usa só a agenda do app (Tatiane). Não alimenta o financeiro oficial, o DRE nem a NFS-e.</div>'
+  c.innerHTML='<div class="card" style="padding:16px"><div style="background:#fff7e0;border:1px solid #ecd9a0;color:#7a5b00;border-radius:8px;padding:6px 10px;font-size:12px;margin-bottom:10px">Piloto: não alimenta o Financeiro oficial, o DRE nem a NFS-e. Serve para testar e conferir com o Doctoralia.</div>'
    +'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><button class="btn-secondary" onclick="rcNav(-1)">‹</button><b id="rc-ttl" style="min-width:150px;text-align:center"></b><button class="btn-secondary" onclick="rcNav(1)">›</button>'
+   +'<select id="rc-fonte" class="filter-input" onchange="rcFonte(this.value)"><option value="fin">Clínica toda (migrado da planilha)</option><option value="agenda">Agenda do app (Tatiane)</option></select>'
    +'<select id="rc-f" class="filter-input" onchange="RC.filtro=this.value;rcDraw()"><option value="pend">Com pendência</option><option value="todos">Todos</option><option value="pago">Só pagos</option></select>'
-   +'<div style="position:relative"><input id="rc-q" class="filter-input" placeholder="Buscar paciente..." autocomplete="off" oninput="rcSug(this.value)" onfocus="rcSug(this.value)"><div id="rc-sug" style="display:none;position:absolute;top:100%;left:0;min-width:320px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px #0002;z-index:50;max-height:300px;overflow:auto"></div></div><select id="rc-p" class="filter-input" onchange="RC.prof=this.value;rcDraw()"></select><select id="rc-s" class="filter-input" onchange="RC.srv=this.value;rcDraw()"></select></div>'
+   +'<div style="position:relative"><input id="rc-q" class="filter-input" placeholder="Buscar paciente..." autocomplete="off" oninput="rcSug(this.value)" onfocus="rcSug(this.value)"><div id="rc-sug" style="display:none;position:absolute;top:100%;left:0;min-width:320px;background:#fff;border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px #0002;z-index:50;max-height:300px;overflow:auto"></div></div>'
+   +'<select id="rc-p" class="filter-input" onchange="RC.prof=this.value;rcDraw()"></select><select id="rc-s" class="filter-input" onchange="RC.srv=this.value;rcDraw()"></select>'
+   +'<span style="margin-left:auto"><button class="btn-secondary" onclick="document.getElementById(\'rc-file\').click()">⬆ Importar planilha do Doctoralia</button><input type="file" id="rc-file" accept=".xlsx,.xls" style="display:none" onchange="rcLePlanilha(this.files[0]);this.value=\'\'"></span></div>'
    +'<div id="rc-body" style="margin-top:14px">Carregando…</div></div><div id="rc-modal"></div>';
-  document.getElementById('rc-f').value=RC.filtro;rcCarrega();
+  document.getElementById('rc-f').value=RC.filtro;document.getElementById('rc-fonte').value=RC.fonte;rcCarrega();
 }
+function rcFonte(v){RC.fonte=v;RC.sel=new Set();RC.pac='';RC.prof='';RC.srv='';rcCarrega();}
 function rcNav(n){const p=RC.mes.split('-');const d=new Date(+p[0],+p[1]-1+n,1);RC.mes=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');RC.sel=new Set();RC.pac='';RC.q='';const qi=document.getElementById('rc-q');if(qi)qi.value='';rcCarrega();}
 function rcCarrega(){
   const m=RC.mes,a=m+'-01',b=m+'-31',t=document.getElementById('rc-ttl');
   if(t){const p=m.split('-');t.textContent=new Date(+p[0],+p[1]-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});}
-  return prFs().collection('agenda').where('data','>=',a).where('data','<=',b).get().then(sn=>{
-    const L=sn.docs.map(d=>Object.assign({id:d.id},d.data())).filter(x=>x.data>=a&&x.data<=b&&x.status!=='cancelado'&&x.status!=='reagendar');
+  return prFs().collection(rcCol()).where('data','>=',a).where('data','<=',b).get().then(sn=>{
+    const L=sn.docs.map(d=>Object.assign({id:d.id},d.data())).filter(x=>x.data>=a&&x.data<=b&&x.status!=='cancelado'&&x.status!=='reagendar').map(x=>RC.fonte==='fin'?Object.assign(x,{profissionalEmail:'nome:'+(x.profNome||'—'),pacienteId:''}):x);
     const por={};L.forEach(x=>{(por[x.pacienteId||x.pacienteNome]=por[x.pacienteId||x.pacienteNome]||[]).push(x);});
     Object.keys(por).forEach(k=>{
       const ls=por[k].sort((x,y)=>(x.data+x.inicio)<(y.data+y.inicio)?-1:1);
-      const f=prFichaDe(ls[0].pacienteNome),mensal=f&&(f.modalidade||'mensal')==='mensal'&&Number(f.valorMensal||f.valor)>0;
-      ls.forEach((x,i)=>{x._plano=mensal?'mensal':'sessao';x._devido=x.valorManual!=null?Number(x.valorManual):(mensal?(i<4?Math.round(Number(f.valorMensal||f.valor)/4*100)/100:0):Number(x.valor||0));});
+      const f=RC.fonte==='fin'?null:prFichaDe(ls[0].pacienteNome),mensal=f&&(f.modalidade||'mensal')==='mensal'&&Number(f.valorMensal||f.valor)>0;
+      ls.forEach((x,i)=>{x._plano=RC.fonte==='fin'?'':(mensal?'mensal':'sessao');x._devido=x.valorManual!=null?Number(x.valorManual):(mensal?(i<4?Math.round(Number(f.valorMensal||f.valor)/4*100)/100:0):Number(x.valor||0));});
     });
     RC.L=L;rcDraw();
   }).catch(e=>{const el=document.getElementById('rc-body');if(el)el.innerHTML='<div style="color:#b91c1c">Erro: '+esc(e.message)+'</div>';});
@@ -3938,7 +3943,7 @@ function rcDraw(){
   ks.forEach(k=>{const g=grupos[k],pd=g.filter(x=>x.pgStatus!=='pago'&&x._devido>0),tp=pd.reduce((s,x)=>s+x._devido,0),nm=g[0].pacienteNome;
     const nSel=pd.filter(x=>RC.sel.has(x.id)).length,tSel=pd.filter(x=>RC.sel.has(x.id)).reduce((s,x)=>s+x._devido,0);
     h+='<div style="border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden"><div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f6f9fc;flex-wrap:wrap">'
-      +'<b>'+esc(nm)+'</b><span style="font-size:12px;color:#5b6b7b">'+(g[0]._plano==='mensal'?'Mensal fixo':'Por sessão')+' · '+esc(agPf(g[0].profissionalEmail).n)+'</span>'
+      +'<b>'+esc(nm)+'</b><span style="font-size:12px;color:#5b6b7b">'+(g[0]._plano==='mensal'?'Mensal fixo · ':(g[0]._plano==='sessao'?'Por sessão · ':''))+esc(agPf(g[0].profissionalEmail).n)+'</span>'
       +'<span style="margin-left:auto;font-size:13px">'+(tp>0?'Pendente: <b style="color:#b9770e">'+rcBRL(tp)+'</b>':'<b style="color:#1f7a4d">Em dia</b>')+'</span>'
       +(pd.length?'<button class="btn-ghost" onclick="rcSelTodos(\''+esc(k)+'\')">Selecionar pendentes</button>':'')
       +'<button class="btn-primary" '+(nSel?'':'disabled style="opacity:.45"')+' onclick="rcAbreBaixa(\''+esc(k)+'\')">Dar baixa'+(nSel?' ('+nSel+' · '+rcBRL(tSel)+')':'')+'</button></div>'
@@ -3962,7 +3967,7 @@ function rcEditaValor(id){
 function rcSalvaValor(id){
   const x=RC.L.find(y=>y.id===id);if(!x)return;
   const v=parseFloat(document.getElementById('ev-v').value);if(isNaN(v)||v<0){toast('Informe um valor válido.');return;}
-  prFs().collection('agenda').doc(id).update({valorManual:Math.round(v*100)/100,valorAnterior:x._devido,editadoEm:new Date().toISOString()})
+  prFs().collection(rcCol()).doc(id).update({valorManual:Math.round(v*100)/100,valorAnterior:x._devido,editadoEm:new Date().toISOString()})
    .then(()=>{prAud('valor-editado',x.pacienteId||'',id);toast('Valor atualizado para '+rcBRL(v)+'.');document.getElementById('rc-modal').innerHTML='';rcCarrega();}).catch(e=>toast('Não salvo: '+e.message));
 }
 function rcSugLista(q){
@@ -3985,6 +3990,69 @@ function rcEscolhe(k){
   const box=document.getElementById('rc-sug');if(box)box.style.display='none';rcDraw();
 }
 document.addEventListener('click',e=>{const b=document.getElementById('rc-sug');if(b&&!e.target.closest('#rc-q')&&!e.target.closest('#rc-sug'))b.style.display='none';});
+
+// ----- Importação da planilha do Doctoralia (migração do financeiro; só admin) -----
+function rcNum(v){if(typeof v==='number')return v;const t=String(v==null?'':v).trim();if(!t)return 0;return t.includes(',')?parseFloat(t.replace(/\./g,'').replace(',','.'))||0:parseFloat(t)||0;}
+function rcHash(str){let h=2166136261;for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,16777619);}return (h>>>0).toString(36);}
+function rcProfNome(n){const t=String(n||'').trim();if(/licen[cç]a/i.test(t))return 'Licença administrativa (sem profissional)';if(/^juliana/i.test(t))return 'Juliana Calleff';return t;}
+function rcLePlanilha(file){
+  if(!file)return;
+  if(typeof XLSX==='undefined'){toast('Leitor de planilhas indisponível. Recarregue a página.');return;}
+  const fr=new FileReader();
+  fr.onload=ev=>{
+    try{
+      const wb=XLSX.read(ev.target.result,{type:'array'}),ws=wb.Sheets[wb.SheetNames[0]],rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      const out=[],ign={teste:0,vazio:0};
+      rows.forEach(r=>{
+        const dt=String(r['Data']||'').trim(),m=dt.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if(!m||!String(r['Paciente']||'').trim()){ign.vazio++;return;}
+        const pac=String(r['Paciente']).trim();
+        if(/teste/i.test(pac)){ign.teste++;return;}
+        const iso=m[3]+'-'+m[2]+'-'+m[1],hora=String(r['Hora']||'').trim(),esp=String(r['Especialista']||'').trim(),srv=String(r['Serviços']||'').trim();
+        const val=rcNum(r['Preço']),pago=String(r['Situação do pagamento']||'').toLowerCase().startsWith('pago'),forma=String(r['Formas de pagamento']||'').trim(),est=String(r['Estado']||'').trim();
+        out.push({id:'d_'+iso.replace(/-/g,'')+'_'+hora.replace(':','')+'_'+rcHash([iso,hora,pac,esp,srv].join('|').toLowerCase()),
+          data:iso,inicio:hora,pacienteNome:pac,profNome:rcProfNome(esp),servicoNome:srv,valor:val,
+          status:/realizada|em consulta/i.test(est)?'compareceu':'programado',estadoOrig:est,
+          pgStatus:pago?'pago':'pendente',pgValor:pago?val:null,pgForma:pago?(forma&&forma!=='Nenhum'?forma:(val>0?'Outro':'Nenhum')):null,pgData:null,origem:'doctoralia_planilha'});
+      });
+      RC.imp=out;RC.impIgn=ign;rcPreviaImp();
+    }catch(e){toast('Não consegui ler a planilha: '+e.message);}
+  };
+  fr.readAsArrayBuffer(file);
+}
+function rcPreviaImp(){
+  const L=RC.imp||[],por={};
+  L.forEach(x=>{const m=x.data.slice(0,7),o=por[m]=por[m]||{n:0,prev:0,pago:0,ab:0,n0:0};o.n++;o.prev+=x.valor;if(x.valor===0)o.n0++;if(x.pgStatus==='pago')o.pago+=x.valor;else o.ab+=x.valor;});
+  const ms=Object.keys(por).sort(),fm=m=>{const p=m.split('-');return new Date(+p[0],+p[1]-1,1).toLocaleDateString('pt-BR',{month:'long',year:'numeric'});};
+  document.getElementById('rc-modal').innerHTML='<div style="position:fixed;inset:0;background:#0006;z-index:400;display:flex;align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:20px;width:640px;max-width:96vw;max-height:90vh;overflow:auto">'
+   +'<h3 style="margin:0 0 4px">Importar planilha do Doctoralia</h3><div style="font-size:12px;color:#5b6b7b;margin-bottom:10px">'+L.length+' sessões lidas'+(RC.impIgn.teste?' · '+RC.impIgn.teste+' de teste ignorada(s)':'')+(RC.impIgn.vazio?' · '+RC.impIgn.vazio+' linha(s) de total/vazias ignoradas':'')+'.</div>'
+   +'<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left;color:#5b6b7b;font-size:11px;text-transform:uppercase"><th>Mês</th><th style="text-align:right">Sessões</th><th style="text-align:right">Previsto</th><th style="text-align:right">Pago</th><th style="text-align:right">Em aberto</th></tr>'
+   +ms.map(m=>{const o=por[m];return '<tr style="border-top:1px solid var(--border)"><td style="padding:5px 0">'+fm(m)+'</td><td style="text-align:right">'+o.n+' <span style="color:#8a98a6">('+o.n0+' a R$ 0)</span></td><td style="text-align:right">'+rcBRL(o.prev)+'</td><td style="text-align:right;color:#1f7a4d">'+rcBRL(o.pago)+'</td><td style="text-align:right;color:#b9770e">'+rcBRL(o.ab)+'</td></tr>';}).join('')+'</table>'
+   +'<div style="font-size:12px;color:#5b6b7b;margin:10px 0">Reimportar é seguro: sessões já existentes são atualizadas, e as que você deu baixa ou editou o valor no app são preservadas. Nada vai para o DRE nem para o Financeiro oficial. A planilha não traz a data do pagamento.</div>'
+   +'<div style="display:flex;gap:8px"><button class="btn-ghost" style="flex:1" onclick="document.getElementById(\'rc-modal\').innerHTML=\'\'">Cancelar</button><button class="btn-primary" style="flex:1" id="rc-imp-ok" onclick="rcGravaImp()">Importar '+L.length+' sessões</button></div></div></div>';
+}
+async function rcGravaImp(){
+  const L=RC.imp||[];if(!L.length)return;const btn=document.getElementById('rc-imp-ok');if(btn){btn.disabled=true;btn.textContent='Importando…';}
+  try{
+    const fs=prFs(),col=fs.collection('fin_sessoes'),ex={};
+    const ds=L.map(x=>x.data).sort(),a=ds[0],b=ds[ds.length-1];
+    (await col.where('data','>=',a).where('data','<=',b).get()).docs.forEach(d=>{ex[d.id]=d.data();});
+    const agora=new Date().toISOString();let nNovo=0,nAtu=0,nPres=0,batch=fs.batch(),ops=0;
+    for(const x of L){
+      const e=ex[x.id],ref=col.doc(x.id);
+      if(!e){batch.set(ref,Object.assign({},x,{criadoEm:agora,editadoEm:agora,criadoPor:prMe()}));nNovo++;}
+      else if(e.pgPor||e.valorManual!=null){batch.update(ref,{status:x.status,estadoOrig:x.estadoOrig,editadoEm:agora});nPres++;}
+      else{batch.update(ref,{valor:x.valor,status:x.status,estadoOrig:x.estadoOrig,pgStatus:x.pgStatus,pgValor:x.pgValor,pgForma:x.pgForma,servicoNome:x.servicoNome,profNome:x.profNome,editadoEm:agora});nAtu++;}
+      if(++ops>=400){await batch.commit();batch=fs.batch();ops=0;}
+    }
+    if(ops)await batch.commit();
+    prAud('importou-planilha','',String(L.length));
+    document.getElementById('rc-modal').innerHTML='';RC.fonte='fin';RC.imp=null;
+    toast('Importação concluída: '+nNovo+' novas, '+nAtu+' atualizadas, '+nPres+' preservadas (com baixa no app).');
+    const f=document.getElementById('rc-fonte');if(f)f.value='fin';
+    RC.mes=a.slice(0,7);rcCarrega();
+  }catch(e){toast('Falha na importação: '+e.message);if(btn){btn.disabled=false;btn.textContent='Tentar novamente';}}
+}
 function rcTog(id,on){on?RC.sel.add(id):RC.sel.delete(id);rcDraw();}
 function rcSelTodos(k){RC.L.filter(x=>(x.pacienteId||x.pacienteNome)===k&&x.pgStatus!=='pago'&&x._devido>0).forEach(x=>RC.sel.add(x.id));rcDraw();}
 function rcAbreBaixa(k){
@@ -4007,13 +4075,13 @@ function rcConfirma(){
   const forma=document.getElementById('rb-forma').value,data=document.getElementById('rb-data').value;if(!data){toast('Informe a data.');return;}
   const lote='b'+Date.now().toString(36),agora=new Date().toISOString(),fs=prFs(),b=fs.batch();let rest=desc;
   S.forEach((x,i)=>{const par=i===S.length-1?rest:Math.round(x._devido/tot*desc*100)/100;rest=Math.round((rest-par)*100)/100;
-    b.update(fs.collection('agenda').doc(x.id),{pgStatus:'pago',pgValor:Math.round((x._devido-par)*100)/100,pgForma:forma,pgData:data,pgLote:lote,pgPor:prMe(),editadoEm:agora});});
+    b.update(fs.collection(rcCol()).doc(x.id),{pgStatus:'pago',pgValor:Math.round((x._devido-par)*100)/100,pgForma:forma,pgData:data,pgLote:lote,pgPor:prMe(),editadoEm:agora});});
   b.commit().then(()=>{prAud('baixa',S[0].pacienteId||'',lote);toast('Baixa registrada: '+rcBRL(tot-desc)+'.');document.getElementById('rc-modal').innerHTML='';S.forEach(x=>RC.sel.delete(x.id));rcCarrega();}).catch(e=>toast('Não salvo: '+e.message));
 }
 function rcEstorna(id){
   if(!confirm('Estornar este pagamento? A sessão volta para pendente.'))return;
   const x=RC.L.find(y=>y.id===id);
-  prFs().collection('agenda').doc(id).update({pgStatus:'pendente',pgValor:null,pgForma:null,pgData:null,pgLote:null,pgPor:null,editadoEm:new Date().toISOString()})
+  prFs().collection(rcCol()).doc(id).update({pgStatus:'pendente',pgValor:null,pgForma:null,pgData:null,pgLote:null,pgPor:null,editadoEm:new Date().toISOString()})
    .then(()=>{prAud('estorno',(x&&x.pacienteId)||'',id);toast('Pagamento estornado.');rcCarrega();}).catch(e=>toast('Erro: '+e.message));
 }
 const PR_CLIN=['tatianesanches@cinpsi.com.br'];
