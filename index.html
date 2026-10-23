@@ -3905,7 +3905,7 @@ function rcCarrega(){
     Object.keys(por).forEach(k=>{
       const ls=por[k].sort((x,y)=>(x.data+x.inicio)<(y.data+y.inicio)?-1:1);
       const f=prFichaDe(ls[0].pacienteNome),mensal=f&&(f.modalidade||'mensal')==='mensal'&&Number(f.valorMensal||f.valor)>0;
-      ls.forEach((x,i)=>{x._plano=mensal?'mensal':'sessao';x._devido=mensal?(i<4?Math.round(Number(f.valorMensal||f.valor)/4*100)/100:0):Number(x.valor||0);});
+      ls.forEach((x,i)=>{x._plano=mensal?'mensal':'sessao';x._devido=x.valorManual!=null?Number(x.valorManual):(mensal?(i<4?Math.round(Number(f.valorMensal||f.valor)/4*100)/100:0):Number(x.valor||0));});
     });
     RC.L=L;rcDraw();
   }).catch(e=>{const el=document.getElementById('rc-body');if(el)el.innerHTML='<div style="color:#b91c1c">Erro: '+esc(e.message)+'</div>';});
@@ -3934,10 +3934,24 @@ function rcDraw(){
       +g.map(x=>{const pg=x.pgStatus==='pago',z=x._devido===0;
         return '<tr style="border-top:1px solid var(--border)"><td style="padding:6px 10px;width:28px">'+(pg||z?'':'<input type="checkbox" '+(RC.sel.has(x.id)?'checked':'')+' onchange="rcTog(\''+x.id+'\',this.checked)">')+'</td>'
          +'<td>'+esc(String(x.data).split('-').reverse().join('/'))+' '+esc(x.inicio||'')+'</td><td>'+esc(x.servicoNome||'')+'</td><td style="color:#5b6b7b">'+esc(AG_ST[x.status]||x.status)+'</td>'
-         +'<td style="text-align:right">'+rcBRL(x._devido)+'</td><td style="padding-right:10px;text-align:right">'
+         +'<td style="text-align:right">'+rcBRL(x._devido)+(x.valorManual!=null?' <span title="valor ajustado manualmente" style="font-size:10px;color:#b9770e">ajustado</span>':'')+(pg?'':' <a href="#" title="Editar valor" onclick="rcEditaValor(\''+x.id+'\');return false" style="text-decoration:none">✎</a>')+'</td><td style="padding-right:10px;text-align:right">'
          +(pg?'<span style="color:#1f7a4d">● Pago'+(x.pgValor!=null&&Math.abs(x.pgValor-x._devido)>0.009?' ('+rcBRL(x.pgValor)+')':'')+' · '+esc(x.pgForma||'')+' · '+esc(String(x.pgData||'').split('-').reverse().join('/'))+'</span> <a href="#" onclick="rcEstorna(\''+x.id+'\');return false" style="font-size:11px">estornar</a>'
            :(z?'<span style="color:#5b6b7b">Incluso no plano</span>':'<span style="color:#b9770e">● Pendente</span>'))+'</td></tr>';}).join('')+'</table></div>';});
   el.innerHTML=h;
+}
+function rcEditaValor(id){
+  const x=RC.L.find(y=>y.id===id);if(!x)return;
+  document.getElementById('rc-modal').innerHTML='<div style="position:fixed;inset:0;background:#0006;z-index:400;display:flex;align-items:center;justify-content:center"><div style="background:#fff;border-radius:14px;padding:20px;width:360px;max-width:94vw">'
+   +'<h3 style="margin:0 0 4px">Editar valor da sessão</h3><div style="font-size:12px;color:#5b6b7b;margin-bottom:10px">'+esc(x.pacienteNome)+' · '+esc(String(x.data).split('-').reverse().join('/'))+' · '+esc(x.servicoNome||'')+'</div>'
+   +'<label style="font-size:11px;color:#5b6b7b">VALOR (R$)</label><input type="number" id="ev-v" class="form-input" min="0" step="0.01" value="'+x._devido+'">'
+   +'<div style="font-size:11px;color:#5b6b7b;margin-top:6px">Vale só para esta sessão. O valor do serviço e das outras sessões não muda.</div>'
+   +'<div style="display:flex;gap:8px;margin-top:14px"><button class="btn-ghost" style="flex:1" onclick="document.getElementById(\'rc-modal\').innerHTML=\'\'">Cancelar</button><button class="btn-primary" style="flex:1" onclick="rcSalvaValor(\''+id+'\')">Salvar</button></div></div></div>';
+}
+function rcSalvaValor(id){
+  const x=RC.L.find(y=>y.id===id);if(!x)return;
+  const v=parseFloat(document.getElementById('ev-v').value);if(isNaN(v)||v<0){toast('Informe um valor válido.');return;}
+  prFs().collection('agenda').doc(id).update({valorManual:Math.round(v*100)/100,valorAnterior:x._devido,editadoEm:new Date().toISOString()})
+   .then(()=>{prAud('valor-editado',x.pacienteId||'',id);toast('Valor atualizado para '+rcBRL(v)+'.');document.getElementById('rc-modal').innerHTML='';rcCarrega();}).catch(e=>toast('Não salvo: '+e.message));
 }
 function rcTog(id,on){on?RC.sel.add(id):RC.sel.delete(id);rcDraw();}
 function rcSelTodos(k){RC.L.filter(x=>(x.pacienteId||x.pacienteNome)===k&&x.pgStatus!=='pago'&&x._devido>0).forEach(x=>RC.sel.add(x.id));rcDraw();}
