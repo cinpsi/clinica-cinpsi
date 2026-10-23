@@ -2098,10 +2098,10 @@ function terSyncPacientes(){
   const all=getConvertidos().filter(p=>p.ativo!==false);
   ROSTER.filter(r=>r.role!=='admin').forEach(r=>{
     const alvo=teTerCanon(r.nome).toLowerCase();
-    const lista=all.filter(p=>teTerCanon(p.terapeuta).toLowerCase()===alvo).map(p=>({id:String(p.id||''),paciente:(p.paciente||p.responsavel||'').trim(),nascimento:String(p.nascimento||'').slice(0,10),telefone:p.telefone||'',terapeuta:teTerCanon(p.terapeuta)||r.nome})).filter(p=>p.paciente);
+    const lista=all.filter(p=>teTerCanon(p.terapeuta).toLowerCase()===alvo).map(p=>({id:String(p.id||''),paciente:(p.paciente||p.responsavel||'').trim(),nascimento:String(p.nascimento||'').slice(0,10),telefone:p.telefone||'',terapeuta:teTerCanon(p.terapeuta)||r.nome,escola:p.escola||'',responsavelLegal:p.responsavelLegal||p.responsavel||'',pai:p.pai||'',mae:p.mae||'',contatoEmergencia:p.contatoEmergencia||'',telefone2:p.telefone2||'',email:p.email||'',endereco:p.endereco||'',servico:p.servico||'',origem:p.origem||'',queixa:p.queixa||'',observacao:p.observacao||''})).filter(p=>p.paciente);
     const h=JSON.stringify(lista), k='te_sync_'+r.email;
-    if(sessionStorage.getItem(k)===h) return;
-    teFs().collection('ter_pacientes').doc(r.email).set({lista,atualizadoEm:new Date().toISOString()}).then(()=>sessionStorage.setItem(k,h)).catch(e=>console.warn('terSync',e&&e.code));
+    if(sessionStorage.getItem(k+'_v2')===h) return;
+    teFs().collection('ter_pacientes').doc(r.email).set({lista,atualizadoEm:new Date().toISOString()}).then(()=>sessionStorage.setItem(k+'_v2',h)).catch(e=>console.warn('terSync',e&&e.code));
   });
 }
 const TE_NAF=[['N','Nunca'],['A','Às vezes'],['F','Frequentemente']];
@@ -3880,7 +3880,7 @@ function rpCarrega(){
 }
 const PR_CLIN=['tatianesanches@cinpsi.com.br'];
 function prVisivel(){return CU&&(CU.role==='admin'||PR_CLIN.includes((CU.email||'').toLowerCase()));}
-const PR={pid:null,pac:null,eps:[],eid:null,lista:[],last:Date.now(),timer:null};
+const PR={pid:null,pac:null,eps:[],eid:null,lista:[],last:Date.now(),timer:null,aba:'reg'};
 const prFs=()=>firebase.firestore();
 const prMe=()=>(CU.email||'').toLowerCase();
 function prDt(d){if(!d)return'—';const p=String(d).slice(0,10).split('-');return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:d;}
@@ -3935,7 +3935,7 @@ function prCarregaLista(){
   }).catch(e=>{const el=document.getElementById('pr-pacs');if(el)el.innerHTML='<span style="color:#b91c1c">Sem permissão ou erro: '+esc(e.message)+'</span>';});
 }
 function prAbrir(pid){
-  PR.pid=pid;PR.eid=null;PR.pac=PR.lista.find(p=>p.id===pid);prTouch();
+  PR.pid=pid;PR.eid=null;PR.aba='reg';PR.pac=PR.lista.find(p=>p.id===pid);prTouch();
   prAud('abriu',pid,'');
   prFs().collection('prontuarios').doc(pid).collection('episodios').orderBy('data','desc').get().then(s=>{
     PR.eps=s.docs.map(d=>Object.assign({id:d.id},d.data()));
@@ -3949,8 +3949,31 @@ function prDesenha(){
   const lista=PR.eps.map(e=>'<div class="pr-it'+(e.id===PR.eid?' on':'')+'" onclick="prSel(\''+esc(e.id)+'\')"><b>'+prDt(e.data)+' · '+esc((e.campos&&e.campos.autorOriginal)||(e.profissionalEmail||'').split('@')[0])+'</b><span>v'+e.versao+(e.origem==='doctoralia_import'?' · Doctoralia':'')+'</span></div>').join('');
   const g=document.getElementById('pr-g'),lb=document.getElementById('pr-listbox');if(g)g.style.gridTemplateColumns='1fr';if(lb)lb.style.display='none';
   m.innerHTML=`<div class="pr-box"><div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><button class="btn-ghost" onclick="prVoltar()">← Pacientes</button><h2 style="margin:0;font-size:18px">${esc(PR.pac?PR.pac.pacienteNome:'')}</h2><span style="color:var(--text2);font-size:12px">${PR.eps.length} registros</span><button class="btn-primary" style="margin-left:auto" onclick="prNovo()">+ Novo registro</button></div>
-   <div class="pr-grid" style="grid-template-columns:230px 1fr"><div class="pr-lst" style="max-height:calc(100vh - 340px)">${lista||'<span style="color:var(--text2)">Sem registros.</span>'}</div><div id="pr-det" style="color:var(--text2)">Selecione um registro.</div></div></div>`;
+   <div style="display:flex;gap:6px;margin-bottom:10px"><button class="btn-ghost" style="${PR.aba==='reg'?'background:#022543;color:#fff':''}" onclick="PR.aba='reg';prDesenha()">Registros</button><button class="btn-ghost" style="${PR.aba==='ficha'?'background:#022543;color:#fff':''}" onclick="PR.aba='ficha';prDesenha()">📋 Ficha do paciente</button></div>
+   ${PR.aba==='ficha'?prFichaHtml():''}
+   <div class="pr-grid" style="grid-template-columns:230px 1fr;${PR.aba==='ficha'?'display:none':''}"><div class="pr-lst" style="max-height:calc(100vh - 340px)">${lista||'<span style="color:var(--text2)">Sem registros.</span>'}</div><div id="pr-det" style="color:var(--text2)">Selecione um registro.</div></div></div>`;
   if(PR.eid)prDet();
+}
+function prNorm(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').split(/\s+/).filter(x=>x.length>1);}
+function prFichaDe(nome){
+  const fonte=(CU&&CU.role==='admin'&&typeof getConvertidos==='function')?getConvertidos().filter(p=>p.ativo!==false):(window._terPacs||[]);
+  const tk=prNorm(nome);if(!tk.length)return null;
+  const ach=fonte.filter(p=>{const pk=prNorm(p.paciente||p.responsavel);return tk.every(t=>pk.includes(t));});
+  ach.sort((a,b)=>String(a.paciente).length-String(b.paciente).length);
+  return ach[0]||null;
+}
+function prFichaHtml(){
+  const p=prFichaDe(PR.pac&&PR.pac.pacienteNome);
+  if(!p)return '<div class="pr-box" style="color:var(--text2)">Ficha cadastral não encontrada para este paciente (o nome no prontuário precisa corresponder ao cadastro).</div>';
+  const R=(k,v)=>{const ok=v!==undefined&&v!==null&&String(v).trim()!=='';return '<div style="display:flex;gap:10px;font-size:13px;padding:5px 0;border-bottom:1px solid var(--border)"><span style="min-width:160px;color:var(--text3)">'+esc(k)+'</span><span style="flex:1;word-break:break-word;white-space:pre-wrap;'+(ok?'':'color:#aab')+'">'+(ok?esc(String(v)):'—')+'</span></div>';};
+  const S=t=>'<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin:16px 0 4px">'+t+'</div>';
+  let idade='',nasc='';
+  if(p.nascimento){const n=new Date(String(p.nascimento).slice(0,10)+'T12:00:00'),h=new Date();if(!isNaN(n)){let a=h.getFullYear()-n.getFullYear();if(h<new Date(h.getFullYear(),n.getMonth(),n.getDate()))a--;idade=' ('+a+' anos)';nasc=n.toLocaleDateString('pt-BR')+idade;}}
+  return '<div class="pr-box" style="max-width:720px">'+S('Paciente').replace('margin:16px 0 4px','margin:0 0 4px')+R('Nome completo',p.paciente)+R('Data de nascimento',nasc)+R('Escola',p.escola)
+   +S('Responsáveis')+R('Responsável legal',p.responsavelLegal)+R('Nome do pai',p.pai)+R('Nome da mãe',p.mae)+R('Contato de emergência',p.contatoEmergencia)
+   +S('Contato')+R('Telefone',p.telefone)+R('Celular 2',p.telefone2)+R('E-mail',p.email)+R('Endereço',p.endereco)
+   +S('Atendimento')+R('Serviço',p.servico)+R('Terapeuta',p.terapeuta)+R('Onde nos conheceu',p.origem)
+   +S('Queixa')+R('Queixa',p.queixa)+S('Observação')+R('Observação',p.observacao)+'</div>';
 }
 function prVoltar(){PR.pid=null;PR.eid=null;renderProntuario(document.getElementById('main-content'));}
 function prSel(eid){PR.eid=eid;prTouch();prAud('leu',PR.pid,eid);prDesenha();}
